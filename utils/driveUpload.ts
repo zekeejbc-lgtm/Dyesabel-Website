@@ -50,19 +50,19 @@ export async function uploadImageToDrive(
 
     // Send to Google Apps Script
     const response = await fetch(GAS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'uploadImage',
-        sessionToken,
-        fileName: file.name,
-        mimeType: file.type,
-        base64Data: base64,
-        folder: folder
-      })
-    });
+  method: 'POST',
+  headers: {
+    'Content-Type': 'text/plain;charset=utf-8', 
+  },
+  body: JSON.stringify({
+    action: 'uploadImage',
+    sessionToken,
+    fileName: file.name,
+    mimeType: file.type,
+    base64Data: base64,
+    folder: folder
+  })
+});
 
     const data = await response.json();
 
@@ -114,8 +114,8 @@ export async function deleteImageFromDrive(
     const response = await fetch(GAS_API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-      },
+  'Content-Type': 'text/plain;charset=utf-8', 
+},
       body: JSON.stringify({
         action: 'deleteImage',
         sessionToken,

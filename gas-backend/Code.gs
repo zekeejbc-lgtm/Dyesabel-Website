@@ -1,202 +1,504 @@
-/**
- * Google Apps Script Backend for Dyesabel PH Authentication
- * * SETUP:
- * 1. Update SPREADSHEET_ID with your sheet ID.
- * 2. Run 'initializeSystem' once from the toolbar to setup sheets.
- * 3. Deploy as Web App (Execute as: Me, Access: Anyone).
- */
-
 // ============================================
-// CONFIGURATION
+// 1. CONFIGURATION
 // ============================================
 
-const SPREADSHEET_ID = '18eF1UnLorCRkZPO9mmEZMZMkjFBwLkXiGU-YxUZpkyU';
-const USERS_SHEET_NAME = 'Users';
-const SESSIONS_SHEET_NAME = 'Sessions';
-const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 Hours
+// REPLACE THIS with your actual Google Sheet ID
+const SPREADSHEET_ID = '18eF1UnLorCRkZPO9mmEZMZMkjFBwLkXiGU-YxUZpkyU'; 
+
+// Sheet Names
+const SHEET_USERS = 'Users';
+const SHEET_SESSIONS = 'Sessions';
+const SHEET_LOGS = 'ImageUploads';
+const SHEET_ORG = 'OrgSettings';
+
+// Session Timeout (24 Hours)
+const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; 
+
+// Default Drive Folder ID (Optional fallback if no folder created)
+// If left empty, files go to Root
+const DEFAULT_ROOT_FOLDER_ID = ''; 
 
 // ============================================
-// MAIN HANDLERS
+// 2. MAIN ENTRY POINTS (CORS BYPASS)
 // ============================================
 
 function doGet(e) {
-  return ContentService.createTextOutput('Dyesabel PH Authentication API is running');
+  return ContentService.createTextOutput('Dyesabel PH API is Online.');
 }
 
 function doPost(e) {
+  // Lock to prevent concurrent write issues
+  const lock = LockService.getScriptLock();
+  
   try {
-    // Handle potential preflight or empty requests
-    if (!e.postData || !e.postData.contents) {
-      return createResponse(false, 'No data provided');
+    // Wait up to 10 seconds for other processes
+    lock.waitLock(10000);
+
+    // CRITICAL: Parse text/plain body manually to bypass CORS preflight
+    const data = JSON.parse(e.postData.contents);
+    let result = {};
+
+    // --- ROUTER ---
+    switch (data.action) {
+      // Auth
+      case 'login':           result = handleLogin(data); break;
+      case 'logout':          result = handleLogout(data); break;
+      case 'validateSession': result = handleValidateSession(data); break;
+      case 'register':        result = handleRegister(data); break;
+      case 'updatePassword':  result = handleUpdatePassword(data); break;
+
+      // Drive / Files
+      case 'uploadImage':       result = handleUploadImage(data); break;
+      case 'uploadImageFromUrl': result = handleUploadFromUrl(data); break;
+      case 'createFolder':      result = handleCreateFolder(data); break;
+      case 'deleteImage':       result = handleDeleteImage(data); break;
+      case 'listImages':        result = handleListImages(data); break;
+
+      // Content / Data
+      case 'getOrgSettings':    result = handleGetOrgSettings(data); break;
+      case 'updateOrgSettings': result = handleUpdateOrgSettings(data); break;
+      case 'savePillars':       result = handleSaveData('Pillars', data.pillars, data.sessionToken); break;
+      case 'loadPillars':       result = handleLoadData('Pillars'); break;
+      case 'saveChapter':       result = handleSaveChapter(data); break;
+      case 'loadChapter':       result = handleLoadChapter(data); break;
+      
+      // Generic Data Handlers (Partners, Stories, Founders)
+      case 'savePartners':      result = handleSaveData('Partners', data.partners, data.sessionToken); break;
+      case 'loadPartners':      result = handleLoadData('Partners'); break;
+      case 'saveStories':       result = handleSaveData('Stories', data.stories, data.sessionToken); break;
+      case 'loadStories':       result = handleLoadData('Stories'); break;
+      case 'saveFounders':      result = handleSaveData('Founders', data.founders, data.sessionToken); break;
+      case 'loadFounders':      result = handleLoadData('Founders'); break;
+
+      default:
+        throw new Error('Unknown action: ' + data.action);
     }
 
-    const data = JSON.parse(e.postData.contents);
-    
-    switch(data.action) {
-      case 'login':
-        return handleLogin(data.username, data.password);
-      case 'logout':
-        return handleLogout(data.sessionToken);
-      case 'validateSession':
-        return handleValidateSession(data.sessionToken);
-      case 'register':
-        return handleRegister(data.username, data.password, data.email);
-      case 'updatePassword':
-        return handleUpdatePassword(data.sessionToken, data.oldPassword, data.newPassword);
-      default:
-        return createResponse(false, 'Invalid action');
-    }
+    return createResponse(true, null, result);
+
   } catch (error) {
-    Logger.log('Error in doPost: ' + error.toString());
-    return createResponse(false, 'Server error: ' + error.toString());
+    return createResponse(false, error.toString());
+  } finally {
+    lock.releaseLock();
   }
 }
 
 // ============================================
-// AUTHENTICATION LOGIC
+// 3. AUTHENTICATION HANDLERS
 // ============================================
 
-function handleLogin(username, password) {
+function handleLogin(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const usersSheet = ss.getSheetByName(USERS_SHEET_NAME);
-  const data = usersSheet.getDataRange().getValues();
-  
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    if (row[0] === username && row[1] === password) {
-      const sessionToken = generateSessionToken();
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const rows = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < rows.length; i++) {
+    // Row: [Username, Password, Email, Role, UserId, ChapterId]
+    if (rows[i][0] === data.username && rows[i][1] === data.password) {
+      const token = Utilities.getUuid() + '_' + new Date().getTime();
       const user = {
-        id: row[4] || Utilities.getUuid(),
-        username: row[0],
-        email: row[2],
-        role: row[3],
-        chapterId: row[5] || null
+        username: rows[i][0],
+        email: rows[i][2],
+        role: rows[i][3],
+        id: rows[i][4],
+        chapterId: rows[i][5]
       };
       
-      storeSession(sessionToken, user);
-      return createResponse(true, 'Login successful', { user, sessionToken });
+      storeSession(token, user);
+      return { sessionToken: token, user: user };
     }
   }
-  return createResponse(false, 'Invalid username or password');
+  throw new Error('Invalid credentials');
 }
 
-function handleRegister(username, password, email) {
+function handleRegister(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const usersSheet = ss.getSheetByName(USERS_SHEET_NAME);
-  const data = usersSheet.getDataRange().getValues();
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const rows = sheet.getDataRange().getValues();
 
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === username) return createResponse(false, 'Username already exists');
-    if (data[i][2] === email) return createResponse(false, 'Email already registered');
+  // Check duplicates
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.username) throw new Error('Username taken');
+    if (rows[i][2] === data.email) throw new Error('Email already registered');
   }
 
-  const userId = Utilities.getUuid();
-  usersSheet.appendRow([username, password, email, 'user', userId, '']);
-  return createResponse(true, 'Registration successful');
+  const newId = Utilities.getUuid();
+  // Default role is 'user'
+  sheet.appendRow([data.username, data.password, data.email, 'user', newId, '']);
+  return { message: 'Registration successful' };
 }
 
-function handleUpdatePassword(sessionToken, oldPassword, newPassword) {
-  const session = getSession(sessionToken);
-  if (!session || isSessionExpired(session)) return createResponse(false, 'Unauthorized');
+function handleValidateSession(data) {
+  const session = getSession(data.sessionToken);
+  if (!session) throw new Error('Session expired or invalid');
+  return { valid: true, user: session.user };
+}
 
-  const userData = JSON.parse(session.userData);
+function handleLogout(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const usersSheet = ss.getSheetByName(USERS_SHEET_NAME);
-  const data = usersSheet.getDataRange().getValues();
-
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === userData.username && data[i][1] === oldPassword) {
-      usersSheet.getRange(i + 1, 2).setValue(newPassword);
-      return createResponse(true, 'Password updated');
+  const sheet = ss.getSheetByName(SHEET_SESSIONS);
+  const rows = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.sessionToken) {
+      sheet.deleteRow(i + 1);
+      return { message: 'Logged out' };
     }
   }
-  return createResponse(false, 'Old password incorrect');
+  return { message: 'Session not found' };
 }
 
-function handleLogout(sessionToken) {
+// ============================================
+// 4. DRIVE & FILE HANDLERS
+// ============================================
+
+function handleUploadImage(data) {
+  validateSessionOrThrow(data.sessionToken);
+
+  // 1. Determine Folder: Use custom ID if provided, otherwise default
+  let folder;
+  if (data.customFolderId) {
+    folder = DriveApp.getFolderById(data.customFolderId);
+  } else if (DEFAULT_ROOT_FOLDER_ID) {
+    folder = DriveApp.getFolderById(DEFAULT_ROOT_FOLDER_ID);
+  } else {
+    folder = DriveApp.getRootFolder();
+  }
+
+  // 2. Process File
+  const decoded = Utilities.base64Decode(data.fileData);
+  const blob = Utilities.newBlob(decoded, data.fileType, data.fileName);
+  const file = folder.createFile(blob);
+
+  // 3. Set Public Access (Silent Fail Safe)
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {
+    Logger.log('Warning: Could not set public permission. ' + e.toString());
+  }
+
+  // 4. Log
+  logUpload(data.sessionToken, file.getId(), file.getName(), folder.getName());
+
+  return {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    fileUrl: file.getDownloadUrl(),
+    thumbnailUrl: `https://drive.google.com/thumbnail?sz=w1000&id=${file.getId()}`
+  };
+}
+
+function handleUploadFromUrl(data) {
+  validateSessionOrThrow(data.sessionToken);
+
+  let folder;
+  if (data.customFolderId) {
+    folder = DriveApp.getFolderById(data.customFolderId);
+  } else {
+    folder = DriveApp.getRootFolder();
+  }
+
+  const response = UrlFetchApp.fetch(data.imageUrl);
+  const blob = response.getBlob();
+  blob.setName(data.fileName);
+  
+  const file = folder.createFile(blob);
+  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e){}
+
+  return {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    fileUrl: file.getDownloadUrl()
+  };
+}
+
+function handleCreateFolder(data) {
+  validateSessionOrThrow(data.sessionToken);
+
+  // Parent defaults to Root if not specified (or add a config for a master "Uploads" folder)
+  let parentFolder;
+  if (data.parentFolderId) {
+    parentFolder = DriveApp.getFolderById(data.parentFolderId);
+  } else {
+    parentFolder = DriveApp.getRootFolder();
+  }
+
+  // Check for existing folder with same name
+  const existing = parentFolder.getFoldersByName(data.folderName);
+  if (existing.hasNext()) {
+    const folder = existing.next();
+    return { folderId: folder.getId(), folderName: folder.getName(), isNew: false };
+  }
+
+  // Create new
+  const newFolder = parentFolder.createFolder(data.folderName);
+  try { newFolder.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e){}
+
+  return { folderId: newFolder.getId(), folderName: newFolder.getName(), isNew: true };
+}
+
+function handleListImages(data) {
+  // Lists images inside a specific folder ID
+  if (!data.customFolderId) throw new Error('Folder ID required to list images');
+  
+  const folder = DriveApp.getFolderById(data.customFolderId);
+  const files = folder.getFiles();
+  const list = [];
+  
+  while (files.hasNext()) {
+    const file = files.next();
+    if (file.getMimeType().indexOf('image/') > -1) {
+      list.push({
+        fileId: file.getId(),
+        fileName: file.getName(),
+        fileUrl: file.getDownloadUrl(),
+        thumbnailUrl: `https://drive.google.com/thumbnail?sz=w400&id=${file.getId()}`
+      });
+    }
+  }
+  return { files: list };
+}
+
+function handleDeleteImage(data) {
+  validateSessionOrThrow(data.sessionToken);
+  DriveApp.getFileById(data.fileId).setTrashed(true);
+  return { status: 'deleted' };
+}
+
+// ============================================
+// 5. CONTENT / DATA HANDLERS
+// ============================================
+
+// Generic handler for Pillars, Partners, Stories, Founders
+function handleSaveData(sheetName, contentData, token) {
+  validateAdminOrEditor(token);
+  
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sessionsSheet = ss.getSheetByName(SESSIONS_SHEET_NAME);
-  if (sessionsSheet) {
-    const data = sessionsSheet.getDataRange().getValues();
-    for (let i = 1; i < data.length; i++) {
-      if (data[i][0] === sessionToken) {
-        sessionsSheet.deleteRow(i + 1);
+  let sheet = ss.getSheetByName(sheetName);
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  
+  // Clear old data and rewrite (Simple overwrite strategy)
+  sheet.clear();
+  
+  // Write Headers (assumes first item has all keys)
+  if (contentData.length > 0) {
+    // We store the raw JSON string of the whole object to be safe and flexible
+    sheet.appendRow(['JSON_DATA']);
+    const jsonString = JSON.stringify(contentData);
+    // Google Sheets cell limit is 50k chars. If huge, we might need chunking, 
+    // but for now we'll assume it fits or users are storing references.
+    sheet.getRange(2, 1).setValue(jsonString);
+  }
+  
+  return { message: `${sheetName} saved` };
+}
+
+function handleLoadData(sheetName) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet) return { [sheetName.toLowerCase()]: [] };
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length < 2) return { [sheetName.toLowerCase()]: [] };
+  
+  // We assume the data is stored in cell A2 as a JSON string
+  const jsonString = data[1][0];
+  try {
+    return { [sheetName.toLowerCase()]: JSON.parse(jsonString) };
+  } catch (e) {
+    return { [sheetName.toLowerCase()]: [] };
+  }
+}
+
+// Specific Handler for Chapters (Row-based)
+function handleSaveChapter(data) {
+  const session = getSession(data.sessionToken);
+  if (!session) throw new Error('Unauthorized');
+  
+  // Permission check
+  if (session.user.role !== 'admin' && session.user.chapterId !== data.chapterId) {
+    throw new Error('Insufficient permissions for this chapter');
+  }
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName('Chapters');
+  if (!sheet) {
+    sheet = ss.insertSheet('Chapters');
+    sheet.appendRow(['ChapterID', 'JSON_Data']);
+  }
+
+  const rows = sheet.getDataRange().getValues();
+  let found = false;
+  const jsonPayload = JSON.stringify(data.chapterData);
+
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.chapterId) {
+      sheet.getRange(i + 1, 2).setValue(jsonPayload);
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    sheet.appendRow([data.chapterId, jsonPayload]);
+  }
+  
+  return { message: 'Chapter saved' };
+}
+
+function handleLoadChapter(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Chapters');
+  if (!sheet) return { chapter: null };
+
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.chapterId) {
+      return { chapter: JSON.parse(rows[i][1]) };
+    }
+  }
+  return { chapter: null };
+}
+
+function handleGetOrgSettings(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_ORG);
+  if (!sheet) return { settings: {} };
+  
+  const rows = sheet.getDataRange().getValues();
+  const settings = {};
+  for (let i = 1; i < rows.length; i++) {
+    settings[rows[i][0]] = rows[i][1];
+  }
+  return { settings };
+}
+
+function handleUpdateOrgSettings(data) {
+  validateAdminOrEditor(data.sessionToken);
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName(SHEET_ORG);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_ORG);
+    sheet.appendRow(['Key', 'Value']);
+  }
+  
+  // Upsert settings
+  const settings = data.settings;
+  const rows = sheet.getDataRange().getValues();
+  
+  for (const key in settings) {
+    let found = false;
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] === key) {
+        sheet.getRange(i + 1, 2).setValue(settings[key]);
+        found = true;
         break;
       }
     }
+    if (!found) {
+      sheet.appendRow([key, settings[key]]);
+    }
   }
-  return createResponse(true, 'Logged out');
-}
-
-function handleValidateSession(sessionToken) {
-  const session = getSession(sessionToken);
-  if (session && !isSessionExpired(session)) {
-    return createResponse(true, 'Session valid', { user: JSON.parse(session.userData) });
-  }
-  return createResponse(false, 'Session expired');
+  return { message: 'Settings updated' };
 }
 
 // ============================================
-// SESSION & UTILS
+// 6. HELPER UTILITIES
 // ============================================
 
 function storeSession(token, user) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(SESSIONS_SHEET_NAME);
-  const expiresAt = new Date(new Date().getTime() + SESSION_TIMEOUT);
-  sheet.appendRow([token, JSON.stringify(user), new Date().toISOString(), expiresAt.toISOString()]);
-  cleanupExpiredSessions();
+  let sheet = ss.getSheetByName(SHEET_SESSIONS);
+  const expires = new Date(new Date().getTime() + SESSION_TIMEOUT).toISOString();
+  sheet.appendRow([token, JSON.stringify(user), expires]);
 }
 
 function getSession(token) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(SESSIONS_SHEET_NAME);
-  if (!sheet) return null;
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] === token) {
-      return { sessionToken: data[i][0], userData: data[i][1], expiresAt: data[i][3] };
+  const sheet = ss.getSheetByName(SHEET_SESSIONS);
+  const rows = sheet.getDataRange().getValues();
+  const now = new Date();
+
+  // Reverse loop to find latest and cleanup
+  for (let i = rows.length - 1; i >= 1; i--) {
+    // Check expiry
+    if (new Date(rows[i][2]) < now) {
+      sheet.deleteRow(i + 1); // Cleanup expired
+      continue;
+    }
+    if (rows[i][0] === token) {
+      return { token: rows[i][0], user: JSON.parse(rows[i][1]) };
     }
   }
   return null;
 }
 
-function isSessionExpired(session) {
-  return new Date(session.expiresAt) < new Date();
+function validateSessionOrThrow(token) {
+  if (!getSession(token)) throw new Error('Unauthorized: Invalid Session');
 }
 
-function cleanupExpiredSessions() {
-  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SESSIONS_SHEET_NAME);
-  const data = sheet.getDataRange().getValues();
-  const now = new Date();
-  for (let i = data.length - 1; i >= 1; i--) {
-    if (new Date(data[i][3]) < now) sheet.deleteRow(i + 1);
+function validateAdminOrEditor(token) {
+  const session = getSession(token);
+  if (!session) throw new Error('Unauthorized');
+  const role = session.user.role;
+  if (role !== 'admin' && role !== 'editor') throw new Error('Insufficient permissions');
+}
+
+function logUpload(token, fileId, fileName, folderName) {
+  try {
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    let sheet = ss.getSheetByName(SHEET_LOGS);
+    if (!sheet) { sheet = ss.insertSheet(SHEET_LOGS); sheet.appendRow(['Date', 'Token', 'FileID', 'Name', 'Folder']); }
+    sheet.appendRow([new Date(), token, fileId, fileName, folderName]);
+  } catch (e) {
+    Logger.log('Log error: ' + e);
   }
 }
 
-function generateSessionToken() {
-  return Utilities.getUuid() + '_' + new Date().getTime();
-}
-
-function createResponse(success, message, data = null) {
-  const res = { success, message, ...data };
-  return ContentService.createTextOutput(JSON.stringify(res))
+function createResponse(success, error, data) {
+  const result = { success: success };
+  if (error) result.error = error;
+  if (data) {
+    for (const key in data) result[key] = data[key];
+  }
+  return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
 // ============================================
-// INITIALIZATION
+// 7. SYSTEM INITIALIZATION (Run Once)
 // ============================================
 
 function initializeSystem() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  if (!ss.getSheetByName(USERS_SHEET_NAME)) {
-    const sheet = ss.insertSheet(USERS_SHEET_NAME);
-    sheet.appendRow(['Username', 'Password', 'Email', 'Role', 'User ID', 'Chapter ID']);
-    sheet.appendRow(['admin', 'admin123', 'admin@dyesabel.org', 'admin', Utilities.getUuid(), '']);
+  
+  // 1. Create Users Sheet
+  if (!ss.getSheetByName(SHEET_USERS)) {
+    const s = ss.insertSheet(SHEET_USERS);
+    s.appendRow(['Username', 'Password', 'Email', 'Role', 'UserId', 'ChapterId']);
+    s.appendRow(['admin', 'admin123', 'admin@example.com', 'admin', Utilities.getUuid(), '']);
+    Logger.log('Created Users sheet with default admin.');
   }
-  if (!ss.getSheetByName(SESSIONS_SHEET_NAME)) {
-    const sheet = ss.insertSheet(SESSIONS_SHEET_NAME);
-    sheet.appendRow(['Token', 'UserData', 'Created', 'Expires']);
+
+  // 2. Create Sessions Sheet
+  if (!ss.getSheetByName(SHEET_SESSIONS)) {
+    const s = ss.insertSheet(SHEET_SESSIONS);
+    s.appendRow(['Token', 'UserData', 'ExpiresAt']);
   }
+
+  // 3. Create Logs Sheet
+  if (!ss.getSheetByName(SHEET_LOGS)) {
+    const s = ss.insertSheet(SHEET_LOGS);
+    s.appendRow(['Timestamp', 'UserToken', 'FileId', 'FileName', 'Folder']);
+  }
+  
+  // 4. Create Org Settings
+  if (!ss.getSheetByName(SHEET_ORG)) {
+    const s = ss.insertSheet(SHEET_ORG);
+    s.appendRow(['Key', 'Value']);
+    s.appendRow(['organizationName', 'Dyesabel PH']);
+  }
+
+  Logger.log('Initialization Complete.');
 }

@@ -27,7 +27,7 @@ export const Hero: React.FC<HeroProps> = ({ onDonateClick }) => {
         </div>
         
         <p className="text-lg md:text-xl lg:text-2xl font-light max-w-3xl mx-auto mb-12 text-ocean-deep/90 dark:text-white/90 drop-shadow-sm reveal reveal-delay-200 leading-relaxed">
-          Developing the Youth with <span className="font-semibold text-primary-blue dark:text-primary-cyan">Environmentally Sustainable Advocacies</span> Building and Empowering Lives.
+          <span className="font-semibold text-primary-blue dark:text-primary-cyan">D</span>eveloping the <span className="font-semibold text-primary-blue dark:text-primary-cyan">Y</span>outh with <span className="font-semibold text-primary-blue dark:text-primary-cyan">E</span>nvironmentally <span className="font-semibold text-primary-blue dark:text-primary-cyan">S</span>ustainable <span className="font-semibold text-primary-blue dark:text-primary-cyan">A</span>dvocacies <span className="font-semibold text-primary-blue dark:text-primary-cyan">B</span>uilding and <span className="font-semibold text-primary-blue dark:text-primary-cyan">E</span>mpowering <span className="font-semibold text-primary-blue dark:text-primary-cyan">L</span>ives <span className="font-semibold text-primary-blue dark:text-primary-cyan">Philippines, Inc.</span>
         </p>
         
         <div className="flex flex-col sm:flex-row gap-6 justify-center items-center reveal reveal-delay-300">

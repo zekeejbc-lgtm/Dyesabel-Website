@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Image as ImageIcon, FileText, Users, Upload, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { DriveService } from '../services/DriveService';
+import { uploadImageToDrive } from '../services/DriveService';
 
 interface ChapterEditorProps {
   onBack: () => void;
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }: ChapterEditorProps) => {
   const { user, logout } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   
@@ -34,12 +34,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }) => {
 
   const handleImageUpload = async (file: File) => {
     try {
-      const fileName = `chapter-${user?.chapterId || 'unknown'}-${Date.now()}`;
+      const sessionToken = localStorage.getItem('dyesabel_session') || '';
+      const result = await uploadImageToDrive(file, 'Chapters', sessionToken);
       
-      const result = await DriveService.uploadImage(file, 'chapters', fileName);
-      
-      if (result.success && result.url) {
-        setChapterData({...chapterData, imageUrl: result.url});
+      if (result.success && result.fileUrl) {
+        setChapterData({...chapterData, imageUrl: result.fileUrl});
       } else {
         alert('Upload failed: ' + (result.error || 'Unknown error'));
       }
@@ -55,11 +54,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }) => {
     });
   };
 
-  const handleRemoveActivity = (id: number) => {
+  const handleRemoveActivity = (id: number | number) => {
     if (!confirm('Remove this activity?')) return;
     setChapterData({
       ...chapterData,
-      activities: chapterData.activities.filter(a => a.id !== id)
+      activities: chapterData.activities.filter((a: any) => a.id !== id)
     });
   };
 

@@ -395,7 +395,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
       {activeEditor === 'landing' && (
         <LandingPageEditor
-          onClose={() => setActiveEditor(null)}
+          onBack={() => setActiveEditor(null)}
         />
       )}
 

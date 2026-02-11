@@ -54,21 +54,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 }, []);
 
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(GAS_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'login',
-          username,
-          password,
-        }),
-      });
+  setIsLoading(true);
+  try {
+    const response = await fetch(GAS_API_URL, {
+      method: 'POST',
+      // REMOVED: mode: 'cors' and 'Content-Type' header
+      // This allows the browser to bypass the preflight check
+      body: JSON.stringify({
+        action: 'login',
+        username,
+        password,
+      }),
+    });
 
-      const data = await response.json();
+    const data = await response.json();
 
       if (data.success && data.user) {
         setUser(data.user);
@@ -82,8 +81,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     } catch (error) {
       console.error('Login error:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Network error';
+      const corsError = errorMsg.includes('CORS') || errorMsg.includes('fetch') ? 
+        'CORS error: Unable to connect to the server. Please ensure the GAS URL is correct and deployed with "Anyone" access.' : 
+        errorMsg;
       setIsLoading(false);
-      return { success: false, error: 'Network error. Please try again.' };
+      return { success: false, error: corsError };
     }
   };
 

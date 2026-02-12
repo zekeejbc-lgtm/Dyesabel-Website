@@ -1,13 +1,16 @@
 import React, { useEffect } from 'react';
-import { ArrowLeft, Target, Calendar, CheckCircle2 } from 'lucide-react';
+import { ArrowLeft, Target, Calendar, CheckCircle2, Edit } from 'lucide-react';
 import { Pillar } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PillarDetailProps {
   pillar: Pillar;
   onBack: () => void;
+  onEdit?: () => void;
 }
 
-export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack }) => {
+export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEdit }) => {
+  const { user } = useAuth();
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
@@ -22,6 +25,17 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack }) =>
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
         <span>Back to Pillars</span>
       </button>
+
+      {/* Edit Button - Show only if user is admin or editor */}
+      {onEdit && (user?.role === 'admin' || user?.role === 'editor') && (
+        <button 
+          onClick={onEdit}
+          className="fixed top-24 right-4 md:right-8 z-40 flex items-center gap-2 bg-primary-blue/90 text-white backdrop-blur-md hover:bg-primary-cyan transition-all duration-300 font-medium px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] border border-white/10 group"
+        >
+          <Edit size={18} className="group-hover:scale-110 transition-transform" />
+          <span>Edit Pillar</span>
+        </button>
+      )}
 
       {/* Hero Section */}
       <section className="relative h-[60vh] min-h-[500px] flex items-end pb-16 overflow-hidden mb-12">

@@ -1,13 +1,16 @@
 import React, { useEffect } from 'react';
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, User, Facebook, Twitter, Instagram } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, User, Facebook, Twitter, Instagram, Edit } from 'lucide-react';
 import { Chapter } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ChapterDetailProps {
   chapter: Chapter;
   onBack: () => void;
+  onEdit?: () => void;
 }
 
-export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter, onBack }) => {
+export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter, onBack, onEdit }) => {
+  const { user } = useAuth();
   
   // Scroll to top when component mounts
   useEffect(() => {
@@ -25,6 +28,17 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter, onBack })
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
         <span>Back to Chapters</span>
       </button>
+
+      {/* Edit Button - Show only if user is chapter head for this chapter */}
+      {onEdit && (user?.role === 'chapter_head' || user?.role === 'admin') && (
+        <button 
+          onClick={onEdit}
+          className="fixed top-24 right-4 md:right-8 z-40 flex items-center gap-2 bg-primary-blue/90 text-white backdrop-blur-md hover:bg-primary-cyan transition-all duration-300 font-medium px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] border border-white/10 group"
+        >
+          <Edit size={18} className="group-hover:scale-110 transition-transform" />
+          <span>Edit Chapter</span>
+        </button>
+      )}
 
       {/* Hero Section */}
       <section className="relative h-[50vh] min-h-[400px] flex items-end pb-12 overflow-hidden mb-12">

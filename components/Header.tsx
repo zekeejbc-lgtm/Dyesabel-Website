@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Sun, Moon, LogIn } from 'lucide-react';
+import { Menu, X, Sun, Moon, LogIn, Edit } from 'lucide-react';
 import { NavLink } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const VOLUNTEER_URL = "https://forms.gle/W6WVpftGDwM7fUm19";
 
@@ -17,9 +18,11 @@ interface HeaderProps {
   toggleTheme: () => void;
   onHomeClick?: () => void;
   onSignInClick: () => void;
+  onEditLogo?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick, onSignInClick }) => {
+export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick, onSignInClick, onEditLogo }) => {
+  const { user } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -143,6 +146,17 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
             {/* Separator between links and buttons */}
             <div className={`h-4 lg:h-5 w-px mx-3 lg:mx-5 ${isScrolled ? 'bg-gray-300 dark:bg-gray-700' : 'bg-ocean-deep/20 dark:bg-white/20'}`}></div>
 
+            {/* Edit Logo Button (Admin/Editor only) */}
+            {onEditLogo && (user?.role === 'admin' || user?.role === 'editor') && (
+              <button
+                onClick={onEditLogo}
+                className="bg-amber-500 hover:bg-amber-600 text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-amber-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+              >
+                Edit Logo
+                <Edit size={14} className="lg:w-4 lg:h-4" />
+              </button>
+            )}
+
             {/* Sign In Button */}
             <button
               onClick={onSignInClick}
@@ -207,6 +221,19 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
               {link.label}
             </a>
           ))}
+          {/* Mobile Edit Logo Button */}
+          {onEditLogo && (user?.role === 'admin' || user?.role === 'editor') && (
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                onEditLogo();
+              }}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
+            >
+              Edit Logo
+              <Edit size={18} />
+            </button>
+          )}
           {/* Mobile Sign In */}
            <button
               onClick={() => {

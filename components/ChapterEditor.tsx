@@ -2,26 +2,27 @@ import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Image as ImageIcon, FileText, Users, Upload, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { DriveService, DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY } from '../types';
+import { SESSION_TOKEN_KEY, Chapter } from '../types';
 
 interface ChapterEditorProps {
   onBack: () => void;
+  chapter?: Chapter;
 }
 
-export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }: ChapterEditorProps) => {
+export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }: ChapterEditorProps) => {
   const { user, logout } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   
   // Chapter data (this would be fetched from your backend/GAS)
   const [chapterData, setChapterData] = useState({
-    title: user?.chapterId ? `${user.chapterId} Chapter` : 'My Chapter',
-    description: 'Building strong communities through education and empowerment',
+    title: chapter?.name || user?.chapterId ? `${user?.chapterId} Chapter` : 'My Chapter',
+    description: chapter?.description || 'Building strong communities through education and empowerment',
     activities: [
       { id: 1, title: 'Youth Leadership Program', description: 'Empowering young leaders' },
       { id: 2, title: 'Community Outreach', description: 'Reaching out to communities in need' },
     ],
     members: 45,
-    imageUrl: 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&q=80&w=800'
+    imageUrl: chapter?.image || 'https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&q=80&w=800'
   });
 
   const handleSave = async () => {
@@ -122,7 +123,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }: ChapterE
               <div>
                 <h1 className="text-3xl font-black text-ocean-deep dark:text-white">Chapter Editor</h1>
                 <p className="text-ocean-deep/60 dark:text-gray-400 mt-1">
-                  Editing: {chapterData.title}
+                  Editing: {chapter?.name || chapterData.title}
                 </p>
               </div>
             </div>

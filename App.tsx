@@ -14,8 +14,13 @@ import { PillarDetail } from './components/PillarDetail';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ChapterEditor } from './components/ChapterEditor';
 import { LandingPageEditor } from './components/LandingPageEditor';
+import { PillarsEditor } from './components/PillarsEditor';
+import { PartnersEditor } from './components/PartnersEditor';
+import { FoundersEditor } from './components/FoundersEditor';
+import { LogoEditor } from './components/LogoEditor';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Chapter, Pillar } from './types';
+import { pillarsData } from './components/Stories';
 
 function AppContent() {
   const { user, isAuthenticated } = useAuth();
@@ -35,10 +40,53 @@ function AppContent() {
   });
 
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [isChapterEditorOpen, setIsChapterEditorOpen] = useState(false);
   const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null);
+  const [isPillarEditorOpen, setIsPillarEditorOpen] = useState(false);
+  const [isPartnersEditorOpen, setIsPartnersEditorOpen] = useState(false);
+  const [isFoundersEditorOpen, setIsFoundersEditorOpen] = useState(false);
+  const [isLogoEditorOpen, setIsLogoEditorOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isDonatePageOpen, setIsDonatePageOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
+
+  // State for editable content
+  const [pillars, setPillars] = useState(pillarsData);
+  const [partners, setPartners] = useState<any[]>([
+    {
+      id: 'coalitions',
+      title: 'Coalitions',
+      partners: [
+        { id: 'c1', name: 'Youth for Nature', logo: 'https://ui-avatars.com/api/?name=Youth+Nature&background=22d3ee&color=fff' },
+        { id: 'c2', name: 'Mindanao Green Alliance', logo: 'https://ui-avatars.com/api/?name=Mindanao+Green&background=2563eb&color=fff' },
+      ]
+    },
+    {
+      id: 'gov',
+      title: 'Government Partners',
+      partners: [
+        { id: 'g1', name: 'DENR', logo: 'https://ui-avatars.com/api/?name=DENR&background=059669&color=fff' },
+        { id: 'g2', name: 'Provincial Gov. Davao', logo: 'https://ui-avatars.com/api/?name=Davao+Gov&background=db2777&color=fff' },
+        { id: 'g3', name: 'LGU Tagum City', logo: 'https://ui-avatars.com/api/?name=Tagum&background=d97706&color=fff' },
+      ]
+    },
+  ]);
+  const [founders, setFounders] = useState<any[]>([
+    {
+      id: '1',
+      name: 'Maria Clara Santos',
+      role: 'Co-Founder & Executive Director',
+      bio: 'An environmental scientist with over 15 years of experience in marine conservation.',
+      imageUrl: 'https://picsum.photos/seed/person1/400/400'
+    },
+    {
+      id: '2',
+      name: 'Juan Dela Cruz',
+      role: 'Co-Founder & Director of Advocacy',
+      bio: 'A passionate youth leader and educator focused on grassroots engagement.',
+      imageUrl: 'https://picsum.photos/seed/person2/400/400'
+    }
+  ]);
 
   useEffect(() => {
     // Apply theme class to document element
@@ -58,6 +106,16 @@ function AppContent() {
     setSelectedChapter(chapter);
     setSelectedPillar(null);
     setIsDonatePageOpen(false);
+    setIsChapterEditorOpen(false);
+    window.scrollTo(0, 0);
+  };
+
+  const handleEditChapter = () => {
+    setIsChapterEditorOpen(true);
+  };
+
+  const handleBackFromEditor = () => {
+    setIsChapterEditorOpen(false);
     window.scrollTo(0, 0);
   };
 
@@ -65,13 +123,67 @@ function AppContent() {
     setSelectedPillar(pillar);
     setSelectedChapter(null);
     setIsDonatePageOpen(false);
+    setIsPillarEditorOpen(false);
     window.scrollTo(0, 0);
+  };
+
+  const handleEditPillar = () => {
+    setIsPillarEditorOpen(true);
+  };
+
+  const handleBackFromPillarEditor = () => {
+    setIsPillarEditorOpen(false);
+    window.scrollTo(0, 0);
+  };
+
+  const handleEditPartners = () => {
+    setIsPartnersEditorOpen(true);
+  };
+
+  const handleBackFromPartnersEditor = () => {
+    setIsPartnersEditorOpen(false);
+  };
+
+  const handleEditFounders = () => {
+    setIsFoundersEditorOpen(true);
+  };
+
+  const handleBackFromFoundersEditor = () => {
+    setIsFoundersEditorOpen(false);
+  };
+
+  const handleEditLogo = () => {
+    setIsLogoEditorOpen(true);
+  };
+
+  const handleBackFromLogoEditor = () => {
+    setIsLogoEditorOpen(false);
+  };
+
+  const handleSavePillars = async (updatedPillars: Pillar[]) => {
+    setPillars(updatedPillars);        // Update the state with new data
+    setIsPillarEditorOpen(false);      // Close the editor
+  };
+
+  const handleSavePartners = async (updatedPartners: any[]) => {
+    setPartners(updatedPartners);
+    setIsPartnersEditorOpen(false);
+  };
+
+  const handleSaveFounders = async (updatedFounders: any[]) => {
+    setFounders(updatedFounders);
+    setIsFoundersEditorOpen(false);
   };
 
   const handleBackToHome = () => {
     setSelectedChapter(null);
     setSelectedPillar(null);
     setIsDonatePageOpen(false);
+    setIsChapterEditorOpen(false);
+    setIsPillarEditorOpen(false);
+    setIsPartnersEditorOpen(false);
+    setIsFoundersEditorOpen(false);
+    setIsLogoEditorOpen(false);
     window.scrollTo(0, 0);
   };
 
@@ -88,6 +200,11 @@ function AppContent() {
     setSelectedPillar(null);
     setIsDonatePageOpen(false);
     setShowDashboard(false);
+    setIsChapterEditorOpen(false);
+    setIsPillarEditorOpen(false);
+    setIsPartnersEditorOpen(false);
+    setIsFoundersEditorOpen(false);
+    setIsLogoEditorOpen(false);
 
     // Allow state updates to propagate then scroll
     setTimeout(() => {
@@ -155,10 +272,13 @@ function AppContent() {
         toggleTheme={toggleTheme} 
         onHomeClick={handleBackToHome} 
         onSignInClick={() => setIsLoginModalOpen(true)}
+        onEditLogo={handleEditLogo}
       />
       
       <main className="relative">
-        {showDashboard && isAuthenticated ? (
+        {isLogoEditorOpen ? (
+          <LogoEditor onClose={handleBackFromLogoEditor} />
+        ) : showDashboard && isAuthenticated ? (
           // Show appropriate dashboard based on user role
           user?.role === 'admin' ? (
             <AdminDashboard onBack={handleDashboardBack} />
@@ -169,18 +289,30 @@ function AppContent() {
           ) : null
         ) : isDonatePageOpen ? (
           <DonatePage onBack={handleBackToHome} />
+        ) : isPartnersEditorOpen ? (
+          <PartnersEditor categories={partners} onSave={handleSavePartners} onClose={handleBackFromPartnersEditor} />
+        ) : isFoundersEditorOpen ? (
+          <FoundersEditor founders={founders} onSave={handleSaveFounders} onClose={handleBackFromFoundersEditor} />
         ) : selectedPillar ? (
-          <PillarDetail pillar={selectedPillar} onBack={handleBackToHome} />
+          isPillarEditorOpen ? (
+            <PillarsEditor pillars={pillars} onSave={handleSavePillars} onClose={handleBackFromPillarEditor} />
+          ) : (
+            <PillarDetail pillar={selectedPillar} onBack={handleBackToHome} onEdit={handleEditPillar} />
+          )
         ) : selectedChapter ? (
-          <ChapterDetail chapter={selectedChapter} onBack={handleBackToHome} />
+          isChapterEditorOpen ? (
+            <ChapterEditor chapter={selectedChapter} onBack={handleBackFromEditor} />
+          ) : (
+            <ChapterDetail chapter={selectedChapter} onBack={handleBackToHome} onEdit={handleEditChapter} />
+          )
         ) : (
           <>
             <Hero onDonateClick={handleDonateClick} />
             <Slogan />
             <Pillars onSelectPillar={handleSelectPillar} />
             <Chapters onSelectChapter={handleSelectChapter} />
-            <Partners />
-            <Founders />
+            <Partners onEdit={handleEditPartners} />
+            <Founders onEdit={handleEditFounders} />
           </>
         )}
       </main>

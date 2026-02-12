@@ -1,5 +1,7 @@
 import React from 'react';
 import { Founder } from '../types';
+import { Edit } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const founders: Founder[] = [
   {
@@ -18,13 +20,29 @@ const founders: Founder[] = [
   }
 ];
 
-export const Founders: React.FC = () => {
+interface FoundersProps {
+  onEdit?: () => void;
+}
+
+export const Founders: React.FC<FoundersProps> = ({ onEdit }) => {
+  const { user } = useAuth();
   return (
     <section className="py-24 relative">
       <div className="container mx-auto px-4">
-        <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-center text-ocean-deep dark:text-white drop-shadow-md mb-20 reveal">
-          Meet the Founders
-        </h2>
+        <div className="flex flex-col items-center gap-6 mb-20">
+          <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-center text-ocean-deep dark:text-white drop-shadow-md reveal">
+            Meet the Founders
+          </h2>
+          {onEdit && (user?.role === 'admin' || user?.role === 'editor') && (
+            <button 
+              onClick={onEdit}
+              className="flex items-center gap-2 bg-primary-blue hover:bg-primary-cyan text-white font-medium px-6 py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl"
+            >
+              <Edit size={18} />
+              <span>Edit Founders</span>
+            </button>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto">
           {founders.map((founder, index) => (

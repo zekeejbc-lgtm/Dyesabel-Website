@@ -1,5 +1,6 @@
 import React from 'react';
-import { Users, Building2, Globe2, Flag } from 'lucide-react';
+import { Users, Building2, Globe2, Flag, Edit } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Partner {
   id: string;
@@ -55,11 +56,16 @@ const partnerCategories: PartnerCategory[] = [
   }
 ];
 
-export const Partners: React.FC = () => {
+interface PartnersProps {
+  onEdit?: () => void;
+}
+
+export const Partners: React.FC<PartnersProps> = ({ onEdit }) => {
+  const { user } = useAuth();
   return (
     <section id="partners" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
-        <div className="text-center mb-16 reveal">
+        <div className="text-center mb-16 reveal flex flex-col items-center">
            <h3 className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">Together We Are Stronger</h3>
            <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-ocean-deep dark:text-white drop-shadow-lg mb-6">
             Our Partners
@@ -67,6 +73,15 @@ export const Partners: React.FC = () => {
           <p className="text-lg text-ocean-deep/70 dark:text-gray-300 max-w-2xl mx-auto font-medium">
             Collaborating with diverse organizations across sectors to amplify our impact and drive sustainable change.
           </p>
+          {onEdit && (user?.role === 'admin' || user?.role === 'editor') && (
+            <button 
+              onClick={onEdit}
+              className="mt-6 flex items-center gap-2 bg-primary-blue hover:bg-primary-cyan text-white font-medium px-6 py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl"
+            >
+              <Edit size={18} />
+              <span>Edit Partners</span>
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col gap-8 max-w-5xl mx-auto">

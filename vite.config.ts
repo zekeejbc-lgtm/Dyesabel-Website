@@ -18,6 +18,24 @@ export default defineConfig(({ mode }) => {
         alias: {
           '@': path.resolve(__dirname, '.'),
         }
-      }
+      },
+      // ✅ ADDED: This block fixes "Project Too Large" build errors
+      build: {
+        target: 'esnext',
+        outDir: 'build',
+        chunkSizeWarningLimit: 1200,
+        rollupOptions: {
+          output: {
+            manualChunks: (id) => {
+              // Split vendor code into separate files
+              if (id.includes('node_modules')) {
+                if (id.includes('react')) return 'vendor-react';
+                if (id.includes('lucide')) return 'vendor-icons';
+                return 'vendor-libs'; // Catch-all for other libs
+              }
+            },
+          },
+        },
+      },
     };
 });

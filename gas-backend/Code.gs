@@ -185,11 +185,16 @@ function handleUploadImage(data) {
   // 4. Log
   logUpload(data.sessionToken, file.getId(), file.getName(), folder.getName());
 
+  // Use the "thumbnail" hack with size w4000 (high res) to bypass CORS issues
+  // Standard getDownloadUrl() often redirects to domains that block localhost
+  const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+
   return {
     fileId: file.getId(),
     fileName: file.getName(),
-    fileUrl: file.getDownloadUrl(),
-    thumbnailUrl: `https://drive.google.com/thumbnail?sz=w1000&id=${file.getId()}`
+    fileUrl: corsFreeUrl, // Replaced standard URL with CORS-free version
+    originalUrl: file.getDownloadUrl(), // Keeping original just in case
+    thumbnailUrl: corsFreeUrl
   };
 }
 
@@ -253,11 +258,15 @@ function handleListImages(data) {
   while (files.hasNext()) {
     const file = files.next();
     if (file.getMimeType().indexOf('image/') > -1) {
+      // Generate CORS-safe link
+      const safeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+
       list.push({
         fileId: file.getId(),
         fileName: file.getName(),
-        fileUrl: file.getDownloadUrl(),
-        thumbnailUrl: `https://drive.google.com/thumbnail?sz=w400&id=${file.getId()}`
+        fileUrl: safeUrl, // Use safe URL for display
+        downloadUrl: file.getDownloadUrl(),
+        thumbnailUrl: safeUrl
       });
     }
   }

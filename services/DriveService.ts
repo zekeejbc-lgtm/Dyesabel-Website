@@ -46,7 +46,9 @@ const fetchWithTextPlain = async (url: string, payload: string): Promise<Respons
   return fetch(url, {
     method: 'POST',
     redirect: 'follow',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    // REMOVE charset to ensure this is treated strictly as a Simple Request
+    // This prevents the browser from sending an OPTIONS preflight check
+    headers: { 'Content-Type': 'text/plain' },
     body: payload
   });
 };
@@ -453,10 +455,26 @@ const fileToBase64 = (file: File): Promise<string> => {
     reader.readAsDataURL(file);
     reader.onload = () => {
       const result = reader.result as string;
-      // Remove "data:image/png;base64," prefix
       const base64 = result.split(',')[1];
       resolve(base64);
     };
     reader.onerror = error => reject(error);
   });
+};
+
+/**
+ * Converts standard Drive links to high-res thumbnail links.
+ * Bypasses CORS restrictions on <img> tags.
+ */
+export const convertToCORSFreeLink = (url: string | undefined): string => {
+  if (!url) return '';
+  
+  // Extract ID from standard Drive URL
+  const idMatch = url.match(/id=([a-zA-Z0-9_-]+)/) || url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (idMatch && idMatch[1]) {
+    // Return high-res (w4000) thumbnail link which skips CORS
+    return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w4000`;
+  }
+  
+  return url;
 };

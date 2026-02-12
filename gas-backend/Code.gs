@@ -46,6 +46,9 @@ function doPost(e) {
       case 'validateSession': result = handleValidateSession(data); break;
       case 'register':        result = handleRegister(data); break;
       case 'updatePassword':  result = handleUpdatePassword(data); break;
+      case 'createUser':      result = handleCreateUser(data); break;
+      case 'listUsers':       result = handleListUsers(data); break;
+      case 'deleteUser':      result = handleDeleteUser(data); break;
 
       // Drive / Files
       case 'uploadImage':       result = handleUploadImage(data); break;
@@ -61,6 +64,8 @@ function doPost(e) {
       case 'loadPillars':       result = handleLoadData('Pillars'); break;
       case 'saveChapter':       result = handleSaveChapter(data); break;
       case 'loadChapter':       result = handleLoadChapter(data); break;
+      case 'saveLandingPage':   result = handleSaveData('LandingPage', data.landingPage, data.sessionToken); break;
+      case 'loadLandingPage':   result = handleLoadData('LandingPage'); break;
       
       // Generic Data Handlers (Partners, Stories, Founders)
       case 'savePartners':      result = handleSaveData('Partners', data.partners, data.sessionToken); break;
@@ -464,6 +469,114 @@ function createResponse(success, error, data) {
   }
   return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// ============================================
+// NEW USER MANAGEMENT HANDLERS
+// ============================================
+
+function handleCreateUser(data) {
+  validateAdminOnly(data.sessionToken);
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const rows = sheet.getDataRange().getValues();
+  
+  // Check duplicates
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.username) throw new Error('Username already exists');
+    if (rows[i][2] === data.email) throw new Error('Email already registered');
+  }
+  
+  const newId = Utilities.getUuid();
+  // Row: [Username, Password, Email, Role, UserId, ChapterId]
+  sheet.appendRow([
+    data.username, 
+    data.password, 
+    data.email, 
+    data.role, 
+    newId, 
+    data.chapterId || ''
+  ]);
+  
+  return { 
+    message: 'User created successfully',
+    user: {
+      username: data.username,
+      email: data.email,
+      role: data.role,
+      id: newId,
+      chapterId: data.chapterId
+    }
+  };
+}
+
+function handleUpdatePassword(data) {
+  const session = getSession(data.sessionToken);
+  if (!session) throw new Error('Unauthorized');
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const rows = sheet.getDataRange().getValues();
+  
+  // Users can only update their own password unless they're admin
+  const targetUsername = data.targetUsername || session.user.username;
+  
+  if (targetUsername !== session.user.username && session.user.role !== 'admin') {
+    throw new Error('Insufficient permissions');
+  }
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === targetUsername) {
+      sheet.getRange(i + 1, 2).setValue(data.newPassword);
+      return { message: 'Password updated successfully' };
+    }
+  }
+  throw new Error('User not found');
+}
+
+function handleListUsers(data) {
+  validateAdminOnly(data.sessionToken);
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const rows = sheet.getDataRange().getValues();
+  
+  const users = [];
+  for (let i = 1; i < rows.length; i++) {
+    users.push({
+      username: rows[i][0],
+      email: rows[i][2],
+      role: rows[i][3],
+      id: rows[i][4],
+      chapterId: rows[i][5]
+      // Note: Password is NOT included for security
+    });
+  }
+  
+  return { users: users };
+}
+
+function handleDeleteUser(data) {
+  validateAdminOnly(data.sessionToken);
+  
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const rows = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][4] === data.userId) {
+      sheet.deleteRow(i + 1);
+      return { message: 'User deleted successfully' };
+    }
+  }
+  throw new Error('User not found');
+}
+
+function validateAdminOnly(token) {
+  const session = getSession(token);
+  if (!session) throw new Error('Unauthorized');
+  if (session.user.role !== 'admin') throw new Error('Admin access required');
 }
 
 // ============================================

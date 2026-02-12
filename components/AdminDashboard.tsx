@@ -8,6 +8,10 @@ import { StoriesEditor } from './StoriesEditor';
 import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
 import { pillarsData } from './Stories';
+import { DriveService, DataService } from '../services/DriveService';
+import { SESSION_TOKEN_KEY } from '../types';
+import { UserManagement } from './UserManagement';
+
 
 // Import initial data
 const initialPartnerCategories = [
@@ -88,27 +92,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   };
 
   const handleSavePillars = async (updatedPillars: any) => {
-    // TODO: Save to Google Sheets via GAS
-    setPillars(updatedPillars);
-    console.log('Saving pillars:', updatedPillars);
+    try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        return;
+      }
+      setPillars(updatedPillars);
+      console.log('Saving pillars:', updatedPillars);
+      const result = await DataService.savePillars(updatedPillars, sessionToken);
+      if (result.success) {
+        console.log('Pillars saved successfully');
+      } else {
+        console.error('Error saving pillars:', result.error);
+        alert('Error saving pillars: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving pillars:', error);
+      alert('Error saving pillars: ' + (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   const handleSavePartners = async (updatedPartners: any) => {
-    // TODO: Save to Google Sheets via GAS
-    setPartners(updatedPartners);
-    console.log('Saving partners:', updatedPartners);
+    try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        return;
+      }
+      setPartners(updatedPartners);
+      console.log('Saving partners:', updatedPartners);
+      const result = await DataService.savePartners(updatedPartners, sessionToken);
+      if (result.success) {
+        console.log('Partners saved successfully');
+      } else {
+        console.error('Error saving partners:', result.error);
+        alert('Error saving partners: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving partners:', error);
+      alert('Error saving partners: ' + (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   const handleSaveFounders = async (updatedFounders: any) => {
-    // TODO: Save to Google Sheets via GAS
-    setFounders(updatedFounders);
-    console.log('Saving founders:', updatedFounders);
+    try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        return;
+      }
+      setFounders(updatedFounders);
+      console.log('Saving founders:', updatedFounders);
+      const result = await DataService.saveFounders(updatedFounders, sessionToken);
+      if (result.success) {
+        console.log('Founders saved successfully');
+      } else {
+        console.error('Error saving founders:', result.error);
+        alert('Error saving founders: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving founders:', error);
+      alert('Error saving founders: ' + (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   const handleSaveStories = async (updatedStories: any) => {
-    // TODO: Save to Google Sheets via GAS
-    setStories(updatedStories);
-    console.log('Saving stories:', updatedStories);
+    try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        return;
+      }
+      setStories(updatedStories);
+      console.log('Saving stories:', updatedStories);
+      const result = await DataService.saveStories(updatedStories, sessionToken);
+      if (result.success) {
+        console.log('Stories saved successfully');
+      } else {
+        console.error('Error saving stories:', result.error);
+        alert('Error saving stories: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving stories:', error);
+      alert('Error saving stories: ' + (error instanceof Error ? error.message : String(error)));
+    }
   };
 
   // Check if user has permission
@@ -355,6 +423,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   Stored in Google Drive
                 </div>
               </button>
+
+              {/* User Management Card (Admin Only) */}
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => setActiveEditor('users')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-indigo-500/10 rounded-lg group-hover:bg-indigo-500/20 transition-colors">
+                      <UsersIcon className="text-indigo-500" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-indigo-500">Manage →</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    User Management
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    Create, edit, and manage user accounts
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    User administration & permissions
+                  </div>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -406,6 +498,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             // Update logo in header if needed
             console.log('Logo updated:', newLogoUrl);
           }}
+        />
+      )}
+
+      {activeEditor === 'users' && user?.role === 'admin' && (
+        <UserManagement
+          onBack={() => setActiveEditor(null)}
         />
       )}
     </>

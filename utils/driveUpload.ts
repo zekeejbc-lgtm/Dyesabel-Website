@@ -1,11 +1,11 @@
 /**
  * Google Drive Image Upload Utility
  * 
- * This utility handles uploading images to Google Drive and returning public URLs
- * that can be used in the website.
+ * This utility provides wrapper functions for uploading images to Google Drive.
+ * It uses DriveService for all API calls, which includes CORS bypass and error handling.
  */
 
-const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbx6jSvrQOC8dh9rtZ9Ort368Q2a--aSEcx7mmWNTfdonGWQglcNPGxM3HLOndS4Mt1ahQ/exec';
+import { DriveService, DataService } from '../services/DriveService';
 
 export interface UploadResult {
   success: boolean;
@@ -19,12 +19,14 @@ export interface UploadResult {
  * @param file - The image file to upload
  * @param folder - The folder name in Google Drive (e.g., 'pillars', 'partners', 'logos')
  * @param sessionToken - User's session token for authentication
+ * @param oldFileId - (Optional) File ID of image to delete/replace
  * @returns Promise with upload result containing the public URL
  */
 export async function uploadImageToDrive(
   file: File,
   folder: string,
-  sessionToken: string
+  sessionToken: string,
+  oldFileId?: string
 ): Promise<UploadResult> {
   try {
     // Validate file type
@@ -45,44 +47,40 @@ export async function uploadImageToDrive(
       };
     }
 
-    // Convert file to base64
-    const base64 = await fileToBase64(file);
+    // If replacing an image, delete the old one first
+    if (oldFileId) {
+      try {
+        const deleteResult = await DriveService.deleteImage(oldFileId, sessionToken);
+        if (!deleteResult.success) {
+          console.warn('Failed to delete old image:', deleteResult.error);
+          // Continue anyway - old image stays but new one will be uploaded
+        }
+      } catch (deleteError) {
+        console.warn('Error deleting old image:', deleteError);
+        // Continue with upload despite delete failure
+      }
+    }
 
-    // Send to Google Apps Script
-    const response = await fetch(GAS_API_URL, {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'text/plain;charset=utf-8', 
-  },
-  body: JSON.stringify({
-    action: 'uploadImage',
-    sessionToken,
-    fileName: file.name,
-    mimeType: file.type,
-    base64Data: base64,
-    folder: folder
-  })
-});
+    // Use DriveService with CORS bypass and error handling
+    const result = await DriveService.uploadImage(file, sessionToken);
 
-    const data = await response.json();
-
-    if (data.success) {
+    if (result.success) {
       return {
         success: true,
-        url: data.url,
-        fileId: data.fileId
+        url: result.fileUrl,
+        fileId: result.fileId
       };
     } else {
       return {
         success: false,
-        error: data.error || 'Upload failed'
+        error: result.error || 'Upload failed'
       };
     }
   } catch (error) {
     console.error('Upload error:', error);
     return {
       success: false,
-      error: 'Network error. Please try again.'
+      error: error instanceof Error ? error.message : 'Network error. Please try again.'
     };
   }
 }
@@ -91,13 +89,33 @@ export async function uploadImageToDrive(
  * Upload logo to Google Drive (specifically for organization logo)
  * @param file - The logo image file
  * @param sessionToken - User's session token
+ * @param oldFileId - (Optional) File ID of old logo to delete/replace
  * @returns Promise with upload result
  */
 export async function uploadLogo(
   file: File,
+  sessionToken: string,
+  oldFileId?: string
+): Promise<UploadResult> {
+  return uploadImageToDrive(file, 'logo', sessionToken, oldFileId);
+}
+
+/**
+ * Replace an existing image with a new one
+ * Automatically deletes the old image and uploads the new one
+ * @param newFile - The new image file
+ * @param oldFileId - The Google Drive file ID of the image to replace
+ * @param folder - The folder name in Google Drive
+ * @param sessionToken - User's session token
+ * @returns Promise with upload result
+ */
+export async function replaceImage(
+  newFile: File,
+  oldFileId: string,
+  folder: string,
   sessionToken: string
 ): Promise<UploadResult> {
-  return uploadImageToDrive(file, 'logo', sessionToken);
+  return uploadImageToDrive(newFile, folder, sessionToken, oldFileId);
 }
 
 /**
@@ -111,28 +129,16 @@ export async function deleteImageFromDrive(
   sessionToken: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(GAS_API_URL, {
-      method: 'POST',
-      headers: {
-  'Content-Type': 'text/plain;charset=utf-8', 
-},
-      body: JSON.stringify({
-        action: 'deleteImage',
-        sessionToken,
-        fileId
-      })
-    });
-
-    const data = await response.json();
+    const result = await DriveService.deleteImage(fileId, sessionToken);
     return {
-      success: data.success,
-      error: data.error
+      success: result.success,
+      error: result.error
     };
   } catch (error) {
     console.error('Delete error:', error);
     return {
       success: false,
-      error: 'Network error. Please try again.'
+      error: error instanceof Error ? error.message : 'Network error. Please try again.'
     };
   }
 }
@@ -141,8 +147,10 @@ export async function deleteImageFromDrive(
  * Convert File to base64 string
  * @param file - The file to convert
  * @returns Promise with base64 string (without data URI prefix)
+ * 
+ * Note: This function is provided for reference. DriveService.uploadImage() handles this internally.
  */
-function fileToBase64(file: File): Promise<string> {
+export function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -156,37 +164,37 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
+
 /**
  * Get organization settings including logo URL
- * @param sessionToken - User's session token
  * @returns Promise with organization settings
  */
-export async function getOrganizationSettings(
-  sessionToken: string
-): Promise<{
+export async function getOrganizationSettings(): Promise<{
   success: boolean;
   logoUrl?: string;
   organizationName?: string;
   error?: string;
 }> {
   try {
-    const response = await fetch(GAS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'getOrgSettings',
-        sessionToken
-      })
-    });
-
-    return await response.json();
+    const result = await DataService.getOrgSettings();
+    
+    if (result.success && result.settings) {
+      return {
+        success: true,
+        logoUrl: result.settings.logoUrl,
+        organizationName: result.settings.organizationName
+      };
+    } else {
+      return {
+        success: false,
+        error: result.error || 'Failed to load organization settings'
+      };
+    }
   } catch (error) {
     console.error('Error fetching org settings:', error);
     return {
       success: false,
-      error: 'Failed to load organization settings'
+      error: error instanceof Error ? error.message : 'Failed to load organization settings'
     };
   }
 }
@@ -206,24 +214,17 @@ export async function updateOrganizationSettings(
   }
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(GAS_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        action: 'updateOrgSettings',
-        sessionToken,
-        settings
-      })
-    });
-
-    return await response.json();
+    const result = await DataService.updateOrgSettings(settings, sessionToken);
+    
+    return {
+      success: result.success,
+      error: result.error
+    };
   } catch (error) {
     console.error('Error updating org settings:', error);
     return {
       success: false,
-      error: 'Failed to update organization settings'
+      error: error instanceof Error ? error.message : 'Failed to update organization settings'
     };
   }
 }

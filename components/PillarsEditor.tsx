@@ -70,25 +70,31 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
       const sessionToken = localStorage.getItem('dyesabel_session');
       if (!sessionToken) {
         alert('Session expired. Please log in again.');
+        setUploadingImage(false);
         return;
       }
 
       const folder = activityIndex !== null ? 'pillar-activities' : 'pillars';
+      console.log('Starting image upload...', { folder, fileName: file.name, size: file.size });
+      
       const result = await uploadImageToDrive(file, folder, sessionToken);
+      console.log('Upload result:', result);
 
       if (result.success && result.url) {
+        console.log('Image uploaded successfully:', result.url);
         if (activityIndex !== null) {
           updateActivity(pillarIndex, activityIndex, 'imageUrl', result.url);
         } else {
           updatePillar(pillarIndex, 'imageUrl', result.url);
         }
-        alert('Image uploaded successfully to Google Drive!');
+        alert('Image uploaded successfully!');
       } else {
+        console.error('Upload failed:', result.error);
         alert('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error uploading image. Please try again.');
       console.error('Upload error:', error);
+      alert('Error uploading image. Please try again.');
     } finally {
       setUploadingImage(false);
     }

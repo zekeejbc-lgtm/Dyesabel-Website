@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Layout, Type, Image } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { DataService } from '../services/DriveService';
+import { SESSION_TOKEN_KEY } from '../types';
 
 interface LandingPageEditorProps {
   onBack: () => void;
@@ -22,10 +24,29 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
 
   const handleSave = async () => {
     setIsSaving(true);
-    // Simulate save operation
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    alert('Landing page changes saved successfully!');
+    try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        setIsSaving(false);
+        return;
+      }
+
+      console.log('Saving landing page data:', pageData);
+      const result = await DataService.saveLandingPageData(pageData, sessionToken);
+      console.log('Save result:', result);
+
+      if (result.success) {
+        alert('Landing page changes saved successfully!');
+      } else {
+        alert('Error saving changes: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving landing page:', error);
+      alert('Error saving landing page: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleLogout = () => {

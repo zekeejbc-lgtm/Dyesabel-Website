@@ -49,3 +49,40 @@ export interface Pillar {
   imageUrl: string;
   activities: PillarActivity[];
 }
+
+// ==========================================
+// USER & AUTHENTICATION TYPES & CONSTANTS
+// ==========================================
+
+export type UserRole = 'admin' | 'editor' | 'chapter_head' | 'user';
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: UserRole;
+  chapterId?: string;
+}
+
+// Storage keys
+export const SESSION_TOKEN_KEY = 'dyesabel_session';
+export const USER_STORAGE_KEY = 'dyesabel_user';
+
+// Available user roles (for dropdowns, etc.)
+export const USER_ROLES = ['editor', 'chapter_head', 'admin'] as const;
+
+// Role display labels
+export const ROLE_LABELS: Record<UserRole, string> = {
+  admin: 'Admin',
+  editor: 'Editor',
+  chapter_head: 'Chapter Head',
+  user: 'User'
+};
+
+// Role badge colors (Tailwind classes)
+export const ROLE_COLORS: Record<UserRole, string> = {
+  admin: 'bg-red-500',
+  editor: 'bg-blue-500',
+  chapter_head: 'bg-green-500',
+  user: 'bg-gray-500'
+};

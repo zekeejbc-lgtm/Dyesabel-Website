@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Image as ImageIcon, FileText, Users, Upload, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { uploadImageToDrive } from '../services/DriveService';
+import { DriveService, DataService } from '../services/DriveService';
+import { SESSION_TOKEN_KEY } from '../types';
 
 interface ChapterEditorProps {
   onBack: () => void;
@@ -25,24 +26,60 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }: ChapterE
 
   const handleSave = async () => {
     setIsSaving(true);
-    // TODO: Save to Google Sheets via GAS
-    // You would call your GAS API here to save chapter data
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    alert('Chapter changes saved successfully!');
+    try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        setIsSaving(false);
+        return;
+      }
+
+      const chapterId = user?.chapterId;
+      if (!chapterId) {
+        alert('Chapter ID not set. Unable to save.');
+        setIsSaving(false);
+        return;
+      }
+
+      console.log('Saving chapter data:', { chapterId, chapterData });
+      const result = await DataService.saveChapter(chapterId, chapterData, sessionToken);
+      console.log('Save result:', result);
+
+      if (result.success) {
+        alert('Chapter changes saved successfully!');
+      } else {
+        alert('Error saving changes: ' + (result.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error saving chapter:', error);
+      alert('Error saving chapter: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleImageUpload = async (file: File) => {
     try {
-      const sessionToken = localStorage.getItem('dyesabel_session') || '';
-      const result = await uploadImageToDrive(file, 'Chapters', sessionToken);
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY) || '';
+      console.log('Starting image upload...', { fileName: file.name, size: file.size });
+      
+      const result = await DriveService.uploadImage(file, sessionToken);
+      console.log('Upload result:', result);
       
       if (result.success && result.fileUrl) {
-        setChapterData({...chapterData, imageUrl: result.fileUrl});
+        console.log('Image uploaded successfully:', result.fileUrl);
+        // Force update state and trigger re-render
+        setChapterData(prevState => ({
+          ...prevState,
+          imageUrl: result.fileUrl
+        }));
+        alert('Image uploaded successfully!');
       } else {
+        console.error('Upload failed:', result.error);
         alert('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
+      console.error('Upload error:', error);
       alert('Error uploading image. Please try again.');
     }
   };
@@ -54,11 +91,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack }: ChapterE
     });
   };
 
-  const handleRemoveActivity = (id: number | number) => {
+  const handleRemoveActivity = (id: number) => {
     if (!confirm('Remove this activity?')) return;
     setChapterData({
       ...chapterData,
-      activities: chapterData.activities.filter((a: any) => a.id !== id)
+      activities: chapterData.activities.filter((a) => a.id !== id)
     });
   };
 

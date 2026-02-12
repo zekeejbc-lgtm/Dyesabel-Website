@@ -20,6 +20,15 @@ export interface NavLink {
   isButton?: boolean;
 }
 
+// New interface for Chapter Activities
+export interface ChapterActivity {
+  id: number | string;
+  title: string;
+  description: string;
+  date?: string;
+  imageUrl?: string;
+}
+
 export interface Chapter {
   id: string;
   name: string;
@@ -30,6 +39,23 @@ export interface Chapter {
   email?: string;
   phone?: string;
   facebook?: string;
+  
+  // Newly added fields
+  twitter?: string;
+  instagram?: string;
+  
+  // Leadership fields
+  headName?: string;
+  headRole?: string;
+  headQuote?: string;
+  headImageUrl?: string;
+  
+  // Join CTA fields
+  joinUrl?: string;
+  joinCtaDescription?: string;
+  
+  // Activities list
+  activities?: ChapterActivity[];
 }
 
 export interface PillarActivity {

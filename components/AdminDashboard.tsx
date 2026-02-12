@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, LogOut, BookOpen, Users as UsersIcon, Heart, Image, FileText, Building2, ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, LogOut, BookOpen, Users as UsersIcon, Heart, Image, FileText, Building2, ImageIcon, Loader2, Edit } from 'lucide-react'; // Added Edit icon
 import { useAuth } from '../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
@@ -12,8 +12,7 @@ import { DriveService, DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY } from '../types';
 import { UserManagement } from './UserManagement';
 
-
-// Import initial data
+// ... [Initial Data Constants remain exactly the same] ...
 const initialPartnerCategories = [
   {
     id: 'coalitions',
@@ -83,6 +82,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const [partners, setPartners] = useState(initialPartnerCategories);
   const [founders, setFounders] = useState(initialFounders);
   const [stories, setStories] = useState(initialStories);
+  
+  // Loading State
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch Data on Mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        console.log('Fetching dashboard data...');
+
+        // Fetch all data in parallel
+        const [pillarsRes, partnersRes, foundersRes, storiesRes] = await Promise.all([
+          DataService.loadPillars(),
+          DataService.loadPartners(),
+          DataService.loadFounders(),
+          DataService.loadStories()
+        ]);
+
+        if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
+          setPillars(pillarsRes.pillars);
+        }
+        
+        if (partnersRes.success && partnersRes.partners) {
+          setPartners(partnersRes.partners);
+        }
+
+        if (foundersRes.success && foundersRes.founders && foundersRes.founders.length > 0) {
+          setFounders(foundersRes.founders);
+        }
+
+        if (storiesRes.success && storiesRes.stories && storiesRes.stories.length > 0) {
+          setStories(storiesRes.stories);
+        }
+
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
   const handleLogout = () => {
     if (confirm('Are you sure you want to logout?')) {
@@ -99,16 +144,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         return;
       }
       setPillars(updatedPillars);
-      console.log('Saving pillars:', updatedPillars);
       const result = await DataService.savePillars(updatedPillars, sessionToken);
-      if (result.success) {
-        console.log('Pillars saved successfully');
-      } else {
-        console.error('Error saving pillars:', result.error);
+      if (!result.success) {
         alert('Error saving pillars: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error saving pillars:', error);
       alert('Error saving pillars: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
@@ -121,16 +161,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         return;
       }
       setPartners(updatedPartners);
-      console.log('Saving partners:', updatedPartners);
       const result = await DataService.savePartners(updatedPartners, sessionToken);
-      if (result.success) {
-        console.log('Partners saved successfully');
-      } else {
-        console.error('Error saving partners:', result.error);
+      if (!result.success) {
         alert('Error saving partners: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error saving partners:', error);
       alert('Error saving partners: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
@@ -143,16 +178,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         return;
       }
       setFounders(updatedFounders);
-      console.log('Saving founders:', updatedFounders);
       const result = await DataService.saveFounders(updatedFounders, sessionToken);
-      if (result.success) {
-        console.log('Founders saved successfully');
-      } else {
-        console.error('Error saving founders:', result.error);
+      if (!result.success) {
         alert('Error saving founders: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error saving founders:', error);
       alert('Error saving founders: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
@@ -165,21 +195,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         return;
       }
       setStories(updatedStories);
-      console.log('Saving stories:', updatedStories);
       const result = await DataService.saveStories(updatedStories, sessionToken);
-      if (result.success) {
-        console.log('Stories saved successfully');
-      } else {
-        console.error('Error saving stories:', result.error);
+      if (!result.success) {
         alert('Error saving stories: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error saving stories:', error);
       alert('Error saving stories: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
-  // Check if user has permission
   const canEdit = user?.role === 'admin' || user?.role === 'editor';
 
   if (!canEdit) {
@@ -194,6 +218,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           >
             Go Back
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-ocean-light to-ocean-mint dark:from-ocean-deep dark:to-ocean-dark flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-10 h-10 text-primary-blue animate-spin mx-auto mb-4" />
+          <p className="text-ocean-deep dark:text-white font-medium">Loading Dashboard Data...</p>
         </div>
       </div>
     );
@@ -222,12 +257,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   </p>
                 </div>
               </div>
+              
+              {/* REPLACED: Logout button -> Edit Logo button */}
               <button
-                onClick={handleLogout}
-                className="flex items-center gap-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+                onClick={() => setActiveEditor('logo')}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-amber-500/30"
               >
-                <LogOut size={18} />
-                Logout
+                <Edit size={18} />
+                Edit Logo
               </button>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Sun, Moon, LogIn, Edit } from 'lucide-react';
+import { Menu, X, Sun, Moon, LogIn, LogOut, Edit } from 'lucide-react';
 import { NavLink } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -22,7 +22,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick, onSignInClick, onEditLogo }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -39,6 +39,13 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
       e.preventDefault();
       onHomeClick();
       window.scrollTo(0, 0);
+    }
+  };
+
+  const handleLogout = () => {
+    if (confirm('Are you sure you want to log out?')) {
+      logout();
+      setIsMobileMenuOpen(false);
     }
   };
 
@@ -120,51 +127,66 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center">
-             <div className="flex items-center">
-                {navLinks.map((link, index) => (
-                <React.Fragment key={link.label}>
-                    <a
-                    href={link.href}
-                    target={link.href.startsWith('http') ? '_blank' : undefined}
-                    rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-                    onClick={(e) => handleNavigation(e, link)}
-                    className={`text-[10px] lg:text-xs xl:text-sm font-bold tracking-wider uppercase transition-colors duration-200 whitespace-nowrap ${
-                        isScrolled ? 'text-ocean-deep dark:text-gray-200 hover:text-primary-blue dark:hover:text-primary-cyan' : 'text-ocean-deep dark:text-white hover:text-primary-blue dark:hover:text-primary-cyan'
-                    }`}
-                    >
-                    {link.label}
-                    </a>
-                    {index < navLinks.length - 1 && (
-                        <span className={`mx-2 lg:mx-3 xl:mx-4 select-none text-[10px] lg:text-xs ${
-                            isScrolled ? 'text-gray-300 dark:text-gray-600' : 'text-ocean-deep/40 dark:text-white/40'
-                        }`}>|</span>
-                    )}
-                </React.Fragment>
-                ))}
-             </div>
+             {/* Only show public navigation links if NOT logged in */}
+             {!user && (
+               <>
+                 <div className="flex items-center">
+                    {navLinks.map((link, index) => (
+                    <React.Fragment key={link.label}>
+                        <a
+                        href={link.href}
+                        target={link.href.startsWith('http') ? '_blank' : undefined}
+                        rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
+                        onClick={(e) => handleNavigation(e, link)}
+                        className={`text-[10px] lg:text-xs xl:text-sm font-bold tracking-wider uppercase transition-colors duration-200 whitespace-nowrap ${
+                            isScrolled ? 'text-ocean-deep dark:text-gray-200 hover:text-primary-blue dark:hover:text-primary-cyan' : 'text-ocean-deep dark:text-white hover:text-primary-blue dark:hover:text-primary-cyan'
+                        }`}
+                        >
+                        {link.label}
+                        </a>
+                        {index < navLinks.length - 1 && (
+                            <span className={`mx-2 lg:mx-3 xl:mx-4 select-none text-[10px] lg:text-xs ${
+                                isScrolled ? 'text-gray-300 dark:text-gray-600' : 'text-ocean-deep/40 dark:text-white/40'
+                            }`}>|</span>
+                        )}
+                    </React.Fragment>
+                    ))}
+                 </div>
 
-            {/* Separator between links and buttons */}
-            <div className={`h-4 lg:h-5 w-px mx-3 lg:mx-5 ${isScrolled ? 'bg-gray-300 dark:bg-gray-700' : 'bg-ocean-deep/20 dark:bg-white/20'}`}></div>
+                {/* Separator between links and buttons */}
+                <div className={`h-4 lg:h-5 w-px mx-3 lg:mx-5 ${isScrolled ? 'bg-gray-300 dark:bg-gray-700' : 'bg-ocean-deep/20 dark:bg-white/20'}`}></div>
+               </>
+             )}
 
             {/* Edit Logo Button (Admin/Editor only) */}
             {onEditLogo && (user?.role === 'admin' || user?.role === 'editor') && (
               <button
                 onClick={onEditLogo}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-amber-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                className="bg-amber-500 hover:bg-amber-600 text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-amber-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap mr-2"
               >
                 Edit Logo
                 <Edit size={14} className="lg:w-4 lg:h-4" />
               </button>
             )}
 
-            {/* Sign In Button */}
-            <button
-              onClick={onSignInClick}
-              className="bg-gradient-to-r from-primary-blue to-primary-cyan text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-primary-cyan/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
-            >
-              Sign In
-              <LogIn size={14} className="lg:w-4 lg:h-4" />
-            </button>
+            {/* Conditional Sign In / Log Out Button */}
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-red-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+              >
+                Log Out
+                <LogOut size={14} className="lg:w-4 lg:h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={onSignInClick}
+                className="bg-gradient-to-r from-primary-blue to-primary-cyan text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-primary-cyan/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+              >
+                Sign In
+                <LogIn size={14} className="lg:w-4 lg:h-4" />
+              </button>
+            )}
             
             {/* Theme Toggle Button (Desktop) */}
             <button 
@@ -209,7 +231,8 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
         }`}
       >
         <div className="flex flex-col px-4 py-4 space-y-2">
-          {navLinks.map((link) => (
+          {/* Only show public links if NOT logged in */}
+          {!user && navLinks.map((link) => (
             <a
               key={link.label}
               href={link.href}
@@ -221,6 +244,7 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
               {link.label}
             </a>
           ))}
+          
           {/* Mobile Edit Logo Button */}
           {onEditLogo && (user?.role === 'admin' || user?.role === 'editor') && (
             <button
@@ -234,8 +258,18 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
               <Edit size={18} />
             </button>
           )}
-          {/* Mobile Sign In */}
-           <button
+          
+          {/* Mobile Sign In / Log Out */}
+          {user ? (
+            <button
+              onClick={handleLogout}
+              className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
+            >
+              Log Out
+              <LogOut size={18} />
+            </button>
+          ) : (
+            <button
               onClick={() => {
                 setIsMobileMenuOpen(false);
                 onSignInClick();
@@ -245,6 +279,7 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
               Sign In
               <LogIn size={18} />
             </button>
+          )}
         </div>
       </div>
     </header>

@@ -1,14 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Pillar } from '../types';
 import { Leaf, BookOpen, Scale, Heart, Palette } from 'lucide-react';
+import { DataService } from '../services/DriveService';
 
-// Extended data with details
+// Keep this as a FALLBACK and for the Admin Dashboard initial state
 export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
   {
     id: '1',
     title: 'Research and Education',
     excerpt: 'Conducting scientific studies and educational workshops to deepen understanding of our marine ecosystems.',
-    description: 'We believe that conservation begins with understanding. Our Research and Education pillar focuses on gathering data-driven insights about our local ecosystems and disseminating this knowledge to the community. Through partnerships with academic institutions and experts, we conduct regular biodiversity assessments and translate complex scientific concepts into accessible educational programs for schools and local communities.',
+    description: 'We believe that conservation begins with understanding. Our Research and Education pillar focuses on gathering data-driven insights about our local ecosystems and disseminating this knowledge to the community.',
     aim: 'To bridge the gap between scientific knowledge and community understanding, ensuring evidence-based conservation efforts.',
     imageUrl: 'https://picsum.photos/seed/research/600/400',
     icon: <BookOpen className="w-6 h-6 text-white" />,
@@ -33,7 +34,7 @@ export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
     id: '2',
     title: 'Good Governance',
     excerpt: 'Advocating for transparent, accountable, and participatory decision-making in environmental management.',
-    description: 'Environmental protection requires strong policy support and active civic engagement. Our Good Governance pillar works closely with Local Government Units (LGUs) to draft, review, and implement environmental ordinances. We empower citizens to participate in public consultations and monitor the enforcement of environmental laws.',
+    description: 'Environmental protection requires strong policy support and active civic engagement. Our Good Governance pillar works closely with Local Government Units (LGUs) to draft, review, and implement environmental ordinances.',
     aim: 'To empower local leaders and citizens with the tools and frameworks necessary for sustainable policy-making and enforcement.',
     imageUrl: 'https://picsum.photos/seed/governance/600/400',
     icon: <Scale className="w-6 h-6 text-white" />,
@@ -58,7 +59,7 @@ export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
     id: '3',
     title: 'Sustainable Livelihood',
     excerpt: 'Empowering coastal communities with eco-friendly income opportunities that work in harmony with nature.',
-    description: 'Conservation should not come at the cost of livelihood. We demonstrate that economic prosperity and environmental stewardship can go hand in hand. By introducing alternative livelihood programs such as ecotourism and sustainable aquaculture, we reduce reliance on extractive practices like dynamite fishing or illegal logging.',
+    description: 'Conservation should not come at the cost of livelihood. We demonstrate that economic prosperity and environmental stewardship can go hand in hand. By introducing alternative livelihood programs such as ecotourism and sustainable aquaculture.',
     aim: 'To provide resilient economic alternatives that uplift communities while regenerating natural resources.',
     imageUrl: 'https://picsum.photos/seed/livelihood/600/400',
     icon: <Leaf className="w-6 h-6 text-white" />,
@@ -83,7 +84,7 @@ export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
     id: '4',
     title: 'Community Health',
     excerpt: 'Promoting public health and well-being through clean environments, sanitation, and access to safe resources.',
-    description: 'A healthy environment is the foundation of a healthy community. Pollution and environmental degradation directly impact public health. Our initiatives focus on sanitation, waste management, and securing clean water sources to prevent waterborne diseases and improve the overall quality of life.',
+    description: 'A healthy environment is the foundation of a healthy community. Pollution and environmental degradation directly impact public health. Our initiatives focus on sanitation, waste management, and securing clean water sources.',
     aim: 'To ensure that environmental health translates directly to improved human health and well-being.',
     imageUrl: 'https://picsum.photos/seed/health/600/400',
     icon: <Heart className="w-6 h-6 text-white" />,
@@ -108,7 +109,7 @@ export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
     id: '5',
     title: 'Culture and Arts',
     excerpt: 'Celebrating local heritage and raising environmental awareness through creative expression and storytelling.',
-    description: 'Art has the power to move hearts and change minds. We leverage culture and the arts to tell the story of our environment, reviving indigenous wisdom regarding nature conservation and engaging the youth through music, visual arts, and theater.',
+    description: 'Art has the power to move hearts and change minds. We leverage culture and the arts to tell the story of our environment, reviving indigenous wisdom regarding nature conservation and engaging the youth.',
     aim: 'To use creative mediums to advocate for nature preservation and celebrate our cultural connection to the environment.',
     imageUrl: 'https://picsum.photos/seed/arts/600/400',
     icon: <Palette className="w-6 h-6 text-white" />,
@@ -131,11 +132,53 @@ export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
   }
 ];
 
+// Helper to map index to icon since icons can't be saved in JSON
+const getIconForIndex = (index: number) => {
+  const icons = [
+    <BookOpen className="w-6 h-6 text-white" />,
+    <Scale className="w-6 h-6 text-white" />,
+    <Leaf className="w-6 h-6 text-white" />,
+    <Heart className="w-6 h-6 text-white" />,
+    <Palette className="w-6 h-6 text-white" />
+  ];
+  return icons[index % icons.length];
+};
+
 interface PillarsProps {
   onSelectPillar: (pillar: Pillar) => void;
 }
 
 export const Pillars: React.FC<PillarsProps> = ({ onSelectPillar }) => {
+  // Use local state, initialized with fallback data
+  const [pillars, setPillars] = useState(pillarsData);
+
+  // FETCH DATA ON MOUNT
+  useEffect(() => {
+    const fetchPillars = async () => {
+      try {
+        console.log('Fetching public pillars data...');
+        const result = await DataService.loadPillars();
+        
+        if (result.success && result.pillars && result.pillars.length > 0) {
+          // Merge fetched text data with local Icons
+          // FIX: Explicitly type 'p' as any and 'index' as number
+          const mergedPillars = result.pillars.map((p: any, index: number) => ({
+            ...p,
+            // Re-attach the icon based on the index or fallback to the static one
+            icon: getIconForIndex(index)
+          }));
+          
+          setPillars(mergedPillars);
+          console.log('Public pillars loaded:', mergedPillars);
+        }
+      } catch (error) {
+        console.error('Failed to load public pillars:', error);
+      }
+    };
+
+    fetchPillars();
+  }, []);
+
   return (
     <section id="pillars" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
@@ -145,7 +188,7 @@ export const Pillars: React.FC<PillarsProps> = ({ onSelectPillar }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-          {pillarsData.map((pillar, index) => (
+          {pillars.map((pillar, index) => (
             <div 
               key={pillar.id} 
               onClick={() => onSelectPillar(pillar)}

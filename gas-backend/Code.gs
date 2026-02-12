@@ -470,14 +470,54 @@ function logUpload(token, fileId, fileName, folderName) {
   }
 }
 
+// ============================================
+// helper function: createResponse
+// ============================================
 function createResponse(success, error, data) {
   const result = { success: success };
   if (error) result.error = error;
   if (data) {
     for (const key in data) result[key] = data[key];
   }
+  // FIX: Use MimeType.TEXT to satisfy the "text/plain" simple request hack.
+  // This prevents the browser from strictly enforcing CORS on the JSON response.
   return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+// ============================================
+// function: handleUploadFromUrl
+// ============================================
+function handleUploadFromUrl(data) {
+  validateSessionOrThrow(data.sessionToken);
+
+  let folder;
+  if (data.customFolderId) {
+    folder = DriveApp.getFolderById(data.customFolderId);
+  } else {
+    folder = DriveApp.getRootFolder();
+  }
+
+  const response = UrlFetchApp.fetch(data.imageUrl);
+  const blob = response.getBlob();
+  blob.setName(data.fileName);
+  const file = folder.createFile(blob);
+  
+  // Set Public Access
+  try { 
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); 
+  } catch(e) {
+    Logger.log('Warning: Could not set public permission on URL upload.');
+  }
+
+  // FIX: Use the thumbnail hack to bypass CORS on <img> tags for this file too
+  const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+
+  return {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    fileUrl: corsFreeUrl // Return the CORS-friendly URL
+  };
 }
 
 // ============================================

@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Edit } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Edit, Loader } from 'lucide-react';
 import { Chapter } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { DataService } from '../services/DriveService';
 
 interface ChapterDetailProps {
   chapter: Chapter;
@@ -9,17 +10,48 @@ interface ChapterDetailProps {
   onEdit?: () => void;
 }
 
-export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter, onBack, onEdit }) => {
+export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialChapter, onBack, onEdit }) => {
   const { user } = useAuth();
+  const [chapter, setChapter] = useState<Chapter>(initialChapter);
+  const [loading, setLoading] = useState(false);
   
   // Scroll to top when component mounts
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  return (
-    <div className="min-h-screen pt-20 pb-10">
+  // ✅ NEW: Fetch latest chapter data from Backend
+  useEffect(() => {
+    const fetchChapterData = async () => {
+      if (!initialChapter.id) return;
       
+      setLoading(true);
+      try {
+        const result = await DataService.loadChapter(initialChapter.id);
+        if (result.success && result.chapter) {
+          console.log('Loaded chapter from backend:', result.chapter);
+          // Merge backend data with initial data to ensure no fields are missing
+          setChapter({ ...initialChapter, ...result.chapter });
+        }
+      } catch (error) {
+        console.error('Failed to load chapter data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChapterData();
+  }, [initialChapter.id]);
+
+  return (
+    <div className="min-h-screen pt-20 pb-10 relative">
+      {loading && (
+        <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 bg-white/80 dark:bg-black/50 px-4 py-2 rounded-full backdrop-blur-md flex items-center gap-2">
+          <Loader className="animate-spin w-4 h-4 text-primary-blue" />
+          <span className="text-sm font-medium">Loading latest content...</span>
+        </div>
+      )}
+
       {/* Floating Back Button */}
       <button 
         onClick={onBack}
@@ -163,7 +195,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter, onBack, o
                 )}
               </ul>
               
-              {/* Social Links - Conditional Rendering */}
+              {/* Social Links */}
               {(chapter.facebook || chapter.twitter || chapter.instagram) && (
                 <div className="mt-8 pt-6 border-t border-ocean-deep/10 dark:border-white/10 flex justify-center gap-4">
                   {chapter.facebook && (
@@ -204,7 +236,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter, onBack, o
               </div>
             )}
 
-            {/* Join CTA - Conditionally Rendered */}
+            {/* Join CTA */}
             {chapter.joinUrl && (
               <div className="bg-gradient-to-br from-primary-blue to-primary-cyan rounded-3xl p-8 text-center text-white shadow-xl reveal reveal-delay-500 relative overflow-hidden">
                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-1/2 -translate-y-1/2"></div>

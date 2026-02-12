@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, LogOut, BookOpen, Users as UsersIcon, Heart, Image, FileText, Building2, ImageIcon, Loader2, Edit } from 'lucide-react'; // Added Edit icon
+import { ArrowLeft, BookOpen, Users as UsersIcon, Heart, Image as ImageIcon, FileText, Building2, Loader2, Edit, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
@@ -7,12 +7,13 @@ import { FoundersEditor } from './FoundersEditor';
 import { StoriesEditor } from './StoriesEditor';
 import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
-import { pillarsData } from './Stories';
-import { DriveService, DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY } from '../types';
 import { UserManagement } from './UserManagement';
+import { ChaptersManagement } from './ChaptersManagement'; // ✅ New Import
+import { pillarsData } from './Stories';
+import { DataService } from '../services/DriveService';
+import { SESSION_TOKEN_KEY } from '../types';
 
-// ... [Initial Data Constants remain exactly the same] ...
+// Initial Data Constants (Fallbacks)
 const initialPartnerCategories = [
   {
     id: 'coalitions',
@@ -93,7 +94,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         setIsLoading(true);
         console.log('Fetching dashboard data...');
 
-        // Fetch all data in parallel
         const [pillarsRes, partnersRes, foundersRes, storiesRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.loadPartners(),
@@ -128,13 +128,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       fetchData();
     }
   }, [user]);
-
-  const handleLogout = () => {
-    if (confirm('Are you sure you want to logout?')) {
-      logout();
-      onBack();
-    }
-  };
 
   const handleSavePillars = async (updatedPillars: any) => {
     try {
@@ -258,7 +251,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
               </div>
               
-              {/* REPLACED: Logout button -> Edit Logo button */}
               <button
                 onClick={() => setActiveEditor('logo')}
                 className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-amber-500/30"
@@ -461,6 +453,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
               </button>
 
+              {/* ✅ NEW: Chapters Management Card (Admin Only) */}
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => setActiveEditor('chapters')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-teal-500 dark:hover:border-teal-400 transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-teal-500/10 rounded-lg group-hover:bg-teal-500/20 transition-colors">
+                      <Globe className="text-teal-500" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-teal-500">Manage →</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Chapters
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    Add new chapters and manage existing ones
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    Network administration
+                  </div>
+                </button>
+              )}
+
               {/* User Management Card (Admin Only) */}
               {user?.role === 'admin' && (
                 <button
@@ -532,9 +548,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         <LogoEditor
           onClose={() => setActiveEditor(null)}
           onLogoUpdate={(newLogoUrl) => {
-            // Update logo in header if needed
             console.log('Logo updated:', newLogoUrl);
           }}
+        />
+      )}
+
+      {/* ✅ NEW: Chapters Management Editor */}
+      {activeEditor === 'chapters' && user?.role === 'admin' && (
+        <ChaptersManagement
+          onBack={() => setActiveEditor(null)}
         />
       )}
 

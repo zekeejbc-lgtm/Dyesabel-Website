@@ -399,6 +399,13 @@ export const DataService = {
     });
   },
 
+  // ✅ ADDED: Function to list ALL chapters for the homepage
+  listChapters: async () => {
+    return sendRequest<{ chapters: any[] }>({
+      action: 'listChapters'
+    });
+  },
+
   // --- Partners ---
   savePartners: async (partners: any, sessionToken: string) => {
     return sendRequest({

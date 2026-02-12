@@ -21,24 +21,70 @@ import { LogoEditor } from './components/LogoEditor';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Chapter, Pillar } from './types';
 import { pillarsData } from './components/Stories';
+import { DataService } from './services/DriveService';
+import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
+
+// Add this style block for the water wave animation
+const waterStyles = `
+@keyframes wave {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes rise {
+  0% { top: 120%; }
+  100% { top: 20%; }
+}
+.water-container {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 20px rgba(34, 211, 238, 0.2);
+}
+.water-wave {
+  position: absolute;
+  top: 120%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: rgba(34, 211, 238, 0.6);
+  border-radius: 40%;
+  animation: wave 5s linear infinite, rise 4s ease-out forwards;
+}
+.water-wave::after {
+  content: '';
+  position: absolute;
+  top: 5%;
+  left: 50%;
+  transform: translate(-50%, 0);
+  width: 100%;
+  height: 100%;
+  background: rgba(34, 211, 238, 0.3);
+  border-radius: 38%;
+  animation: wave 7s linear infinite reverse;
+}
+`;
 
 function AppContent() {
   const { user, isAuthenticated } = useAuth();
   
-  // Initialize theme from local storage or system preference, default to 'light'
+  // Initialize theme
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {
       const savedTheme = localStorage.getItem('theme');
-      if (savedTheme) {
-        return savedTheme;
-      }
-      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        return 'dark';
-      }
+      if (savedTheme) return savedTheme;
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
     }
     return 'light';
   });
 
+  // Global Loading State
+  const [isGlobalLoading, setIsGlobalLoading] = useState(true);
+
+  // Navigation & Editor States
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [isChapterEditorOpen, setIsChapterEditorOpen] = useState(false);
   const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null);
@@ -50,8 +96,9 @@ function AppContent() {
   const [isDonatePageOpen, setIsDonatePageOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
 
-  // State for editable content
+  // Content Data States
   const [pillars, setPillars] = useState(pillarsData);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
   const [partners, setPartners] = useState<any[]>([
     {
       id: 'coalitions',
@@ -88,8 +135,62 @@ function AppContent() {
     }
   ]);
 
+  // Helper to map index to icon
+  const getIconForIndex = (index: number) => {
+    const icons = [
+      <BookOpen className="w-6 h-6 text-white" />,
+      <Scale className="w-6 h-6 text-white" />,
+      <Leaf className="w-6 h-6 text-white" />,
+      <Heart className="w-6 h-6 text-white" />,
+      <Palette className="w-6 h-6 text-white" />
+    ];
+    return icons[index % icons.length];
+  };
+
+  // Fetch ALL data at once on startup
   useEffect(() => {
-    // Apply theme class to document element
+    const loadAllData = async () => {
+      try {
+        console.log("🚀 Starting global data fetch...");
+        
+        const [pillarsRes, chaptersRes, partnersRes, foundersRes] = await Promise.all([
+          DataService.loadPillars(),
+          DataService.listChapters(),
+          DataService.loadPartners(),
+          DataService.loadFounders()
+        ]);
+
+        if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
+          const mergedPillars = pillarsRes.pillars.map((p: any, index: number) => ({
+            ...p,
+            icon: getIconForIndex(index)
+          }));
+          setPillars(mergedPillars);
+        }
+
+        if (chaptersRes.success && chaptersRes.chapters && chaptersRes.chapters.length > 0) {
+          setChapters(chaptersRes.chapters);
+        }
+
+        if (partnersRes.success && partnersRes.partners) {
+          setPartners(partnersRes.partners);
+        }
+
+        if (foundersRes.success && foundersRes.founders && foundersRes.founders.length > 0) {
+          setFounders(foundersRes.founders);
+        }
+
+      } catch (error) {
+        console.error("Global fetch error:", error);
+      } finally {
+        setIsGlobalLoading(false);
+      }
+    };
+
+    loadAllData();
+  }, []);
+
+  useEffect(() => {
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
     } else {
@@ -102,6 +203,7 @@ function AppContent() {
     setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
   };
 
+  // --- Handlers ---
   const handleSelectChapter = (chapter: Chapter) => {
     setSelectedChapter(chapter);
     setSelectedPillar(null);
@@ -161,8 +263,12 @@ function AppContent() {
   };
 
   const handleSavePillars = async (updatedPillars: Pillar[]) => {
-    setPillars(updatedPillars);        // Update the state with new data
-    setIsPillarEditorOpen(false);      // Close the editor
+    const mergedPillars = updatedPillars.map((p: any, index: number) => ({
+      ...p,
+      icon: getIconForIndex(index)
+    }));
+    setPillars(mergedPillars);
+    setIsPillarEditorOpen(false);
   };
 
   const handleSavePartners = async (updatedPartners: any[]) => {
@@ -195,7 +301,6 @@ function AppContent() {
   };
 
   const handleFooterNavigation = (sectionId: string) => {
-    // Reset view to home first
     setSelectedChapter(null);
     setSelectedPillar(null);
     setIsDonatePageOpen(false);
@@ -206,7 +311,6 @@ function AppContent() {
     setIsFoundersEditorOpen(false);
     setIsLogoEditorOpen(false);
 
-    // Allow state updates to propagate then scroll
     setTimeout(() => {
       if (sectionId === 'home') {
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -227,7 +331,6 @@ function AppContent() {
   };
 
   const handleLoginSuccess = () => {
-    // Automatically show dashboard after successful login
     setShowDashboard(true);
     setSelectedChapter(null);
     setSelectedPillar(null);
@@ -239,16 +342,34 @@ function AppContent() {
     window.scrollTo(0, 0);
   };
 
+  // ✅ LOADING SCREEN WITH WATER ANIMATION
+  if (isGlobalLoading) {
+    return (
+      <>
+        <style>{waterStyles}</style>
+        <div className="fixed inset-0 z-50 bg-[#00080a] flex flex-col items-center justify-center text-white">
+          <div className="water-container">
+            <div className="water-wave"></div>
+            <div className="absolute inset-0 flex items-center justify-center z-10">
+              <img 
+                src="https://i.imgur.com/CQCKjQM.png" 
+                className="w-14 h-14 object-contain drop-shadow-lg" 
+                alt="Logo"
+              />
+            </div>
+          </div>
+          <h2 className="mt-8 text-2xl font-black tracking-widest animate-pulse font-sans">DYESABEL PH</h2>
+          <p className="text-[#22d3ee] text-sm mt-2 font-medium tracking-wide">Loading resources...</p>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="min-h-screen relative text-ocean-deep dark:text-white transition-colors duration-500 overflow-x-hidden">
-      {/* Global Dynamic Background */}
       <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none transition-colors duration-700 bg-gradient-to-b from-ocean-light via-[#b2dfdb] to-ocean-mint dark:from-ocean-deep dark:via-[#021017] dark:to-ocean-dark">
-        
-        {/* Pulsating Orbs */}
         <div className="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] bg-primary-cyan/20 dark:bg-primary-blue/20 rounded-full blur-[100px] animate-float opacity-60"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-primary-blue/20 dark:bg-primary-cyan/10 rounded-full blur-[120px] animate-float opacity-50" style={{ animationDelay: '3s' }}></div>
-        
-        {/* Rising Bubbles */}
         <div className="absolute inset-0">
           {[...Array(12)].map((_, i) => (
              <div
@@ -279,7 +400,6 @@ function AppContent() {
         {isLogoEditorOpen ? (
           <LogoEditor onClose={handleBackFromLogoEditor} />
         ) : showDashboard && isAuthenticated ? (
-          // Show appropriate dashboard based on user role
           user?.role === 'admin' ? (
             <AdminDashboard onBack={handleDashboardBack} />
           ) : user?.role === 'chapter_head' ? (
@@ -310,7 +430,10 @@ function AppContent() {
             <Hero onDonateClick={handleDonateClick} />
             <Slogan />
             <Pillars onSelectPillar={handleSelectPillar} />
-            <Chapters onSelectChapter={handleSelectChapter} />
+            <Chapters 
+              chapters={chapters} 
+              onSelectChapter={handleSelectChapter} 
+            />
             <Partners onEdit={handleEditPartners} />
             <Founders onEdit={handleEditFounders} />
           </>
@@ -324,7 +447,6 @@ function AppContent() {
         />
       )}
 
-      {/* Login Modal */}
       <LoginModal 
         isOpen={isLoginModalOpen} 
         onClose={() => setIsLoginModalOpen(false)}

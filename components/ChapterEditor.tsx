@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Save, LogOut, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Save, LogOut, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, User, Pencil, X, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { DriveService, DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY, Chapter } from '../types';
@@ -12,6 +12,9 @@ interface ChapterEditorProps {
 export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }: ChapterEditorProps) => {
   const { user, logout } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+  
+  // ✅ NEW: Edit State
+  const [isEditing, setIsEditing] = useState(false);
   
   // Initialize state with existing chapter data or defaults
   const [chapterData, setChapterData] = useState({
@@ -28,7 +31,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     email: chapter?.email || '',
     phone: chapter?.phone || '',
     facebook: chapter?.facebook || '',
-    twitter: chapter?.twitter || '', // Add these to types.ts if missing
+    twitter: chapter?.twitter || '', 
     instagram: chapter?.instagram || '',
 
     // Leadership
@@ -46,6 +49,46 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       { id: 1, title: 'Sample Activity', description: 'Description here...', date: '2024-01-01', imageUrl: '' },
     ],
   });
+
+  // ✅ NEW: Store original data to revert on Cancel
+  const [originalData, setOriginalData] = useState(chapterData);
+
+  // ✅ NEW: Fetch fresh data on mount to ensure we are editing the latest version
+  useEffect(() => {
+    const fetchFreshData = async () => {
+      const chapterId = user?.chapterId || chapter?.id;
+      if (!chapterId) return;
+
+      try {
+        const result = await DataService.loadChapter(chapterId);
+        if (result.success && result.chapter) {
+          console.log("Fetched fresh chapter data for editor:", result.chapter);
+          
+          const newData = {
+            ...chapterData, // Keep defaults for missing fields
+            ...result.chapter, // Overwrite with backend data
+            title: result.chapter.name || result.chapter.title || chapterData.title, // Handle name mapping
+            // Ensure activities is an array if the backend returns undefined
+            activities: result.chapter.activities || []
+          };
+
+          setChapterData(newData);
+          setOriginalData(newData); // Update backup
+        }
+      } catch (error) {
+        console.error("Failed to load chapter for editing:", error);
+      }
+    };
+
+    fetchFreshData();
+  }, [user, chapter]);
+
+  const handleCancel = () => {
+    if (confirm("Are you sure you want to discard your changes?")) {
+      setChapterData(originalData); // Revert changes
+      setIsEditing(false); // Exit edit mode
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -91,6 +134,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
 
       if (result.success) {
         alert('Chapter changes saved successfully!');
+        setOriginalData(chapterData); // Update backup to new saved state
+        setIsEditing(false); // Exit edit mode
       } else {
         alert('Error saving changes: ' + (result.error || 'Unknown error'));
       }
@@ -147,17 +192,48 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg">
                 <ArrowLeft className="text-gray-900 dark:text-white" size={24} />
               </button>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Chapter Details</h1>
+              {/* ✅ UPDATED: Dynamic Title based on Chapter Name */}
+              <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
+                {chapterData.title || "Edit Chapter Details"}
+              </h1>
             </div>
+            
+            {/* ✅ UPDATED: Edit/Save/Cancel Buttons */}
             <div className="flex gap-2">
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-6 py-2 bg-primary-blue hover:bg-primary-cyan text-white rounded-lg transition-colors disabled:opacity-50 font-medium"
-              >
-                <Save size={18} />
-                {isSaving ? 'Saving...' : 'Save Changes'}
-              </button>
+              {!isEditing ? (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-2 px-6 py-2 bg-primary-blue hover:bg-primary-cyan text-white rounded-lg transition-colors font-bold shadow-lg"
+                >
+                  <Pencil size={18} />
+                  Edit Details
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleCancel}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition-colors font-medium disabled:opacity-50"
+                  >
+                    <X size={18} />
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSave}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 px-6 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors font-bold shadow-lg disabled:opacity-50"
+                  >
+                    {isSaving ? (
+                      <>Saving...</>
+                    ) : (
+                      <>
+                        <Check size={18} />
+                        Save All
+                      </>
+                    )}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -168,24 +244,36 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
           <div className="lg:col-span-2 space-y-6">
             
             {/* 1. Basic Info & Cover */}
-            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
+              {/* Overlay for disabled state visual cue */}
+              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <FileText size={20} className="text-primary-blue" /> Basic Information
               </h2>
               
               <div className="space-y-4">
                 {/* Cover Image */}
-                <div className="relative aspect-video rounded-xl overflow-hidden bg-gray-100 dark:bg-black/20 border-2 border-dashed border-gray-300 dark:border-gray-700 group">
+                <div className={`relative aspect-video rounded-xl overflow-hidden bg-gray-100 dark:bg-black/20 border-2 border-dashed border-gray-300 dark:border-gray-700 group ${!isEditing ? 'opacity-90' : ''}`}>
                   {chapterData.imageUrl ? (
                     <img src={chapterData.imageUrl} alt="Cover" className="w-full h-full object-cover" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-gray-400">No Cover Image</div>
                   )}
-                  <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white">
-                    <Upload size={32} className="mb-2" />
-                    <span className="font-medium">Change Cover Photo</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'imageUrl')} />
-                  </label>
+                  
+                  {isEditing && (
+                    <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white">
+                      <Upload size={32} className="mb-2" />
+                      <span className="font-medium">Change Cover Photo</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'imageUrl')}
+                        disabled={!isEditing} 
+                      />
+                    </label>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -195,7 +283,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                       type="text" 
                       value={chapterData.title}
                       onChange={(e) => setChapterData({...chapterData, title: e.target.value})}
-                      className="w-full p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white"
+                      disabled={!isEditing}
+                      className="w-full p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -206,7 +295,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                         type="text" 
                         value={chapterData.location}
                         onChange={(e) => setChapterData({...chapterData, location: e.target.value})}
-                        className="w-full p-3 pl-10 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white"
+                        disabled={!isEditing}
+                        className="w-full p-3 pl-10 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                         placeholder="City, Province"
                       />
                     </div>
@@ -219,7 +309,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                     rows={4}
                     value={chapterData.description}
                     onChange={(e) => setChapterData({...chapterData, description: e.target.value})}
-                    className="w-full p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white"
+                    disabled={!isEditing}
+                    className="w-full p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                     placeholder="Describe your chapter's mission and history..."
                   />
                 </div>
@@ -227,17 +318,21 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
             </div>
 
             {/* 2. Recent Activities */}
-            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
+              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                   <ImageIcon size={20} className="text-primary-cyan" /> Recent Activities
                 </h2>
-                <button 
-                  onClick={() => setChapterData({...chapterData, activities: [...chapterData.activities, { id: Date.now(), title: '', description: '', date: '', imageUrl: '' }]})}
-                  className="text-xs bg-primary-blue text-white px-3 py-1.5 rounded-lg hover:bg-primary-cyan transition-colors"
-                >
-                  + Add Activity
-                </button>
+                {isEditing && (
+                  <button 
+                    onClick={() => setChapterData({...chapterData, activities: [...chapterData.activities, { id: Date.now(), title: '', description: '', date: '', imageUrl: '' }]})}
+                    className="text-xs bg-primary-blue text-white px-3 py-1.5 rounded-lg hover:bg-primary-cyan transition-colors"
+                  >
+                    + Add Activity
+                  </button>
+                )}
               </div>
 
               <div className="space-y-6">
@@ -245,10 +340,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                   <div key={activity.id} className="p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10">
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-xs font-bold text-gray-400 uppercase">Activity #{index + 1}</span>
-                      <button onClick={() => {
-                        const newActs = chapterData.activities.filter((_, i) => i !== index);
-                        setChapterData({...chapterData, activities: newActs});
-                      }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                      {isEditing && (
+                        <button onClick={() => {
+                          const newActs = chapterData.activities.filter((_, i) => i !== index);
+                          setChapterData({...chapterData, activities: newActs});
+                        }} className="text-red-500 hover:text-red-400"><Trash2 size={16} /></button>
+                      )}
                     </div>
                     
                     <div className="flex flex-col md:flex-row gap-4">
@@ -259,10 +356,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">No Image</div>
                         )}
-                        <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                          <Upload size={20} className="text-white" />
-                          <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleActivityImageUpload(index, e.target.files[0])} />
-                        </label>
+                        {isEditing && (
+                          <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                            <Upload size={20} className="text-white" />
+                            <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleActivityImageUpload(index, e.target.files[0])} />
+                          </label>
+                        )}
                       </div>
 
                       <div className="flex-grow space-y-3">
@@ -272,14 +371,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                             placeholder="Activity Title"
                             value={activity.title}
                             onChange={(e) => handleActivityChange(index, 'title', e.target.value)}
-                            className="p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
+                            disabled={!isEditing}
+                            className="p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                           />
                           <input 
                             type="text" 
                             placeholder="Date (e.g. March 2024)"
                             value={activity.date}
                             onChange={(e) => handleActivityChange(index, 'date', e.target.value)}
-                            className="p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
+                            disabled={!isEditing}
+                            className="p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                           />
                         </div>
                         <textarea 
@@ -287,7 +388,8 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                           rows={2}
                           value={activity.description}
                           onChange={(e) => handleActivityChange(index, 'description', e.target.value)}
-                          className="w-full p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white"
+                          disabled={!isEditing}
+                          className="w-full p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                         />
                       </div>
                     </div>
@@ -301,83 +403,91 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
           <div className="space-y-6">
             
             {/* 3. Logo & Branding */}
-            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
+              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Logo</h2>
               <div className="flex flex-col items-center">
                 <div className="w-32 h-32 rounded-full border-4 border-gray-100 dark:border-white/10 overflow-hidden relative group mb-4">
                   <img src={chapterData.logoUrl || `https://ui-avatars.com/api/?name=${chapterData.title}&background=random`} alt="Logo" className="w-full h-full object-cover" />
-                  <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
-                    <Upload size={24} />
-                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'logoUrl')} />
-                  </label>
+                  {isEditing && (
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
+                      <Upload size={24} />
+                      <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'logoUrl')} />
+                    </label>
+                  )}
                 </div>
-                <p className="text-xs text-gray-500 text-center">Click to upload new logo</p>
+                {isEditing && <p className="text-xs text-gray-500 text-center">Click to upload new logo</p>}
               </div>
             </div>
 
             {/* 4. Contact Info */}
-            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
+              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Phone size={20} className="text-green-500" /> Contact Info
               </h2>
               <div className="space-y-3">
                 <div className="relative">
                   <Mail size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="email" placeholder="Email Address" value={chapterData.email} onChange={(e) => setChapterData({...chapterData, email: e.target.value})} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <input type="email" placeholder="Email Address" value={chapterData.email} onChange={(e) => setChapterData({...chapterData, email: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Phone size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Phone Number" value={chapterData.phone} onChange={(e) => setChapterData({...chapterData, phone: e.target.value})} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <input type="text" placeholder="Phone Number" value={chapterData.phone} onChange={(e) => setChapterData({...chapterData, phone: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Facebook size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Facebook URL (Optional)" value={chapterData.facebook} onChange={(e) => setChapterData({...chapterData, facebook: e.target.value})} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <input type="text" placeholder="Facebook URL (Optional)" value={chapterData.facebook} onChange={(e) => setChapterData({...chapterData, facebook: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Twitter size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Twitter URL (Optional)" value={chapterData.twitter} onChange={(e) => setChapterData({...chapterData, twitter: e.target.value})} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <input type="text" placeholder="Twitter URL (Optional)" value={chapterData.twitter} onChange={(e) => setChapterData({...chapterData, twitter: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Instagram size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Instagram URL (Optional)" value={chapterData.instagram} onChange={(e) => setChapterData({...chapterData, instagram: e.target.value})} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <input type="text" placeholder="Instagram URL (Optional)" value={chapterData.instagram} onChange={(e) => setChapterData({...chapterData, instagram: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
               </div>
             </div>
 
             {/* 5. Leadership */}
-            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
+              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Users size={20} className="text-purple-500" /> Leadership
               </h2>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden relative group flex-shrink-0">
                   <img src={chapterData.headImageUrl || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" />
-                  <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
-                    <Upload size={16} className="text-white" />
-                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'headImageUrl')} />
-                  </label>
+                  {isEditing && (
+                    <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
+                      <Upload size={16} className="text-white" />
+                      <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'headImageUrl')} />
+                    </label>
+                  )}
                 </div>
                 <div className="flex-grow">
-                  <input type="text" placeholder="Leader Name" value={chapterData.headName} onChange={(e) => setChapterData({...chapterData, headName: e.target.value})} className="w-full p-2 mb-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
-                  <input type="text" placeholder="Role (e.g. President)" value={chapterData.headRole} onChange={(e) => setChapterData({...chapterData, headRole: e.target.value})} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-xs dark:text-white dark:border-white/10" />
+                  <input type="text" placeholder="Leader Name" value={chapterData.headName} onChange={(e) => setChapterData({...chapterData, headName: e.target.value})} disabled={!isEditing} className="w-full p-2 mb-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Role (e.g. President)" value={chapterData.headRole} onChange={(e) => setChapterData({...chapterData, headRole: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-xs dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
               </div>
-              <textarea placeholder="Leader's Quote..." rows={2} value={chapterData.headQuote} onChange={(e) => setChapterData({...chapterData, headQuote: e.target.value})} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+              <textarea placeholder="Leader's Quote..." rows={2} value={chapterData.headQuote} onChange={(e) => setChapterData({...chapterData, headQuote: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
             </div>
 
             {/* 6. Call to Action */}
-            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
+              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Megaphone size={20} className="text-orange-500" /> Join CTA
               </h2>
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
-                  <textarea rows={3} value={chapterData.joinCtaDescription} onChange={(e) => setChapterData({...chapterData, joinCtaDescription: e.target.value})} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <textarea rows={3} value={chapterData.joinCtaDescription} onChange={(e) => setChapterData({...chapterData, joinCtaDescription: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Google Form Link</label>
-                  <input type="text" placeholder="https://forms.google.com/..." value={chapterData.joinUrl} onChange={(e) => setChapterData({...chapterData, joinUrl: e.target.value})} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10" />
+                  <input type="text" placeholder="https://forms.google.com/..." value={chapterData.joinUrl} onChange={(e) => setChapterData({...chapterData, joinUrl: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                   <p className="text-[10px] text-gray-400 mt-1">Leave blank to hide the Join button.</p>
                 </div>
               </div>

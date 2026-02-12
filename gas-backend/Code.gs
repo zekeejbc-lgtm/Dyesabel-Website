@@ -14,9 +14,11 @@ const SHEET_ORG = 'OrgSettings';
 // Session Timeout (24 Hours)
 const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; 
 
-// Default Drive Folder ID (Optional fallback if no folder created)
-// If left empty, files go to Root
-const DEFAULT_ROOT_FOLDER_ID = ''; 
+// ============================================
+// 👇 PASTE YOUR GOOGLE DRIVE FOLDER ID BELOW 👇
+// ============================================
+// All uploaded images will go here automatically unless a specific folder is requested.
+const DEFAULT_ROOT_FOLDER_ID = '10lelZpBdOsEwRAEFixArC6djAC0osJT-'; 
 
 // ============================================
 // 2. MAIN ENTRY POINTS (CORS BYPASS)
@@ -51,25 +53,32 @@ function doPost(e) {
       case 'deleteUser':      result = handleDeleteUser(data); break;
 
       // Drive / Files
-      case 'uploadImage':       result = handleUploadImage(data); break;
+      case 'uploadImage':        result = handleUploadImage(data); break;
       case 'uploadImageFromUrl': result = handleUploadFromUrl(data); break;
-      case 'createFolder':      result = handleCreateFolder(data); break;
-      case 'deleteImage':       result = handleDeleteImage(data); break;
-      case 'listImages':        result = handleListImages(data); break;
+      case 'createFolder':       result = handleCreateFolder(data); break;
+      case 'deleteImage':        result = handleDeleteImage(data); break;
+      case 'listImages':         result = handleListImages(data); break;
 
       // Content / Data
       case 'getOrgSettings':    result = handleGetOrgSettings(data); break;
       case 'updateOrgSettings': result = handleUpdateOrgSettings(data); break;
       case 'savePillars':       result = handleSaveData('Pillars', data.pillars, data.sessionToken); break;
       case 'loadPillars':       result = handleLoadData('Pillars'); break;
+      
+      // ✅ CHAPTERS HANDLERS
       case 'saveChapter':       result = handleSaveChapter(data); break;
       case 'loadChapter':       result = handleLoadChapter(data); break;
+      case 'listChapters':      result = handleListChapters(data); break;
+      case 'deleteChapter':     result = handleDeleteChapter(data); break;
+      
       case 'saveLandingPage':   result = handleSaveData('LandingPage', data.landingPage, data.sessionToken); break;
       case 'loadLandingPage':   result = handleLoadData('LandingPage'); break;
       
-      // Generic Data Handlers (Partners, Stories, Founders)
-      case 'savePartners':      result = handleSaveData('Partners', data.partners, data.sessionToken); break;
-      case 'loadPartners':      result = handleLoadData('Partners'); break;
+      // ✅ PARTNERS HANDLERS (New Column Mapping)
+      case 'savePartners':      result = handleSavePartners(data); break;
+      case 'loadPartners':      result = handleLoadPartners(data); break;
+
+      // Generic Data Handlers (Stories, Founders)
       case 'saveStories':       result = handleSaveData('Stories', data.stories, data.sessionToken); break;
       case 'loadStories':       result = handleLoadData('Stories'); break;
       case 'saveFounders':      result = handleSaveData('Founders', data.founders, data.sessionToken); break;
@@ -157,18 +166,32 @@ function handleLogout(data) {
 // 4. DRIVE & FILE HANDLERS
 // ============================================
 
+/**
+ * Helper to get the correct folder based on priority:
+ * 1. Request-specific Custom ID
+ * 2. Script-level Default ID
+ * 3. Root Folder
+ */
+function getTargetFolder(customId) {
+  if (customId) {
+    try {
+      return DriveApp.getFolderById(customId);
+    } catch(e) {
+      // Fallback logic if customId is just a string name like "chapters"
+      return DEFAULT_ROOT_FOLDER_ID ? DriveApp.getFolderById(DEFAULT_ROOT_FOLDER_ID) : DriveApp.getRootFolder();
+    }
+  } else if (DEFAULT_ROOT_FOLDER_ID) {
+    return DriveApp.getFolderById(DEFAULT_ROOT_FOLDER_ID);
+  } else {
+    return DriveApp.getRootFolder();
+  }
+}
+
 function handleUploadImage(data) {
   validateSessionOrThrow(data.sessionToken);
 
-  // 1. Determine Folder: Use custom ID if provided, otherwise default
-  let folder;
-  if (data.customFolderId) {
-    folder = DriveApp.getFolderById(data.customFolderId);
-  } else if (DEFAULT_ROOT_FOLDER_ID) {
-    folder = DriveApp.getFolderById(DEFAULT_ROOT_FOLDER_ID);
-  } else {
-    folder = DriveApp.getRootFolder();
-  }
+  // 1. Determine Folder
+  const folder = getTargetFolder(data.customFolderId);
 
   // 2. Process File
   const decoded = Utilities.base64Decode(data.fileData);
@@ -186,14 +209,13 @@ function handleUploadImage(data) {
   logUpload(data.sessionToken, file.getId(), file.getName(), folder.getName());
 
   // Use the "thumbnail" hack with size w4000 (high res) to bypass CORS issues
-  // Standard getDownloadUrl() often redirects to domains that block localhost
   const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
 
   return {
     fileId: file.getId(),
     fileName: file.getName(),
-    fileUrl: corsFreeUrl, // Replaced standard URL with CORS-free version
-    originalUrl: file.getDownloadUrl(), // Keeping original just in case
+    fileUrl: corsFreeUrl,
+    originalUrl: file.getDownloadUrl(),
     thumbnailUrl: corsFreeUrl
   };
 }
@@ -201,12 +223,7 @@ function handleUploadImage(data) {
 function handleUploadFromUrl(data) {
   validateSessionOrThrow(data.sessionToken);
 
-  let folder;
-  if (data.customFolderId) {
-    folder = DriveApp.getFolderById(data.customFolderId);
-  } else {
-    folder = DriveApp.getRootFolder();
-  }
+  const folder = getTargetFolder(data.customFolderId);
 
   const response = UrlFetchApp.fetch(data.imageUrl);
   const blob = response.getBlob();
@@ -215,20 +232,24 @@ function handleUploadFromUrl(data) {
   const file = folder.createFile(blob);
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e){}
 
+  const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+
   return {
     fileId: file.getId(),
     fileName: file.getName(),
-    fileUrl: file.getDownloadUrl()
+    fileUrl: corsFreeUrl 
   };
 }
 
 function handleCreateFolder(data) {
   validateSessionOrThrow(data.sessionToken);
 
-  // Parent defaults to Root if not specified (or add a config for a master "Uploads" folder)
+  // Parent defaults to Configured Default or Root
   let parentFolder;
   if (data.parentFolderId) {
     parentFolder = DriveApp.getFolderById(data.parentFolderId);
+  } else if (DEFAULT_ROOT_FOLDER_ID) {
+    parentFolder = DriveApp.getFolderById(DEFAULT_ROOT_FOLDER_ID);
   } else {
     parentFolder = DriveApp.getRootFolder();
   }
@@ -248,23 +269,26 @@ function handleCreateFolder(data) {
 }
 
 function handleListImages(data) {
-  // Lists images inside a specific folder ID
-  if (!data.customFolderId) throw new Error('Folder ID required to list images');
+  let folder;
+  if (data.customFolderId) {
+    folder = DriveApp.getFolderById(data.customFolderId);
+  } else if (DEFAULT_ROOT_FOLDER_ID) {
+    folder = DriveApp.getFolderById(DEFAULT_ROOT_FOLDER_ID);
+  } else {
+    folder = DriveApp.getRootFolder();
+  }
   
-  const folder = DriveApp.getFolderById(data.customFolderId);
   const files = folder.getFiles();
   const list = [];
   
   while (files.hasNext()) {
     const file = files.next();
     if (file.getMimeType().indexOf('image/') > -1) {
-      // Generate CORS-safe link
       const safeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
-
       list.push({
         fileId: file.getId(),
         fileName: file.getName(),
-        fileUrl: safeUrl, // Use safe URL for display
+        fileUrl: safeUrl, 
         downloadUrl: file.getDownloadUrl(),
         thumbnailUrl: safeUrl
       });
@@ -283,7 +307,7 @@ function handleDeleteImage(data) {
 // 5. CONTENT / DATA HANDLERS
 // ============================================
 
-// Generic handler for Pillars, Partners, Stories, Founders
+// Generic handler for Landing Page, Stories, Founders
 function handleSaveData(sheetName, contentData, token) {
   validateAdminOrEditor(token);
   
@@ -291,20 +315,58 @@ function handleSaveData(sheetName, contentData, token) {
   let sheet = ss.getSheetByName(sheetName);
   if (!sheet) sheet = ss.insertSheet(sheetName);
   
-  // Clear old data and rewrite (Simple overwrite strategy)
+  // --- Process Images before saving ---
+  if (Array.isArray(contentData)) {
+    contentData = contentData.map(item => processAndUploadImages(item));
+  }
+  
+  // Clear old data and rewrite
   sheet.clear();
   
-  // Write Headers (assumes first item has all keys)
   if (contentData.length > 0) {
-    // We store the raw JSON string of the whole object to be safe and flexible
     sheet.appendRow(['JSON_DATA']);
     const jsonString = JSON.stringify(contentData);
-    // Google Sheets cell limit is 50k chars. If huge, we might need chunking, 
-    // but for now we'll assume it fits or users are storing references.
     sheet.getRange(2, 1).setValue(jsonString);
   }
   
   return { message: `${sheetName} saved` };
+}
+
+/**
+ * HELPER: Scans an object for Base64 image strings, uploads them,
+ * and replaces the Base64 string with the new Google Drive URL.
+ */
+function processAndUploadImages(item) {
+  if (!item || typeof item !== 'object') return item;
+
+  for (const key in item) {
+    const value = item[key];
+    
+    // Check if the value is a string starting with 'data:image' (Base64)
+    if (typeof value === 'string' && value.startsWith('data:image/')) {
+      try {
+        Logger.log(`Found base64 image in key: ${key}. Uploading...`);
+        
+        const contentType = value.substring(5, value.indexOf(';'));
+        const base64Data = value.substring(value.indexOf(',') + 1);
+        const fileExt = contentType.split('/')[1] || 'jpg';
+        const fileName = `auto_upload_${key}_${new Date().getTime()}.${fileExt}`;
+        
+        const folder = getTargetFolder(null); 
+        const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, fileName);
+        const file = folder.createFile(blob);
+        
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        const driveUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+        
+        item[key] = driveUrl;
+        
+      } catch (e) {
+        Logger.log('Error auto-uploading base64 image: ' + e.toString());
+      }
+    }
+  }
+  return item;
 }
 
 function handleLoadData(sheetName) {
@@ -315,7 +377,6 @@ function handleLoadData(sheetName) {
   const data = sheet.getDataRange().getValues();
   if (data.length < 2) return { [sheetName.toLowerCase()]: [] };
   
-  // We assume the data is stored in cell A2 as a JSON string
   const jsonString = data[1][0];
   try {
     return { [sheetName.toLowerCase()]: JSON.parse(jsonString) };
@@ -324,7 +385,122 @@ function handleLoadData(sheetName) {
   }
 }
 
-// Specific Handler for Chapters (Row-based)
+// ==========================================
+// ✅ PARTNERS HANDLERS (Column Mapped)
+// ==========================================
+
+function handleSavePartners(data) {
+  const session = getSession(data.sessionToken);
+  if (!session) throw new Error('Unauthorized');
+  
+  // Permission check
+  if (session.user.role !== 'admin' && session.user.role !== 'editor') {
+    throw new Error('Insufficient permissions');
+  }
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheet = ss.getSheetByName('Partners');
+  if (!sheet) {
+    sheet = ss.insertSheet('Partners');
+    // Create Headers
+    sheet.appendRow(['CategoryID', 'CategoryTitle', 'PartnerID', 'PartnerName', 'PartnerLogo']);
+    sheet.setFrozenRows(1);
+  }
+
+  // 1. Process Images (Handle Base64 uploads nested inside partners)
+  let categories = data.partners || [];
+  categories.forEach(cat => {
+    if (cat.partners && Array.isArray(cat.partners)) {
+      cat.partners = cat.partners.map(p => processAndUploadImages(p));
+    }
+  });
+
+  // 2. Clear existing data (preserve headers)
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 5).clearContent();
+  }
+
+  // 3. Flatten Data for Sheet
+  const rows = [];
+  categories.forEach(cat => {
+    if (cat.partners && cat.partners.length > 0) {
+      // If category has partners, add a row for each
+      cat.partners.forEach(p => {
+        rows.push([
+          cat.id,
+          cat.title,
+          p.id,
+          p.name,
+          p.logo || ''
+        ]);
+      });
+    } else {
+      // If category is empty, add a placeholder row so we don't lose the category
+      rows.push([
+        cat.id,
+        cat.title,
+        '', // No Partner ID
+        '', // No Name
+        ''  // No Logo
+      ]);
+    }
+  });
+
+  // 4. Write to Sheet
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, 5).setValues(rows);
+  }
+  
+  return { message: 'Partners saved successfully' };
+}
+
+function handleLoadPartners(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Partners');
+  
+  // If sheet doesn't exist, return empty
+  if (!sheet) return { partners: [] };
+
+  const rows = sheet.getDataRange().getValues();
+  // If only header row exists
+  if (rows.length < 2) return { partners: [] };
+
+  const categoryMap = {};
+  const categories = [];
+
+  // Skip header (i=1)
+  for (let i = 1; i < rows.length; i++) {
+    const [catId, catTitle, pId, pName, pLogo] = rows[i];
+
+    // Initialize category if not exists
+    if (!categoryMap[catId]) {
+      const newCat = {
+        id: catId,
+        title: catTitle,
+        partners: []
+      };
+      categoryMap[catId] = newCat;
+      categories.push(newCat);
+    }
+
+    // Add partner if valid (pId exists)
+    if (pId) {
+      categoryMap[catId].partners.push({
+        id: pId,
+        name: pName,
+        logo: pLogo
+      });
+    }
+  }
+
+  return { partners: categories };
+}
+
+// ==========================================
+// CHAPTER HANDLERS
+// ==========================================
+
 function handleSaveChapter(data) {
   const session = getSession(data.sessionToken);
   if (!session) throw new Error('Unauthorized');
@@ -338,26 +514,50 @@ function handleSaveChapter(data) {
   let sheet = ss.getSheetByName('Chapters');
   if (!sheet) {
     sheet = ss.insertSheet('Chapters');
-    sheet.appendRow(['ChapterID', 'JSON_Data']);
+    sheet.appendRow(['ChapterID', 'Title', 'Description', 'ImageURL', 'ActivitiesJSON', 'Members', 'ExtendedData']);
   }
 
   const rows = sheet.getDataRange().getValues();
-  let found = false;
-  const jsonPayload = JSON.stringify(data.chapterData);
+  let rowIndex = -1;
 
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.chapterId) {
-      sheet.getRange(i + 1, 2).setValue(jsonPayload);
-      found = true;
+      rowIndex = i + 1; 
       break;
     }
   }
 
-  if (!found) {
-    sheet.appendRow([data.chapterId, jsonPayload]);
+  const cData = data.chapterData;
+  const activitiesJson = JSON.stringify(cData.activities || []);
+  
+  const rowData = [
+    data.chapterId,                        
+    cData.name || cData.title,             
+    cData.description,                     
+    cData.imageUrl || cData.image,         
+    activitiesJson,                        
+    cData.logo || ''                       
+  ];
+
+  const extendedData = {
+    location: cData.location,
+    logo: cData.logo,
+    headName: cData.headName,
+    headRole: cData.headRole,
+    headImageUrl: cData.headImageUrl,
+    email: cData.email,
+    phone: cData.phone,
+    facebook: cData.facebook
+  };
+
+  if (rowIndex > 0) {
+    sheet.getRange(rowIndex, 1, 1, 6).setValues([rowData]);
+    sheet.getRange(rowIndex, 7).setValue(JSON.stringify(extendedData));
+  } else {
+    sheet.appendRow([...rowData, JSON.stringify(extendedData)]);
   }
   
-  return { message: 'Chapter saved' };
+  return { message: 'Chapter saved successfully' };
 }
 
 function handleLoadChapter(data) {
@@ -366,12 +566,74 @@ function handleLoadChapter(data) {
   if (!sheet) return { chapter: null };
 
   const rows = sheet.getDataRange().getValues();
+  
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.chapterId) {
-      return { chapter: JSON.parse(rows[i][1]) };
+      let activities = [];
+      let extended = {};
+      try { activities = JSON.parse(rows[i][4]); } catch(e) {}
+      try { extended = JSON.parse(rows[i][6]); } catch(e) {}
+
+      const chapter = {
+        id: rows[i][0],
+        name: rows[i][1],
+        description: rows[i][2],
+        imageUrl: rows[i][3], 
+        image: rows[i][3],   
+        activities: activities,
+        ...extended
+      };
+      return { chapter: chapter };
     }
   }
   return { chapter: null };
+}
+
+function handleListChapters() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Chapters');
+  if (!sheet) return { chapters: [] };
+  
+  const rows = sheet.getDataRange().getValues();
+  const chapters = [];
+  
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    let extended = {};
+    if (row[6]) {
+       try { extended = JSON.parse(row[6]); } catch(e) {}
+    }
+
+    chapters.push({
+      id: row[0],
+      name: row[1],
+      description: row[2],
+      image: row[3],
+      logo: row[5],
+      location: extended.location || '',
+      email: extended.email || '',
+      phone: extended.phone || '',
+      facebook: extended.facebook || ''
+    });
+  }
+  
+  return { chapters: chapters };
+}
+
+function handleDeleteChapter(data) {
+  validateAdminOrEditor(data.sessionToken);
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName('Chapters');
+  if (!sheet) throw new Error('Chapters sheet not found');
+  
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i][0] === data.chapterId) {
+      sheet.deleteRow(i + 1);
+      return { message: 'Chapter deleted' };
+    }
+  }
+  throw new Error('Chapter not found');
 }
 
 function handleGetOrgSettings(data) {
@@ -389,7 +651,6 @@ function handleGetOrgSettings(data) {
 
 function handleUpdateOrgSettings(data) {
   validateAdminOrEditor(data.sessionToken);
-  
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sheet = ss.getSheetByName(SHEET_ORG);
   if (!sheet) {
@@ -397,7 +658,6 @@ function handleUpdateOrgSettings(data) {
     sheet.appendRow(['Key', 'Value']);
   }
   
-  // Upsert settings
   const settings = data.settings;
   const rows = sheet.getDataRange().getValues();
   
@@ -434,11 +694,9 @@ function getSession(token) {
   const rows = sheet.getDataRange().getValues();
   const now = new Date();
 
-  // Reverse loop to find latest and cleanup
   for (let i = rows.length - 1; i >= 1; i--) {
-    // Check expiry
     if (new Date(rows[i][2]) < now) {
-      sheet.deleteRow(i + 1); // Cleanup expired
+      sheet.deleteRow(i + 1); 
       continue;
     }
     if (rows[i][0] === token) {
@@ -470,54 +728,14 @@ function logUpload(token, fileId, fileName, folderName) {
   }
 }
 
-// ============================================
-// helper function: createResponse
-// ============================================
 function createResponse(success, error, data) {
   const result = { success: success };
   if (error) result.error = error;
   if (data) {
     for (const key in data) result[key] = data[key];
   }
-  // FIX: Use MimeType.TEXT to satisfy the "text/plain" simple request hack.
-  // This prevents the browser from strictly enforcing CORS on the JSON response.
   return ContentService.createTextOutput(JSON.stringify(result))
     .setMimeType(ContentService.MimeType.TEXT);
-}
-
-// ============================================
-// function: handleUploadFromUrl
-// ============================================
-function handleUploadFromUrl(data) {
-  validateSessionOrThrow(data.sessionToken);
-
-  let folder;
-  if (data.customFolderId) {
-    folder = DriveApp.getFolderById(data.customFolderId);
-  } else {
-    folder = DriveApp.getRootFolder();
-  }
-
-  const response = UrlFetchApp.fetch(data.imageUrl);
-  const blob = response.getBlob();
-  blob.setName(data.fileName);
-  const file = folder.createFile(blob);
-  
-  // Set Public Access
-  try { 
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); 
-  } catch(e) {
-    Logger.log('Warning: Could not set public permission on URL upload.');
-  }
-
-  // FIX: Use the thumbnail hack to bypass CORS on <img> tags for this file too
-  const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
-
-  return {
-    fileId: file.getId(),
-    fileName: file.getName(),
-    fileUrl: corsFreeUrl // Return the CORS-friendly URL
-  };
 }
 
 // ============================================
@@ -526,19 +744,16 @@ function handleUploadFromUrl(data) {
 
 function handleCreateUser(data) {
   validateAdminOnly(data.sessionToken);
-  
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_USERS);
   const rows = sheet.getDataRange().getValues();
   
-  // Check duplicates
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.username) throw new Error('Username already exists');
     if (rows[i][2] === data.email) throw new Error('Email already registered');
   }
   
   const newId = Utilities.getUuid();
-  // Row: [Username, Password, Email, Role, UserId, ChapterId]
   sheet.appendRow([
     data.username, 
     data.password, 
@@ -567,8 +782,6 @@ function handleUpdatePassword(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_USERS);
   const rows = sheet.getDataRange().getValues();
-  
-  // Users can only update their own password unless they're admin
   const targetUsername = data.targetUsername || session.user.username;
   
   if (targetUsername !== session.user.username && session.user.role !== 'admin') {
@@ -586,7 +799,6 @@ function handleUpdatePassword(data) {
 
 function handleListUsers(data) {
   validateAdminOnly(data.sessionToken);
-  
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_USERS);
   const rows = sheet.getDataRange().getValues();
@@ -599,16 +811,13 @@ function handleListUsers(data) {
       role: rows[i][3],
       id: rows[i][4],
       chapterId: rows[i][5]
-      // Note: Password is NOT included for security
     });
   }
-  
   return { users: users };
 }
 
 function handleDeleteUser(data) {
   validateAdminOnly(data.sessionToken);
-  
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_USERS);
   const rows = sheet.getDataRange().getValues();
@@ -629,13 +838,12 @@ function validateAdminOnly(token) {
 }
 
 // ============================================
-// 7. SYSTEM INITIALIZATION (Run Once)
+// 7. SYSTEM INITIALIZATION
 // ============================================
 
 function initializeSystem() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   
-  // 1. Create Users Sheet
   if (!ss.getSheetByName(SHEET_USERS)) {
     const s = ss.insertSheet(SHEET_USERS);
     s.appendRow(['Username', 'Password', 'Email', 'Role', 'UserId', 'ChapterId']);
@@ -643,19 +851,16 @@ function initializeSystem() {
     Logger.log('Created Users sheet with default admin.');
   }
 
-  // 2. Create Sessions Sheet
   if (!ss.getSheetByName(SHEET_SESSIONS)) {
     const s = ss.insertSheet(SHEET_SESSIONS);
     s.appendRow(['Token', 'UserData', 'ExpiresAt']);
   }
 
-  // 3. Create Logs Sheet
   if (!ss.getSheetByName(SHEET_LOGS)) {
     const s = ss.insertSheet(SHEET_LOGS);
     s.appendRow(['Timestamp', 'UserToken', 'FileId', 'FileName', 'Folder']);
   }
   
-  // 4. Create Org Settings
   if (!ss.getSheetByName(SHEET_ORG)) {
     const s = ss.insertSheet(SHEET_ORG);
     s.appendRow(['Key', 'Value']);

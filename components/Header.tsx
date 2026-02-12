@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Sun, Moon, LogIn, LogOut, Edit } from 'lucide-react';
+import { Menu, X, Sun, Moon, LogIn, LogOut, Edit, LayoutDashboard } from 'lucide-react';
 import { NavLink } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -19,9 +19,17 @@ interface HeaderProps {
   onHomeClick?: () => void;
   onSignInClick: () => void;
   onEditLogo?: () => void;
+  onOpenDashboard?: () => void; // ✅ Added Prop
 }
 
-export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick, onSignInClick, onEditLogo }) => {
+export const Header: React.FC<HeaderProps> = ({ 
+  theme, 
+  toggleTheme, 
+  onHomeClick, 
+  onSignInClick, 
+  onEditLogo,
+  onOpenDashboard 
+}) => {
   const { user, logout } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -46,6 +54,8 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
     if (confirm('Are you sure you want to log out?')) {
       logout();
       setIsMobileMenuOpen(false);
+      // Optional: Force home view after logout
+      if (onHomeClick) onHomeClick();
     }
   };
 
@@ -169,6 +179,17 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
               </button>
             )}
 
+            {/* ✅ DASHBOARD BUTTON (Visible only when logged in) */}
+            {user && onOpenDashboard && (
+              <button
+                onClick={onOpenDashboard}
+                className="bg-primary-cyan text-ocean-deep px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-cyan-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap mr-2"
+              >
+                Dashboard
+                <LayoutDashboard size={14} className="lg:w-4 lg:h-4" />
+              </button>
+            )}
+
             {/* Conditional Sign In / Log Out Button */}
             {user ? (
               <button
@@ -256,6 +277,20 @@ export const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, onHomeClick,
             >
               Edit Logo
               <Edit size={18} />
+            </button>
+          )}
+
+          {/* ✅ MOBILE DASHBOARD BUTTON */}
+          {user && onOpenDashboard && (
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                onOpenDashboard();
+              }}
+              className="w-full bg-primary-cyan text-ocean-deep font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
+            >
+              Dashboard
+              <LayoutDashboard size={18} />
             </button>
           )}
           

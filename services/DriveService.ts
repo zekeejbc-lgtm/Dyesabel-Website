@@ -352,6 +352,15 @@ export const DataService = {
     });
   },
 
+  // MAKE SURE THIS IS HERE:
+  deleteChapter: async (chapterId: string, sessionToken: string) => {
+    return sendRequest({
+      action: 'deleteChapter',
+      sessionToken,
+      chapterId
+    });
+  },
+
   // --- Landing Page ---
   saveLandingPageData: async (landingPage: any, sessionToken: string) => {
     return sendRequest({

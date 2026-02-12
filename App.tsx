@@ -388,12 +388,14 @@ function AppContent() {
         </div>
       </div>
 
+      {/* ✅ Pass the onOpenDashboard handler here */}
       <Header 
         theme={theme} 
         toggleTheme={toggleTheme} 
         onHomeClick={handleBackToHome} 
         onSignInClick={() => setIsLoginModalOpen(true)}
         onEditLogo={handleEditLogo}
+        onOpenDashboard={() => setShowDashboard(true)}
       />
       
       <main className="relative">

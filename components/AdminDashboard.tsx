@@ -7,8 +7,8 @@ import { FoundersEditor } from './FoundersEditor';
 import { StoriesEditor } from './StoriesEditor';
 import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
-import { UserManagement } from './UserManagement';
-import { ChaptersManagement } from './ChaptersManagement'; // ✅ New Import
+// Removed UserManagement import as it is now integrated into ChaptersManagement
+import { ChaptersManagement } from './ChaptersManagement';
 import { pillarsData } from './Stories';
 import { DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY } from '../types';
@@ -453,7 +453,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
               </button>
 
-              {/* ✅ NEW: Chapters Management Card (Admin Only) */}
+              {/* ✅ COMBINED: Chapters & Members Management Card (Admin Only) */}
               {user?.role === 'admin' && (
                 <button
                   onClick={() => setActiveEditor('chapters')}
@@ -466,37 +466,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     <span className="text-sm font-medium text-teal-500">Manage →</span>
                   </div>
                   <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                    Chapters
+                    Chapters & Members
                   </h3>
                   <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                    Add new chapters and manage existing ones
+                    Manage local chapters and their user accounts
                   </p>
                   <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                    Network administration
-                  </div>
-                </button>
-              )}
-
-              {/* User Management Card (Admin Only) */}
-              {user?.role === 'admin' && (
-                <button
-                  onClick={() => setActiveEditor('users')}
-                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-indigo-500 dark:hover:border-indigo-400 transition-all hover:shadow-xl text-left group"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="p-3 bg-indigo-500/10 rounded-lg group-hover:bg-indigo-500/20 transition-colors">
-                      <UsersIcon className="text-indigo-500" size={28} />
-                    </div>
-                    <span className="text-sm font-medium text-indigo-500">Manage →</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                    User Management
-                  </h3>
-                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                    Create, edit, and manage user accounts
-                  </p>
-                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                    User administration & permissions
+                    Network & User administration
                   </div>
                 </button>
               )}
@@ -553,15 +529,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         />
       )}
 
-      {/* ✅ NEW: Chapters Management Editor */}
+      {/* ✅ NEW: Chapters Management Editor (Handles both Chapters & Users) */}
       {activeEditor === 'chapters' && user?.role === 'admin' && (
         <ChaptersManagement
-          onBack={() => setActiveEditor(null)}
-        />
-      )}
-
-      {activeEditor === 'users' && user?.role === 'admin' && (
-        <UserManagement
           onBack={() => setActiveEditor(null)}
         />
       )}

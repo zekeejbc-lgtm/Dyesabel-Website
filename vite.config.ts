@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => {
             display_override: ['standalone', 'minimal-ui', 'browser'],
             orientation: 'portrait',
             theme_color: '#051923',
-            background_color: '#00080a',
+            background_color: '#051923',
             lang: 'en',
             categories: ['non-profit', 'community', 'education'],
             icons: [

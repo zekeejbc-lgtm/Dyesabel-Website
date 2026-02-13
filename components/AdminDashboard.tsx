@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, BookOpen, Users as UsersIcon, Heart, Image as ImageIcon, FileText, Building2, Loader2, Edit, Globe } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users as UsersIcon, Image as ImageIcon, FileText, Building2, Loader2, Edit, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
 import { FoundersEditor } from './FoundersEditor';
-import { StoriesEditor } from './StoriesEditor';
 import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
-// Removed UserManagement import as it is now integrated into ChaptersManagement
 import { ChaptersManagement } from './ChaptersManagement';
 import { pillarsData } from './Stories';
 import { DataService } from '../services/DriveService';
@@ -53,36 +51,18 @@ const initialFounders = [
   }
 ];
 
-const initialStories = [
-  {
-    id: '1',
-    title: 'Beach Cleanup Success',
-    excerpt: 'Over 200 volunteers joined our coastal cleanup drive...',
-    imageUrl: 'https://picsum.photos/seed/story1/600/400',
-    date: 'January 15, 2024'
-  },
-  {
-    id: '2',
-    title: 'Youth Leadership Training',
-    excerpt: 'Empowering the next generation of environmental leaders...',
-    imageUrl: 'https://picsum.photos/seed/story2/600/400',
-    date: 'February 3, 2024'
-  }
-];
-
 interface AdminDashboardProps {
   onBack: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [activeEditor, setActiveEditor] = useState<string | null>(null);
   
   // State for all editable content
   const [pillars, setPillars] = useState(pillarsData);
   const [partners, setPartners] = useState(initialPartnerCategories);
   const [founders, setFounders] = useState(initialFounders);
-  const [stories, setStories] = useState(initialStories);
   
   // Loading State
   const [isLoading, setIsLoading] = useState(true);
@@ -94,11 +74,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         setIsLoading(true);
         console.log('Fetching dashboard data...');
 
-        const [pillarsRes, partnersRes, foundersRes, storiesRes] = await Promise.all([
+        // Removed Stories fetch
+        const [pillarsRes, partnersRes, foundersRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.loadPartners(),
-          DataService.loadFounders(),
-          DataService.loadStories()
+          DataService.loadFounders()
         ]);
 
         if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
@@ -111,10 +91,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
         if (foundersRes.success && foundersRes.founders && foundersRes.founders.length > 0) {
           setFounders(foundersRes.founders);
-        }
-
-        if (storiesRes.success && storiesRes.stories && storiesRes.stories.length > 0) {
-          setStories(storiesRes.stories);
         }
 
       } catch (error) {
@@ -177,23 +153,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       }
     } catch (error) {
       alert('Error saving founders: ' + (error instanceof Error ? error.message : String(error)));
-    }
-  };
-
-  const handleSaveStories = async (updatedStories: any) => {
-    try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
-      if (!sessionToken) {
-        alert('Session expired. Please login again.');
-        return;
-      }
-      setStories(updatedStories);
-      const result = await DataService.saveStories(updatedStories, sessionToken);
-      if (!result.success) {
-        alert('Error saving stories: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      alert('Error saving stories: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -261,8 +220,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {/* Quick Stats - Removed "Stories" */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
               <div className="flex items-center gap-3">
                 <div className="p-3 bg-primary-blue/10 rounded-lg">
@@ -285,18 +244,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     {partners.reduce((sum, cat) => sum + cat.partners.length, 0)}
                   </p>
                   <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Partners</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-green-500/10 rounded-lg">
-                  <Heart className="text-green-500" size={24} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-ocean-deep dark:text-white">{stories.length}</p>
-                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Stories</p>
                 </div>
               </div>
             </div>
@@ -365,27 +312,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
               </button>
 
-              {/* Stories Card */}
-              <button
-                onClick={() => setActiveEditor('stories')}
-                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-green-500 dark:hover:border-green-400 transition-all hover:shadow-xl text-left group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-green-500/10 rounded-lg group-hover:bg-green-500/20 transition-colors">
-                    <Heart className="text-green-500" size={28} />
-                  </div>
-                  <span className="text-sm font-medium text-green-500">Edit →</span>
-                </div>
-                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                  Success Stories
-                </h3>
-                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                  Add and edit success stories & updates
-                </p>
-                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  {stories.length} stories published
-                </div>
-              </button>
+              {/* Removed Success Stories Card */}
 
               {/* Founders Card */}
               <button
@@ -453,7 +380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
               </button>
 
-              {/* ✅ COMBINED: Chapters & Members Management Card (Admin Only) */}
+              {/* Chapters & Members Management Card (Admin Only) */}
               {user?.role === 'admin' && (
                 <button
                   onClick={() => setActiveEditor('chapters')}
@@ -506,14 +433,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         />
       )}
 
-      {activeEditor === 'stories' && (
-        <StoriesEditor
-          stories={stories}
-          onSave={handleSaveStories}
-          onClose={() => setActiveEditor(null)}
-        />
-      )}
-
       {activeEditor === 'landing' && (
         <LandingPageEditor
           onBack={() => setActiveEditor(null)}
@@ -529,7 +448,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         />
       )}
 
-      {/* ✅ NEW: Chapters Management Editor (Handles both Chapters & Users) */}
       {activeEditor === 'chapters' && user?.role === 'admin' && (
         <ChaptersManagement
           onBack={() => setActiveEditor(null)}

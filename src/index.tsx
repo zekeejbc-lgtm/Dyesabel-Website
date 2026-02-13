@@ -6,7 +6,7 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css'; // Ensure your global styles are imported
 
-// Service Worker Registration and Update Handling
+// Service Work er Registration and Update Handling
 let updateToastId: string | number | undefined;
 let updateToastActive = false;
 

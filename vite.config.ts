@@ -36,7 +36,7 @@ export default defineConfig(({ mode }) => {
           manifest: {
             name: 'Dyesabel Philippines, Inc.',
             short_name: 'Dyesabel',
-            description: 'Empowering communities through sustainable development and education.',
+            description: 'Developing the Youth with Environmentally Sustainable Advocacies Building and Empowering Lives Philippines, Inc.',
             id: '/',
             start_url: '/',
             scope: '/',

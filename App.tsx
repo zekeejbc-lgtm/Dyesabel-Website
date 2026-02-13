@@ -18,55 +18,13 @@ import { PillarsEditor } from './components/PillarsEditor';
 import { PartnersEditor } from './components/PartnersEditor';
 import { FoundersEditor } from './components/FoundersEditor';
 import { LogoEditor } from './components/LogoEditor';
+// ✅ Import the new LoadingScreen component
+import { LoadingScreen } from './components/LoadingScreen'; 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Chapter, Pillar } from './types';
 import { pillarsData } from './components/Stories';
 import { DataService } from './services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
-
-// Add this style block for the water wave animation
-const waterStyles = `
-@keyframes wave {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-@keyframes rise {
-  0% { top: 120%; }
-  100% { top: 20%; }
-}
-.water-container {
-  position: relative;
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  border: 4px solid rgba(255, 255, 255, 0.3);
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.05);
-  box-shadow: 0 0 20px rgba(34, 211, 238, 0.2);
-}
-.water-wave {
-  position: absolute;
-  top: 120%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: rgba(34, 211, 238, 0.6);
-  border-radius: 40%;
-  animation: wave 5s linear infinite, rise 4s ease-out forwards;
-}
-.water-wave::after {
-  content: '';
-  position: absolute;
-  top: 5%;
-  left: 50%;
-  transform: translate(-50%, 0);
-  width: 100%;
-  height: 100%;
-  background: rgba(34, 211, 238, 0.3);
-  border-radius: 38%;
-  animation: wave 7s linear infinite reverse;
-}
-`;
 
 function AppContent() {
   const { user, isAuthenticated } = useAuth();
@@ -148,12 +106,10 @@ function AppContent() {
   };
 
   // Fetch ALL data at once on startup
-  // Inside App.tsx
-
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        console.group("🚀 APP: STARTING GLOBAL DATA FETCH"); // Groups logs nicely
+        console.group("🚀 APP: STARTING GLOBAL DATA FETCH");
         
         const [pillarsRes, chaptersRes, partnersRes, foundersRes] = await Promise.all([
           DataService.loadPillars(),
@@ -190,12 +146,12 @@ function AppContent() {
           console.error("❌ Partners fetch failed:", partnersRes);
         }
 
-        console.groupEnd(); // End the log group
+        console.groupEnd(); 
 
       } catch (error) {
         console.error("🔥 CRITICAL ERROR during global fetch:", error);
       } finally {
-        setIsGlobalLoading(false);
+        setTimeout(() => setIsGlobalLoading(false), 800);
       }
     };
 
@@ -354,27 +310,9 @@ function AppContent() {
     window.scrollTo(0, 0);
   };
 
-  // ✅ LOADING SCREEN WITH WATER ANIMATION
+  // ✅ USE THE NEW LOADING COMPONENT
   if (isGlobalLoading) {
-    return (
-      <>
-        <style>{waterStyles}</style>
-        <div className="fixed inset-0 z-50 bg-[#00080a] flex flex-col items-center justify-center text-white">
-          <div className="water-container">
-            <div className="water-wave"></div>
-            <div className="absolute inset-0 flex items-center justify-center z-10">
-              <img 
-                src="https://i.imgur.com/CQCKjQM.png" 
-                className="w-14 h-14 object-contain drop-shadow-lg" 
-                alt="Logo"
-              />
-            </div>
-          </div>
-          <h2 className="mt-8 text-2xl font-black tracking-widest animate-pulse font-sans">DYESABEL PH</h2>
-          <p className="text-[#22d3ee] text-sm mt-2 font-medium tracking-wide">Loading resources...</p>
-        </div>
-      </>
-    );
+    return <LoadingScreen />;
   }
 
   return (
@@ -400,7 +338,6 @@ function AppContent() {
         </div>
       </div>
 
-      {/* ✅ Pass the onOpenDashboard handler here */}
       <Header 
         theme={theme} 
         toggleTheme={toggleTheme} 
@@ -443,10 +380,10 @@ function AppContent() {
           <>
             <Hero onDonateClick={handleDonateClick} />
             <Slogan />
-<Pillars 
-  pillars={pillars} 
-  onSelectPillar={handleSelectPillar} 
-/>
+            <Pillars 
+              pillars={pillars} 
+              onSelectPillar={handleSelectPillar} 
+            />
             <Chapters 
               chapters={chapters} 
               onSelectChapter={handleSelectChapter} 

@@ -95,11 +95,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
 
         {/* Header with Logo */}
         <div className="text-center mb-8">
-          <div className="w-24 h-24 bg-white dark:bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg border border-ocean-deep/5 dark:border-white/10 p-4">
+          <div className="w-24 h-24 mx-auto mb-4 flex items-center justify-center">
              <img 
                src="https://i.imgur.com/CQCKjQM.png" 
                alt="Dyesabel Logo" 
-               className="w-full h-full object-contain drop-shadow-md"
+               className="w-full h-full object-contain rounded-full drop-shadow-md"
              />
           </div>
           <h2 className="text-2xl md:text-3xl font-black text-ocean-deep dark:text-white tracking-tight">Welcome Back</h2>

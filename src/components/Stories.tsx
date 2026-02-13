@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Pillar } from '../../types';
+import { Pillar } from '../types';
 import { Leaf, BookOpen, Scale, Heart, Palette } from 'lucide-react';
-import { DataService } from '../../services/DriveService';
+import { DataService } from '../services/DriveService';
 
 // Keep this as a FALLBACK and for the Admin Dashboard initial state
 export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [

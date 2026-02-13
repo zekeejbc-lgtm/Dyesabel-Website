@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+    <title>Dyesabel Philippines, Inc.</title>
+    
+    <meta name="theme-color" content="#051923" />
+    <meta name="description" content="Empowering communities through sustainable development and education." />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Lobster&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              ocean: {
+                dark: '#00080a',
+                deep: '#051923',
+                light: '#e0f2f1',
+                mint: '#80cbc4',
+              },
+              primary: {
+                cyan: '#22d3ee',
+                blue: '#2563eb',
+              },
+              accent: {
+                rose: '#f43f5e',
+                pink: '#db2777',
+              }
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              lobster: ['Lobster', 'cursive'],
+            },
+            animation: {
+              'float': 'float 8s ease-in-out infinite',
+              'rise': 'rise 15s infinite linear',
+              'pulse-slow': 'pulse 6s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-20px)' },
+              },
+              rise: {
+                '0%': { bottom: '-50px', transform: 'translateX(0)', opacity: '0' },
+                '10%': { opacity: '0.6' },
+                '50%': { transform: 'translateX(20px)', opacity: '0.4' },
+                '100%': { bottom: '110%', transform: 'translateX(-20px)', opacity: '0' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 80px;
+      }
+      body {
+        font-family: 'Inter', sans-serif;
+        overflow-x: hidden;
+      }
+      .reveal {
+        opacity: 0;
+        transform: translateY(30px);
+        transition: all 0.8s cubic-bezier(0.5, 0, 0, 1);
+      }
+      .reveal.active {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      .glass {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-sWZQq6zy.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-libs-B1tV3oQX.js">
+    <link rel="modulepreload" crossorigin href="/assets/vendor-react-CDrWK-s1.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-Cwq2LiyE.css">
+  <link rel="manifest" href="/manifest.webmanifest"></head>
+  <body class="text-slate-900 dark:text-white transition-colors duration-500 antialiased">
+    <div id="root"></div>
+    <script>
+      function reveal() {
+        var reveals = document.querySelectorAll(".reveal");
+        for (var i = 0; i < reveals.length; i++) {
+          var windowHeight = window.innerHeight;
+          var elementTop = reveals[i].getBoundingClientRect().top;
+          var elementVisible = 100;
+          if (elementTop < windowHeight - elementVisible) {
+            reveals[i].classList.add("active");
+          }
+        }
+      }
+      window.addEventListener("scroll", reveal);
+      window.addEventListener("load", reveal);
+      setTimeout(reveal, 500);
+    </script>
+  </body>
+</html>

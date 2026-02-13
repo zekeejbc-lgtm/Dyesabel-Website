@@ -18,11 +18,14 @@ import { PillarsEditor } from './components/PillarsEditor';
 import { PartnersEditor } from './components/PartnersEditor';
 import { FoundersEditor } from './components/FoundersEditor';
 import { LogoEditor } from './components/LogoEditor';
-import { LoadingScreen } from './components/LoadingScreen'; 
-import { AuthProvider, useAuth } from '../contexts/AuthContext';
-import { Chapter, Pillar } from '../types';
+import { LoadingScreen } from './components/LoadingScreen';
+
+// ✅ FIXED IMPORTS: Changed '../' to './' because these folders are now in src/
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { Chapter, Pillar } from './types';
 import { pillarsData } from './components/Stories';
-import { DataService } from '../services/DriveService';
+import { DataService } from './services/DriveService';
+
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 
 function AppContent() {
@@ -236,7 +239,6 @@ function AppContent() {
     setIsFoundersEditorOpen(false);
   };
 
-  // ✅ UPDATED: Ensure Dashboard is closed when going home
   const handleBackToHome = () => {
     setSelectedChapter(null);
     setSelectedPillar(null);
@@ -246,7 +248,7 @@ function AppContent() {
     setIsPartnersEditorOpen(false);
     setIsFoundersEditorOpen(false);
     setIsLogoEditorOpen(false);
-    setShowDashboard(false); // <--- Added this line
+    setShowDashboard(false); 
     window.scrollTo(0, 0);
   };
 
@@ -333,7 +335,7 @@ function AppContent() {
         onSignInClick={() => setIsLoginModalOpen(true)}
         onEditLogo={handleEditLogo}
         onOpenDashboard={() => setShowDashboard(true)}
-        isDashboardOpen={showDashboard} // ✅ Added prop to update button text
+        isDashboardOpen={showDashboard}
       />
       
       <main className="relative">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Menu, X, Sun, Moon, LogIn, LogOut, LayoutDashboard, Home } from 'lucide-react'; // Added Home icon
-import { NavLink } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
+import { NavLink } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 const VOLUNTEER_URL = "https://forms.gle/W6WVpftGDwM7fUm19";
 

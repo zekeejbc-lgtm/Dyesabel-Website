@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { ArrowLeft, Target, Calendar, CheckCircle2, Edit } from 'lucide-react';
-import { Pillar } from '../../types';
-import { useAuth } from '../../contexts/AuthContext';
+// ✅ FIXED IMPORTS: Changed '../../' to '../'
+import { Pillar } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 interface PillarDetailProps {
   pillar: Pillar;

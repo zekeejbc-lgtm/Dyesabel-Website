@@ -1,6 +1,6 @@
 import React from 'react';
 import { ArrowUpRight, MapPin } from 'lucide-react';
-import { Chapter } from '../../types';
+import { Chapter } from '../types';
 
 // Keeping this as a fallback/initial state for other components to use
 export const chaptersData: Chapter[] = [

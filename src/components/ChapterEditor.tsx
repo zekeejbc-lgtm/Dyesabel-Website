@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, Pencil, X } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { DriveService, DataService } from '../../services/DriveService';
-import { SESSION_TOKEN_KEY, Chapter } from '../../types';
+import { useAuth } from '../contexts/AuthContext';
+import { DriveService, DataService } from '../services/DriveService';
+import { SESSION_TOKEN_KEY, Chapter } from '../types';
 
 interface ChapterEditorProps {
   onBack: () => void;

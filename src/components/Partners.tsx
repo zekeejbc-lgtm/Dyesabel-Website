@@ -1,9 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Users, Building2, Globe2, Flag, Edit, Mail, Handshake } from 'lucide-react';
-
-// ✅ FIXED IMPORTS: Changed '../../' to '../'
 import { useAuth } from '../contexts/AuthContext';
-import { DataService } from '../services/DriveService';
 
 // Interfaces matching your backend structure
 export interface Partner {
@@ -20,11 +17,12 @@ export interface PartnerCategory {
 }
 
 interface PartnersProps {
+  partners?: PartnerCategory[]; // ✅ Recieved from App.tsx
+  isLoading?: boolean;         // ✅ Loading State
   onEdit?: () => void;
   refreshTrigger?: number;
 }
 
-// Icon mapping for categories
 const ICON_MAP: Record<string, React.ReactNode> = {
   coalitions: <Users className="w-6 h-6" />,
   gov: <Building2 className="w-6 h-6" />,
@@ -33,62 +31,19 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   default: <Users className="w-6 h-6" />
 };
 
-export const Partners: React.FC<PartnersProps> = ({ onEdit, refreshTrigger }) => {
+export const Partners: React.FC<PartnersProps> = ({ partners = [], isLoading = false, onEdit }) => {
   const { user } = useAuth();
-  const [categories, setCategories] = useState<PartnerCategory[]>([]);
-  const [loading, setLoading] = useState(true);
 
-  // 1. Fetch Data
-  useEffect(() => {
-    const fetchPartners = async () => {
-      try {
-        const response = await DataService.loadPartners();
-        if (response && response.partners && response.partners.length > 0) {
-          setCategories(response.partners);
-        } else {
-          setCategories([]);
-        }
-      } catch (error) {
-        console.error("Failed to load partners:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchPartners();
-  }, [refreshTrigger]);
-
-  // 2. Smart Email Handler (Gmail Web for Desktop, App for Mobile)
   const handleJoinPartner = () => {
     const recipient = "dyesabel.system+partnerships@gmail.com";
     const subject = "Partnership Inquiry: [Insert Organization Name]";
-    
-    const bodyContent = `
-Hi Dyesabel Team,
+    const bodyContent = `Hi Dyesabel Team,\n\nWe are interested in partnering with you!\n\n--- PARTNER DETAILS ---\nOrganization Name: \nContact Person: \nContact Number: \n\n--- PARTNERSHIP SCOPE ---\nWhich Chapter do you wish to partner with? \n\n--- MESSAGE ---\n[Please describe how you would like to collaborate]`;
 
-We are interested in partnering with you!
-
---- PARTNER DETAILS ---
-Organization Name: 
-Contact Person: 
-Contact Number: 
-
---- PARTNERSHIP SCOPE ---
-Which Chapter do you wish to partner with? 
-(e.g., National, Davao, Tagum, or specify other): 
-
---- MESSAGE ---
-[Please describe how you would like to collaborate]
-    `;
-
-    // Detect if screen is large (Desktop)
     const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
-
     if (isDesktop) {
-      // Desktop: Open Gmail Web Composer in a new tab
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipient)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyContent)}`;
       window.open(gmailUrl, '_blank');
     } else {
-      // Mobile/Tablet: Use standard mailto to trigger the App
       const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyContent)}`;
       window.location.href = mailtoUrl;
     }
@@ -99,15 +54,11 @@ Which Chapter do you wish to partner with?
     return ICON_MAP[category.id] || ICON_MAP['default'];
   };
 
-  if (loading) {
-    return <div className="py-24 text-center text-ocean-deep/50 dark:text-white/50">Loading Partners...</div>;
-  }
-
   return (
     <section id="partners" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
         
-        {/* Header Section */}
+        {/* Header */}
         <div className="text-center mb-16 reveal flex flex-col items-center">
            <h3 className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">
              Together We Are Stronger
@@ -119,7 +70,6 @@ Which Chapter do you wish to partner with?
             Collaborating with diverse organizations across sectors to amplify our impact and drive sustainable change.
           </p>
 
-          {/* Admin Edit Button */}
           {onEdit && (user?.role === 'admin' || user?.role === 'editor') && (
             <button 
               onClick={onEdit}
@@ -133,8 +83,29 @@ Which Chapter do you wish to partner with?
 
         <div className="flex flex-col gap-8 max-w-5xl mx-auto">
           
-          {/* 3. Empty State: Show "Be Our Partner" CTA if no data */}
-          {categories.length === 0 ? (
+          {/* ✅ SKELETON LOADING STATE */}
+          {isLoading ? (
+            // Render 2 fake category cards
+            [1, 2].map((_, i) => (
+              <div key={i} className="glass-card rounded-2xl p-6 md:p-8 border border-white/10 animate-pulse">
+                {/* Skeleton Header */}
+                <div className="flex items-center gap-4 mb-6 pb-4 border-b border-white/10">
+                  <div className="w-12 h-12 rounded-full bg-white/20"></div>
+                  <div className="h-6 w-48 bg-white/20 rounded"></div>
+                </div>
+                {/* Skeleton Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {[1, 2, 3, 4].map((_, j) => (
+                    <div key={j} className="flex flex-col items-center p-4 rounded-xl bg-white/5 border border-transparent">
+                      <div className="w-16 h-16 rounded-full bg-white/20 mb-3"></div>
+                      <div className="h-4 w-24 bg-white/20 rounded"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : partners.length === 0 ? (
+            // Empty State
             <div className="glass-card rounded-2xl p-12 border border-white/10 text-center flex flex-col items-center justify-center animate-fade-in">
                <Handshake className="w-20 h-20 text-primary-blue dark:text-primary-cyan mb-6 opacity-80" />
                <h3 className="text-2xl font-bold text-ocean-deep dark:text-white mb-2">
@@ -152,8 +123,8 @@ Which Chapter do you wish to partner with?
                </button>
             </div>
           ) : (
-            // 4. List Partners with "Join Us" Card
-            categories.map((category, index) => (
+            // Real Data
+            partners.map((category, index) => (
              <div 
                 key={category.id}
                 className={`glass-card rounded-2xl p-6 md:p-8 border border-white/10 reveal reveal-delay-${(index + 1) * 100}`}
@@ -168,18 +139,13 @@ Which Chapter do you wish to partner with?
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                  {/* Render Existing Partners */}
                   {category.partners.map((partner) => (
                     <div 
                       key={partner.id} 
                       className="group flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-all duration-300 border border-transparent hover:border-primary-cyan/30 cursor-pointer"
                     >
                       <div className="w-16 h-16 rounded-full mb-3 shadow-md group-hover:scale-110 transition-transform duration-300 overflow-hidden bg-white/20">
-                        <img 
-                            src={partner.logo} 
-                            alt={partner.name}
-                            className="w-full h-full object-cover"
-                        />
+                        <img src={partner.logo} alt={partner.name} className="w-full h-full object-cover" />
                       </div>
                       <span className="text-sm font-semibold text-center text-ocean-deep/80 dark:text-gray-200 group-hover:text-primary-blue dark:group-hover:text-primary-cyan transition-colors leading-tight">
                         {partner.name}
@@ -187,17 +153,13 @@ Which Chapter do you wish to partner with?
                     </div>
                   ))}
                   
-                  {/* 5. "Join Us" Card (Appears at the end of the grid) */}
                   <div 
                     onClick={handleJoinPartner}
                     className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-dashed border-ocean-deep/10 dark:border-white/10 opacity-60 hover:opacity-100 hover:bg-white/5 hover:border-primary-cyan/50 transition-all cursor-pointer min-h-[140px] group"
                   >
                     <span className="text-3xl font-light text-ocean-deep/40 dark:text-white/40 mb-2 group-hover:text-primary-cyan transition-colors">+</span>
-                    <span className="text-xs font-bold text-ocean-deep/40 dark:text-white/40 text-center group-hover:text-primary-cyan transition-colors uppercase tracking-wider">
-                      Join Us
-                    </span>
+                    <span className="text-xs font-bold text-ocean-deep/40 dark:text-white/40 text-center group-hover:text-primary-cyan transition-colors uppercase tracking-wider">Join Us</span>
                   </div>
-
                 </div>
              </div>
             ))

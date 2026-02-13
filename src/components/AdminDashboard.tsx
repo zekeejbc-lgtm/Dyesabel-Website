@@ -7,48 +7,23 @@ import { FoundersEditor } from './FoundersEditor';
 import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
 import { ChaptersManagement } from './ChaptersManagement';
-import { pillarsData } from './Stories';
 import { DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY } from '../types';
 
-// Initial Data Constants (Fallbacks)
+// Initial Data Constants (Fallbacks - You can keep or remove these as needed)
 const initialPartnerCategories = [
   {
     id: 'coalitions',
     title: 'Coalitions',
     icon: <UsersIcon className="w-6 h-6" />,
-    partners: [
-      { id: 'c1', name: 'Youth for Nature', logo: 'https://ui-avatars.com/api/?name=Youth+Nature&background=22d3ee&color=fff' },
-      { id: 'c2', name: 'Mindanao Green Alliance', logo: 'https://ui-avatars.com/api/?name=Mindanao+Green&background=2563eb&color=fff' },
-    ]
+    partners: []
   },
   {
     id: 'gov',
     title: 'Government Partners',
     icon: <Building2 className="w-6 h-6" />,
-    partners: [
-      { id: 'g1', name: 'DENR', logo: 'https://ui-avatars.com/api/?name=DENR&background=059669&color=fff' },
-      { id: 'g2', name: 'Provincial Gov. Davao', logo: 'https://ui-avatars.com/api/?name=Davao+Gov&background=db2777&color=fff' },
-      { id: 'g3', name: 'LGU Tagum City', logo: 'https://ui-avatars.com/api/?name=Tagum&background=d97706&color=fff' },
-    ]
+    partners: []
   },
-];
-
-const initialFounders = [
-  {
-    id: '1',
-    name: 'Maria Clara Santos',
-    role: 'Co-Founder & Executive Director',
-    bio: 'An environmental scientist with over 15 years of experience in marine conservation.',
-    imageUrl: 'https://picsum.photos/seed/person1/400/400'
-  },
-  {
-    id: '2',
-    name: 'Juan Dela Cruz',
-    role: 'Co-Founder & Director of Advocacy',
-    bio: 'A passionate youth leader and educator focused on grassroots engagement.',
-    imageUrl: 'https://picsum.photos/seed/person2/400/400'
-  }
 ];
 
 interface AdminDashboardProps {
@@ -56,13 +31,14 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
+  // ✅ FIXED: Use email if name/username isn't on the type
   const { user } = useAuth();
   const [activeEditor, setActiveEditor] = useState<string | null>(null);
   
-  // State for all editable content
-  const [pillars, setPillars] = useState(pillarsData);
+  // ✅ FIXED: Initialize as empty arrays, do NOT import pillarsData
+  const [pillars, setPillars] = useState<any[]>([]);
   const [partners, setPartners] = useState(initialPartnerCategories);
-  const [founders, setFounders] = useState(initialFounders);
+  const [founders, setFounders] = useState<any[]>([]);
   
   // Loading State
   const [isLoading, setIsLoading] = useState(true);
@@ -74,7 +50,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         setIsLoading(true);
         console.log('Fetching dashboard data...');
 
-        // Removed Stories fetch
         const [pillarsRes, partnersRes, foundersRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.loadPartners(),
@@ -205,7 +180,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     Content Management Dashboard
                   </h1>
                   <p className="text-ocean-deep/60 dark:text-gray-400 mt-1">
-                    Welcome back, {user?.username} • Role: {user?.role}
+                    Welcome back, {user?.email || 'Admin'} • Role: {user?.role}
                   </p>
                 </div>
               </div>
@@ -220,7 +195,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Quick Stats - Removed "Stories" */}
+          {/* Quick Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
             <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
               <div className="flex items-center gap-3">
@@ -286,7 +261,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   Edit the 5 core pillars and their activities
                 </p>
                 <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  {pillars.length} pillars • {pillars.reduce((sum, p) => sum + p.activities.length, 0)} activities
+                  {pillars.length} pillars • {pillars.reduce((sum: number, p: any) => sum + (p.activities?.length || 0), 0)} activities
                 </div>
               </button>
 
@@ -311,8 +286,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   {partners.reduce((sum, cat) => sum + cat.partners.length, 0)} partners • {partners.length} categories
                 </div>
               </button>
-
-              {/* Removed Success Stories Card */}
 
               {/* Founders Card */}
               <button

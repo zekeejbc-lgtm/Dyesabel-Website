@@ -10,7 +10,6 @@
    1. GLASSMORPHISM CARD STYLES
    ========================================= */
 .glass-card {
-  /* Light Mode Default */
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -19,17 +18,15 @@
   transition: all 0.3s ease-in-out;
 }
 
-/* Dark Mode Override */
 .dark .glass-card {
   background: rgba(2, 16, 23, 0.6); 
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* Hover Effects */
 .glass-card:hover {
   background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(34, 211, 238, 0.5); /* Primary Cyan border on hover */
+  border-color: rgba(34, 211, 238, 0.5);
   transform: translateY(-5px);
 }
 
@@ -53,7 +50,6 @@
   transform: translateY(0);
 }
 
-/* Staggered Delays for Grid Items */
 .reveal-delay-100 { transition-delay: 0.1s; }
 .reveal-delay-200 { transition-delay: 0.2s; }
 .reveal-delay-300 { transition-delay: 0.3s; }
@@ -64,7 +60,6 @@
    3. BACKGROUND ANIMATIONS
    ========================================= */
 
-/* Floating Blobs (with rotation - for background) */
 @keyframes float {
   0% { transform: translate(0, 0) rotate(0deg); }
   33% { transform: translate(30px, -50px) rotate(10deg); }
@@ -76,7 +71,6 @@
   animation: float 20s ease-in-out infinite;
 }
 
-/* ✅ NEW: Floating Text (NO rotation - for titles) */
 @keyframes float-y {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-20px); }
@@ -86,23 +80,37 @@
   animation: float-y 6s ease-in-out infinite;
 }
 
-/* Rising Bubbles/Particles */
+/* ✅ NEW: Sway Animation (Left/Right) */
+@keyframes sway {
+  0%, 100% { transform: translateX(-25px); }
+  50% { transform: translateX(25px); }
+}
+
+.animate-sway {
+  animation: sway ease-in-out infinite;
+}
+
+/* ✅ UPDATED: Rise Animation (Upwards) */
 @keyframes rise {
   0% {
-    transform: translateY(100vh) scale(0);
+    transform: translateY(0) scale(0.8);
     opacity: 0;
   }
-  50% {
+  20% {
     opacity: 0.6;
   }
+  80% {
+    opacity: 0.4;
+  }
   100% {
-    transform: translateY(-10vh) scale(1);
+    /* Moves way up past the top */
+    transform: translateY(-120vh) scale(1.1);
     opacity: 0;
   }
 }
 
 .animate-rise {
-  animation: rise 15s infinite linear;
+  animation: rise linear infinite;
 }
 
 /* =========================================

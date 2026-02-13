@@ -18,12 +18,10 @@ import { PillarsEditor } from './components/PillarsEditor';
 import { PartnersEditor } from './components/PartnersEditor';
 import { FoundersEditor } from './components/FoundersEditor';
 import { LogoEditor } from './components/LogoEditor';
-import { LoadingScreen } from './components/LoadingScreen';
 import { BackgroundBubbles } from './components/BackgroundBubbles';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { Chapter, Pillar } from './types';
-import { pillarsData } from './components/Stories';
 import { DataService } from './services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 
@@ -40,23 +38,26 @@ function AppContent() {
     return 'light';
   });
 
-  // ✅ LOADING STATE: Controls the skeletons
+  // ✅ LOADING STATE
   const [isLoading, setIsLoading] = useState(true);
 
   // Navigation & Editor States
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
-  const [isChapterEditorOpen, setIsChapterEditorOpen] = useState(false);
   const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null);
+  
+  const [isChapterEditorOpen, setIsChapterEditorOpen] = useState(false);
   const [isPillarEditorOpen, setIsPillarEditorOpen] = useState(false);
   const [isPartnersEditorOpen, setIsPartnersEditorOpen] = useState(false);
   const [isFoundersEditorOpen, setIsFoundersEditorOpen] = useState(false);
+  const [isLandingEditorOpen, setIsLandingEditorOpen] = useState(false); // New State
   const [isLogoEditorOpen, setIsLogoEditorOpen] = useState(false);
+  
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isDonatePageOpen, setIsDonatePageOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
 
-  // ✅ DATA STATES: Initialized as EMPTY (No Mock Data)
-  const [pillars, setPillars] = useState(pillarsData);
+  // ✅ DATA STATES: Initialized as EMPTY
+  const [pillars, setPillars] = useState<any[]>([]); 
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [founders, setFounders] = useState<any[]>([]);
@@ -99,7 +100,7 @@ function AppContent() {
   // Fetch ALL data
   useEffect(() => {
     const loadAllData = async () => {
-      setIsLoading(true); // Start showing skeletons
+      setIsLoading(true);
       try {
         const [pillarsRes, chaptersRes, partnersRes, foundersRes] = await Promise.all([
           DataService.loadPillars(),
@@ -121,7 +122,6 @@ function AppContent() {
       } catch (error) {
         console.error("Fetch error:", error);
       } finally {
-        // Stop showing skeletons after fetch
         setTimeout(() => setIsLoading(false), 800);
       }
     };
@@ -149,6 +149,7 @@ function AppContent() {
     setIsPillarEditorOpen(false);
     setIsPartnersEditorOpen(false);
     setIsFoundersEditorOpen(false);
+    setIsLandingEditorOpen(false);
     setIsLogoEditorOpen(false);
     setShowDashboard(false); 
     window.scrollTo(0, 0);
@@ -192,44 +193,87 @@ function AppContent() {
       />
       
       <main className="relative">
+        {/* =========================================================
+            EDITOR MODALS (Higher Priority)
+            These render ON TOP of everything else if active.
+           ========================================================= */}
         {isLogoEditorOpen ? (
           <LogoEditor onClose={() => setIsLogoEditorOpen(false)} />
-        ) : showDashboard && isAuthenticated ? (
+        ) : isLandingEditorOpen ? (
+          <LandingPageEditor onBack={() => setIsLandingEditorOpen(false)} />
+        ) : isPartnersEditorOpen ? (
+          <PartnersEditor 
+            categories={partners} 
+            onSave={(p) => { setPartners(p); setIsPartnersEditorOpen(false); }} 
+            onClose={() => setIsPartnersEditorOpen(false)} 
+          />
+        ) : isFoundersEditorOpen ? (
+          <FoundersEditor 
+            founders={founders} 
+            onSave={(f) => { setFounders(f); setIsFoundersEditorOpen(false); }} 
+            onClose={() => setIsFoundersEditorOpen(false)} 
+          />
+        ) : isPillarEditorOpen ? (
+          <PillarsEditor 
+            pillars={pillars} 
+            onSave={(p) => { setPillars(p.map((x:any, i) => ({...x, icon: getIconForIndex(i)}))); setIsPillarEditorOpen(false); }} 
+            onClose={() => setIsPillarEditorOpen(false)} 
+          />
+        ) : isChapterEditorOpen ? (
+          <ChapterEditor 
+            chapter={selectedChapter || undefined} 
+            onBack={() => setIsChapterEditorOpen(false)} 
+          />
+        ) 
+
+        /* =========================================================
+            ADMIN DASHBOARD & NAVIGATION
+           ========================================================= */
+        : showDashboard && isAuthenticated ? (
           user?.role === 'admin' ? (
             <AdminDashboard onBack={() => setShowDashboard(false)} />
           ) : user?.role === 'chapter_head' ? (
             <ChapterEditor onBack={() => setShowDashboard(false)} />
           ) : user?.role === 'editor' ? (
             <LandingPageEditor onBack={() => setShowDashboard(false)} />
-          ) : null
-        ) : isDonatePageOpen ? (
+          ) : (
+            /* Fallback for unknown roles */
+            <div className="pt-32 text-center">
+              <h2 className="text-2xl font-bold">Access Denied</h2>
+            </div>
+          )
+        ) 
+        
+        /* =========================================================
+            PUBLIC PAGES (View Mode)
+           ========================================================= */
+        : isDonatePageOpen ? (
           <DonatePage onBack={handleBackToHome} />
-        ) : isPartnersEditorOpen ? (
-          <PartnersEditor categories={partners} onSave={(p) => { setPartners(p); setIsPartnersEditorOpen(false); }} onClose={() => setIsPartnersEditorOpen(false)} />
-        ) : isFoundersEditorOpen ? (
-          <FoundersEditor founders={founders} onSave={(f) => { setFounders(f); setIsFoundersEditorOpen(false); }} onClose={() => setIsFoundersEditorOpen(false)} />
         ) : selectedPillar ? (
-          isPillarEditorOpen ? (
-            <PillarsEditor pillars={pillars} onSave={(p) => { setPillars(p.map((x:any, i) => ({...x, icon: getIconForIndex(i)}))); setIsPillarEditorOpen(false); }} onClose={() => setIsPillarEditorOpen(false)} />
-          ) : (
-            <PillarDetail pillar={selectedPillar} onBack={handleBackToHome} onEdit={() => setIsPillarEditorOpen(true)} />
-          )
+          <PillarDetail 
+            pillar={selectedPillar} 
+            onBack={handleBackToHome} 
+            onEdit={() => setIsPillarEditorOpen(true)} 
+          />
         ) : selectedChapter ? (
-          isChapterEditorOpen ? (
-            <ChapterEditor chapter={selectedChapter} onBack={() => setIsChapterEditorOpen(false)} />
-          ) : (
-            <ChapterDetail chapter={selectedChapter} onBack={handleBackToHome} onEdit={() => setIsChapterEditorOpen(true)} />
-          )
+          <ChapterDetail 
+            chapter={selectedChapter} 
+            onBack={handleBackToHome} 
+            onEdit={() => setIsChapterEditorOpen(true)} 
+          />
         ) : (
+          /* =========================================================
+              HOME PAGE (Default)
+             ========================================================= */
           <>
             <Hero onDonateClick={handleDonateClick} />
             <Slogan />
             <Pillars 
               pillars={pillars} 
+              isLoading={isLoading} 
               onSelectPillar={(p) => { setSelectedPillar(p); window.scrollTo(0,0); }} 
             />
             
-            {/* ✅ PASSING isLoading & DATA to components */}
             <Chapters 
               chapters={chapters} 
               isLoading={isLoading}
@@ -249,7 +293,7 @@ function AppContent() {
         )}
       </main>
       
-      {!isDonatePageOpen && !showDashboard && (
+      {!isDonatePageOpen && !showDashboard && !isLandingEditorOpen && !isChapterEditorOpen && !isPillarEditorOpen && !isPartnersEditorOpen && !isFoundersEditorOpen && (
         <Footer onDonateClick={handleDonateClick} onNavigate={handleFooterNavigation} />
       )}
 

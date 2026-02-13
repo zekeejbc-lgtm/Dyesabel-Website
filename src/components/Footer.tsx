@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Facebook, Twitter, Instagram, Mail, MapPin, Phone } from 'lucide-react';
 
 interface FooterProps {
@@ -7,6 +7,50 @@ interface FooterProps {
 }
 
 export const Footer: React.FC<FooterProps> = ({ onDonateClick, onNavigate }) => {
+  // --- BACKEND LOGIC START ---
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState('');
+
+  // 🔴 IMPORTANT: Replace with the Web App URL you just deployed (from the Newsletter script)
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx6jSvrQOC8dh9rtZ9Ort368Q2a--aSEcx7mmWNTfdonGWQglcNPGxM3HLOndS4Mt1ahQ/exec"; 
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+
+    setStatus('loading');
+    setMessage('');
+
+    try {
+      await fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ 
+          action: 'subscribeNewsletter', 
+          email: email 
+        }),
+      });
+
+      // Assuming success if no network error (no-cors/text-mode limitation)
+      setStatus('success');
+      setMessage('Subscribed successfully!');
+      setEmail('');
+      
+      // Reset after 3 seconds
+      setTimeout(() => {
+        setStatus('idle');
+        setMessage('');
+      }, 3000);
+
+    } catch (error) {
+      console.error("Newsletter error:", error);
+      setStatus('error');
+      setMessage('Connection failed.');
+    }
+  };
+  // --- BACKEND LOGIC END ---
+
   const handleLinkClick = (e: React.MouseEvent, sectionId: string) => {
     e.preventDefault();
     onNavigate(sectionId);
@@ -100,20 +144,36 @@ export const Footer: React.FC<FooterProps> = ({ onDonateClick, onNavigate }) => 
             </ul>
           </div>
 
-          {/* Newsletter */}
+          {/* Newsletter - CONNECTED */}
           <div className="reveal reveal-delay-300">
             <h4 className="font-sans font-bold text-lg mb-8 text-white tracking-wide">Newsletter</h4>
             <p className="text-gray-400 text-sm mb-6 font-medium">Subscribe to our newsletter for eco-updates.</p>
-            <div className="flex flex-col gap-3">
+            
+            {/* Swapped DIV for FORM to handle Enter key & Submit */}
+            <form onSubmit={handleSubscribe} className="flex flex-col gap-3">
               <input 
                 type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="Your email address" 
-                className="bg-white/5 text-white placeholder-gray-500 px-5 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-cyan border border-white/10 transition-all hover:bg-white/10"
+                disabled={status === 'loading' || status === 'success'}
+                className="bg-white/5 text-white placeholder-gray-500 px-5 py-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-cyan border border-white/10 transition-all hover:bg-white/10 disabled:opacity-50"
               />
-              <button className="bg-gradient-to-r from-primary-cyan to-primary-blue hover:from-primary-blue hover:to-primary-cyan text-white font-bold py-3 px-5 rounded-lg transition-all hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] transform active:scale-95">
-                Subscribe
+              <button 
+                type="submit"
+                disabled={status === 'loading' || status === 'success'}
+                className="bg-gradient-to-r from-primary-cyan to-primary-blue hover:from-primary-blue hover:to-primary-cyan text-white font-bold py-3 px-5 rounded-lg transition-all hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {status === 'loading' ? 'Subscribing...' : status === 'success' ? 'Subscribed!' : 'Subscribe'}
               </button>
-            </div>
+              
+              {/* Subtle Feedback Message - Only appears if there is a message */}
+              {message && (
+                <p className={`text-xs font-medium ${status === 'error' ? 'text-red-400' : 'text-primary-cyan'}`}>
+                  {message}
+                </p>
+              )}
+            </form>
           </div>
         </div>
 

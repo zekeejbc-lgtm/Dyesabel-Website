@@ -1,136 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Pillar } from '../types';
 import { Leaf, BookOpen, Scale, Heart, Palette } from 'lucide-react';
-import { DataService } from '../services/DriveService';
-
-// Keep this as a FALLBACK and for the Admin Dashboard initial state
-export const pillarsData: (Pillar & { icon: React.ReactNode })[] = [
-  {
-    id: '1',
-    title: 'Research and Education',
-    excerpt: 'Conducting scientific studies and educational workshops to deepen understanding of our marine ecosystems.',
-    description: 'We believe that conservation begins with understanding. Our Research and Education pillar focuses on gathering data-driven insights about our local ecosystems and disseminating this knowledge to the community.',
-    aim: 'To bridge the gap between scientific knowledge and community understanding, ensuring evidence-based conservation efforts.',
-    imageUrl: 'https://picsum.photos/seed/research/600/400',
-    icon: <BookOpen className="w-6 h-6 text-white" />,
-    activities: [
-      {
-        id: 'a1-1',
-        title: 'Marine Biodiversity Assessment 2023',
-        date: 'August 2023',
-        description: 'A comprehensive survey of coral reef health and fish population in key coastal areas of Davao del Norte.',
-        imageUrl: 'https://picsum.photos/seed/activity1/500/300'
-      },
-      {
-        id: 'a1-2',
-        title: '"Sea Class" for Elementary Students',
-        date: 'October 2023',
-        description: 'An interactive workshop series teaching over 500 elementary students about marine life and plastic pollution.',
-        imageUrl: 'https://picsum.photos/seed/activity2/500/300'
-      }
-    ]
-  },
-  {
-    id: '2',
-    title: 'Good Governance',
-    excerpt: 'Advocating for transparent, accountable, and participatory decision-making in environmental management.',
-    description: 'Environmental protection requires strong policy support and active civic engagement. Our Good Governance pillar works closely with Local Government Units (LGUs) to draft, review, and implement environmental ordinances.',
-    aim: 'To empower local leaders and citizens with the tools and frameworks necessary for sustainable policy-making and enforcement.',
-    imageUrl: 'https://picsum.photos/seed/governance/600/400',
-    icon: <Scale className="w-6 h-6 text-white" />,
-    activities: [
-      {
-        id: 'a2-1',
-        title: 'Environmental Code Drafting Summit',
-        date: 'July 2023',
-        description: 'Facilitated a multi-sectoral summit to review and propose amendments to the local environmental code.',
-        imageUrl: 'https://picsum.photos/seed/activity3/500/300'
-      },
-      {
-        id: 'a2-2',
-        title: 'Barangay Green Leadership Training',
-        date: 'November 2023',
-        description: 'Capacity building workshop for barangay officials on solid waste management implementation.',
-        imageUrl: 'https://picsum.photos/seed/activity4/500/300'
-      }
-    ]
-  },
-  {
-    id: '3',
-    title: 'Sustainable Livelihood',
-    excerpt: 'Empowering coastal communities with eco-friendly income opportunities that work in harmony with nature.',
-    description: 'Conservation should not come at the cost of livelihood. We demonstrate that economic prosperity and environmental stewardship can go hand in hand. By introducing alternative livelihood programs such as ecotourism and sustainable aquaculture.',
-    aim: 'To provide resilient economic alternatives that uplift communities while regenerating natural resources.',
-    imageUrl: 'https://picsum.photos/seed/livelihood/600/400',
-    icon: <Leaf className="w-6 h-6 text-white" />,
-    activities: [
-      {
-        id: 'a3-1',
-        title: 'Seaweed Farming Initiative',
-        date: 'September 2023',
-        description: 'Provided startup materials and training for 50 fisherfolk families to start sustainable seaweed farms.',
-        imageUrl: 'https://picsum.photos/seed/activity5/500/300'
-      },
-      {
-        id: 'a3-2',
-        title: 'Upcycled Crafts Workshop',
-        date: 'December 2023',
-        description: 'Training women\'s groups to turn plastic waste into marketable bags and accessories.',
-        imageUrl: 'https://picsum.photos/seed/activity6/500/300'
-      }
-    ]
-  },
-  {
-    id: '4',
-    title: 'Community Health',
-    excerpt: 'Promoting public health and well-being through clean environments, sanitation, and access to safe resources.',
-    description: 'A healthy environment is the foundation of a healthy community. Pollution and environmental degradation directly impact public health. Our initiatives focus on sanitation, waste management, and securing clean water sources.',
-    aim: 'To ensure that environmental health translates directly to improved human health and well-being.',
-    imageUrl: 'https://picsum.photos/seed/health/600/400',
-    icon: <Heart className="w-6 h-6 text-white" />,
-    activities: [
-      {
-        id: 'a4-1',
-        title: 'Coastal Cleanup & Sanitation Drive',
-        date: 'Monthly',
-        description: 'Regular community-led cleanups combined with dengue prevention information campaigns.',
-        imageUrl: 'https://picsum.photos/seed/activity7/500/300'
-      },
-      {
-        id: 'a4-2',
-        title: 'Clean Water Access Project',
-        date: 'January 2024',
-        description: 'Installation of community water filtration systems in remote coastal sitios.',
-        imageUrl: 'https://picsum.photos/seed/activity8/500/300'
-      }
-    ]
-  },
-  {
-    id: '5',
-    title: 'Culture and Arts',
-    excerpt: 'Celebrating local heritage and raising environmental awareness through creative expression and storytelling.',
-    description: 'Art has the power to move hearts and change minds. We leverage culture and the arts to tell the story of our environment, reviving indigenous wisdom regarding nature conservation and engaging the youth.',
-    aim: 'To use creative mediums to advocate for nature preservation and celebrate our cultural connection to the environment.',
-    imageUrl: 'https://picsum.photos/seed/arts/600/400',
-    icon: <Palette className="w-6 h-6 text-white" />,
-    activities: [
-      {
-        id: 'a5-1',
-        title: '"Dyesabel" Theater Production',
-        date: 'February 2024',
-        description: 'A musical play performed by youth volunteers highlighting marine conservation issues.',
-        imageUrl: 'https://picsum.photos/seed/activity9/500/300'
-      },
-      {
-        id: 'a5-2',
-        title: 'Ocean Mural Painting Contest',
-        date: 'March 2024',
-        description: 'Beautifying public spaces with murals that educate passersby about local marine species.',
-        imageUrl: 'https://picsum.photos/seed/activity10/500/300'
-      }
-    ]
-  }
-];
 
 // Helper to map index to icon since icons can't be saved in JSON
 const getIconForIndex = (index: number) => {
@@ -144,17 +14,52 @@ const getIconForIndex = (index: number) => {
   return icons[index % icons.length];
 };
 
-// zekeejbc-lgtm/dyesabel-website/.../components/Stories.tsx
-
 interface PillarsProps {
-  pillars?: (Pillar & { icon?: React.ReactNode })[]; // <--- ADD THIS (Mark optional to be safe)
+  pillars?: (Pillar & { icon?: React.ReactNode })[];
   onSelectPillar: (pillar: Pillar) => void;
+  isLoading?: boolean;
 }
 
-export const Pillars: React.FC<PillarsProps> = ({ pillars = pillarsData, onSelectPillar }) => {
+export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, isLoading = false }) => {
 
-  console.log("🏛️ Pillars Component RENDERED. Received pillars prop:", pillars);
-  
+  // ✅ 1. Loading State (Skeletons)
+  if (isLoading) {
+    return (
+      <section id="pillars" className="py-24 relative overflow-hidden">
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="text-center mb-20">
+             {/* Title Skeletons */}
+             <div className="h-4 w-32 bg-gray-300 dark:bg-white/10 rounded mx-auto mb-4 animate-pulse"></div>
+             <div className="h-12 w-64 md:w-96 bg-gray-300 dark:bg-white/10 rounded mx-auto animate-pulse"></div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="glass-card rounded-2xl overflow-hidden h-full animate-pulse border border-white/20">
+                {/* Image Area Skeleton */}
+                <div className="h-48 md:h-36 lg:h-48 bg-gray-300 dark:bg-white/10 w-full relative">
+                    <div className="absolute bottom-4 left-4 w-10 h-10 bg-gray-400 dark:bg-white/20 rounded-xl"></div>
+                </div>
+                {/* Text Content Skeleton */}
+                <div className="p-6">
+                  <div className="h-6 w-3/4 bg-gray-300 dark:bg-white/10 rounded mb-3"></div>
+                  <div className="h-4 w-full bg-gray-300 dark:bg-white/10 rounded mb-2"></div>
+                  <div className="h-4 w-2/3 bg-gray-300 dark:bg-white/10 rounded"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // ✅ 2. Empty State (Hide section if no data)
+  if (!pillars || pillars.length === 0) {
+    return null;
+  }
+
+  // ✅ 3. Real Data Render
   return (
     <section id="pillars" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
@@ -164,7 +69,6 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = pillarsData, onSelec
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-          {/* Ensure we map over the passed prop */}
           {pillars.map((pillar, index) => (
             <div 
               key={pillar.id} 
@@ -180,7 +84,6 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = pillarsData, onSelec
                 <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep/90 via-transparent to-transparent opacity-90"></div>
                 
                 <div className="absolute bottom-4 left-4 bg-gradient-to-br from-primary-cyan to-primary-blue p-2.5 rounded-xl shadow-lg transform group-hover:rotate-12 transition-transform duration-300 ring-2 ring-white/20">
-                  {/* Use the icon passed from App.tsx */}
                   {pillar.icon || getIconForIndex(index)} 
                 </div>
               </div>

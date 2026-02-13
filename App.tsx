@@ -148,10 +148,12 @@ function AppContent() {
   };
 
   // Fetch ALL data at once on startup
+  // Inside App.tsx
+
   useEffect(() => {
     const loadAllData = async () => {
       try {
-        console.log("🚀 Starting global data fetch...");
+        console.group("🚀 APP: STARTING GLOBAL DATA FETCH"); // Groups logs nicely
         
         const [pillarsRes, chaptersRes, partnersRes, foundersRes] = await Promise.all([
           DataService.loadPillars(),
@@ -160,28 +162,38 @@ function AppContent() {
           DataService.loadFounders()
         ]);
 
+        // --- DEBUG PILLARS ---
+        console.log("📊 Pillars Response:", pillarsRes);
         if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
           const mergedPillars = pillarsRes.pillars.map((p: any, index: number) => ({
             ...p,
             icon: getIconForIndex(index)
           }));
+          console.log("✅ Pillars State Updated:", mergedPillars);
           setPillars(mergedPillars);
+        } else {
+          console.warn("⚠️ Pillars data empty or failed:", pillarsRes);
         }
 
+        // --- DEBUG CHAPTERS ---
+        console.log("cx Chapters Response:", chaptersRes);
         if (chaptersRes.success && chaptersRes.chapters && chaptersRes.chapters.length > 0) {
           setChapters(chaptersRes.chapters);
+        } else {
+          console.warn("⚠️ Chapters data empty or failed:", chaptersRes);
         }
 
+        // --- DEBUG PARTNERS ---
         if (partnersRes.success && partnersRes.partners) {
           setPartners(partnersRes.partners);
+        } else {
+          console.error("❌ Partners fetch failed:", partnersRes);
         }
 
-        if (foundersRes.success && foundersRes.founders && foundersRes.founders.length > 0) {
-          setFounders(foundersRes.founders);
-        }
+        console.groupEnd(); // End the log group
 
       } catch (error) {
-        console.error("Global fetch error:", error);
+        console.error("🔥 CRITICAL ERROR during global fetch:", error);
       } finally {
         setIsGlobalLoading(false);
       }
@@ -431,7 +443,10 @@ function AppContent() {
           <>
             <Hero onDonateClick={handleDonateClick} />
             <Slogan />
-            <Pillars onSelectPillar={handleSelectPillar} />
+<Pillars 
+  pillars={pillars} 
+  onSelectPillar={handleSelectPillar} 
+/>
             <Chapters 
               chapters={chapters} 
               onSelectChapter={handleSelectChapter} 

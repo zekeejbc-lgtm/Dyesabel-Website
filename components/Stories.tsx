@@ -144,41 +144,17 @@ const getIconForIndex = (index: number) => {
   return icons[index % icons.length];
 };
 
+// zekeejbc-lgtm/dyesabel-website/.../components/Stories.tsx
+
 interface PillarsProps {
+  pillars?: (Pillar & { icon?: React.ReactNode })[]; // <--- ADD THIS (Mark optional to be safe)
   onSelectPillar: (pillar: Pillar) => void;
 }
 
-export const Pillars: React.FC<PillarsProps> = ({ onSelectPillar }) => {
-  // Use local state, initialized with fallback data
-  const [pillars, setPillars] = useState(pillarsData);
+export const Pillars: React.FC<PillarsProps> = ({ pillars = pillarsData, onSelectPillar }) => {
 
-  // FETCH DATA ON MOUNT
-  useEffect(() => {
-    const fetchPillars = async () => {
-      try {
-        console.log('Fetching public pillars data...');
-        const result = await DataService.loadPillars();
-        
-        if (result.success && result.pillars && result.pillars.length > 0) {
-          // Merge fetched text data with local Icons
-          // FIX: Explicitly type 'p' as any and 'index' as number
-          const mergedPillars = result.pillars.map((p: any, index: number) => ({
-            ...p,
-            // Re-attach the icon based on the index or fallback to the static one
-            icon: getIconForIndex(index)
-          }));
-          
-          setPillars(mergedPillars);
-          console.log('Public pillars loaded:', mergedPillars);
-        }
-      } catch (error) {
-        console.error('Failed to load public pillars:', error);
-      }
-    };
-
-    fetchPillars();
-  }, []);
-
+  console.log("🏛️ Pillars Component RENDERED. Received pillars prop:", pillars);
+  
   return (
     <section id="pillars" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
@@ -188,13 +164,13 @@ export const Pillars: React.FC<PillarsProps> = ({ onSelectPillar }) => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+          {/* Ensure we map over the passed prop */}
           {pillars.map((pillar, index) => (
             <div 
               key={pillar.id} 
               onClick={() => onSelectPillar(pillar)}
               className={`glass-card rounded-2xl overflow-hidden group flex flex-col h-full transform hover:-translate-y-3 transition-all duration-500 hover:shadow-[0_20px_40px_-15px_rgba(34,211,238,0.3)] reveal reveal-delay-${(index + 1) * 100} cursor-pointer`}
             >
-              {/* Image Section */}
               <div className="relative h-48 md:h-36 lg:h-48 overflow-hidden">
                 <img 
                   src={pillar.imageUrl} 
@@ -203,13 +179,12 @@ export const Pillars: React.FC<PillarsProps> = ({ onSelectPillar }) => {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep/90 via-transparent to-transparent opacity-90"></div>
                 
-                {/* Icon Badge */}
                 <div className="absolute bottom-4 left-4 bg-gradient-to-br from-primary-cyan to-primary-blue p-2.5 rounded-xl shadow-lg transform group-hover:rotate-12 transition-transform duration-300 ring-2 ring-white/20">
-                  {pillar.icon}
+                  {/* Use the icon passed from App.tsx */}
+                  {pillar.icon || getIconForIndex(index)} 
                 </div>
               </div>
 
-              {/* Content Section */}
               <div className="p-6 flex flex-col flex-grow text-center md:text-left relative">
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/5 to-transparent pointer-events-none"></div>
                 <h3 className="text-xl md:text-lg lg:text-xl font-bold text-ocean-deep dark:text-white mb-3 leading-tight group-hover:text-primary-blue dark:group-hover:text-primary-cyan transition-colors">
@@ -223,7 +198,6 @@ export const Pillars: React.FC<PillarsProps> = ({ onSelectPillar }) => {
                 </div>
               </div>
               
-              {/* Decorative bottom bar */}
               <div className="h-1.5 w-0 bg-gradient-to-r from-primary-cyan to-primary-blue group-hover:w-full transition-all duration-700 ease-out"></div>
             </div>
           ))}

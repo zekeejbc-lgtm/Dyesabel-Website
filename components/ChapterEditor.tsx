@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, LogOut, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, User, Pencil, X, Check } from 'lucide-react';
+import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, Pencil, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { DriveService, DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY, Chapter } from '../types';
@@ -10,10 +10,10 @@ interface ChapterEditorProps {
 }
 
 export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }: ChapterEditorProps) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
   
-  // ✅ NEW: Edit State
+  // Edit State
   const [isEditing, setIsEditing] = useState(false);
   
   // Initialize state with existing chapter data or defaults
@@ -50,10 +50,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     ],
   });
 
-  // ✅ NEW: Store original data to revert on Cancel
+  // Store original data to revert on Cancel
   const [originalData, setOriginalData] = useState(chapterData);
 
-  // ✅ NEW: Fetch fresh data on mount to ensure we are editing the latest version
+  // Fetch fresh data on mount to ensure we are editing the latest version
   useEffect(() => {
     const fetchFreshData = async () => {
       const chapterId = user?.chapterId || chapter?.id;
@@ -67,7 +67,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
           const newData = {
             ...chapterData, // Keep defaults for missing fields
             ...result.chapter, // Overwrite with backend data
-            title: result.chapter.name || result.chapter.title || chapterData.title, // Handle name mapping
+            
+            // ✅ CRITICAL FIX: Map backend fields to local state names correctly
+            title: result.chapter.name || result.chapter.title || chapterData.title, 
+            logoUrl: result.chapter.logo || chapterData.logoUrl, // <--- Fixes the missing logo issue
+            
             // Ensure activities is an array if the backend returns undefined
             activities: result.chapter.activities || []
           };
@@ -84,7 +88,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   }, [user, chapter]);
 
   const handleCancel = () => {
-    if (confirm("Are you sure you want to discard your changes?")) {
+    if (window.confirm("Are you sure you want to discard your changes?")) {
       setChapterData(originalData); // Revert changes
       setIsEditing(false); // Exit edit mode
     }
@@ -113,7 +117,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         description: chapterData.description,
         location: chapterData.location,
         image: chapterData.imageUrl,
-        logo: chapterData.logoUrl,
+        logo: chapterData.logoUrl, // ✅ Ensure this is sending the URL, not empty string
         email: chapterData.email,
         phone: chapterData.phone,
         facebook: chapterData.facebook,
@@ -192,13 +196,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               <button onClick={onBack} className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg">
                 <ArrowLeft className="text-gray-900 dark:text-white" size={24} />
               </button>
-              {/* ✅ UPDATED: Dynamic Title based on Chapter Name */}
               <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
                 {chapterData.title || "Edit Chapter Details"}
               </h1>
             </div>
             
-            {/* ✅ UPDATED: Edit/Save/Cancel Buttons */}
+            {/* Edit/Save/Cancel Buttons */}
             <div className="flex gap-2">
               {!isEditing ? (
                 <button
@@ -245,7 +248,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
             
             {/* 1. Basic Info & Cover */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {/* Overlay for disabled state visual cue */}
               {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -352,7 +354,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                       {/* Activity Image */}
                       <div className="w-full md:w-32 h-32 bg-gray-200 dark:bg-black/20 rounded-lg overflow-hidden relative group flex-shrink-0">
                         {activity.imageUrl ? (
-                          <img src={activity.imageUrl} className="w-full h-full object-cover" />
+                          <img src={activity.imageUrl} className="w-full h-full object-cover" alt="Activity" />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">No Image</div>
                         )}
@@ -458,7 +460,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               </h2>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden relative group flex-shrink-0">
-                  <img src={chapterData.headImageUrl || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" />
+                  <img src={chapterData.headImageUrl || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" alt="Leader" />
                   {isEditing && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
                       <Upload size={16} className="text-white" />

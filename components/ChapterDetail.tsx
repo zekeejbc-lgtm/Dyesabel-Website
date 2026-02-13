@@ -1,8 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Edit, Loader } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Edit, Loader, X } from 'lucide-react';
 import { Chapter } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { DataService } from '../services/DriveService';
+
+// Add a simple pop-in animation for the modal
+const modalStyles = `
+@keyframes popIn {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.animate-pop-in {
+  animation: popIn 0.3s ease-out forwards;
+}
+`;
 
 interface ChapterDetailProps {
   chapter: Chapter;
@@ -15,12 +26,15 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
   const [chapter, setChapter] = useState<Chapter>(initialChapter);
   const [loading, setLoading] = useState(false);
   
+  // State for the selected activity (Modal)
+  const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
+
   // Scroll to top when component mounts
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  // ✅ NEW: Fetch latest chapter data from Backend
+  // Fetch latest chapter data from Backend
   useEffect(() => {
     const fetchChapterData = async () => {
       if (!initialChapter.id) return;
@@ -30,8 +44,13 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
         const result = await DataService.loadChapter(initialChapter.id);
         if (result.success && result.chapter) {
           console.log('Loaded chapter from backend:', result.chapter);
-          // Merge backend data with initial data to ensure no fields are missing
-          setChapter({ ...initialChapter, ...result.chapter });
+          
+          // Safeguard: Keep initial logo if backend returns empty
+          const safeLogo = (result.chapter.logo && result.chapter.logo !== "") 
+            ? result.chapter.logo 
+            : initialChapter.logo;
+
+          setChapter({ ...initialChapter, ...result.chapter, logo: safeLogo });
         }
       } catch (error) {
         console.error('Failed to load chapter data:', error);
@@ -43,8 +62,22 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
     fetchChapterData();
   }, [initialChapter.id]);
 
+  // Disable body scroll when modal is open
+  useEffect(() => {
+    if (selectedActivity) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [selectedActivity]);
+
   return (
     <div className="min-h-screen pt-20 pb-10 relative">
+      <style>{modalStyles}</style>
+
       {loading && (
         <div className="absolute top-24 left-1/2 -translate-x-1/2 z-50 bg-white/80 dark:bg-black/50 px-4 py-2 rounded-full backdrop-blur-md flex items-center gap-2">
           <Loader className="animate-spin w-4 h-4 text-primary-blue" />
@@ -61,7 +94,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
         <span>Back to Chapters</span>
       </button>
 
-      {/* Edit Button - Show only if user is chapter head for this chapter or admin */}
+      {/* Edit Button */}
       {onEdit && (user?.role === 'chapter_head' || user?.role === 'admin') && (
         <button 
           onClick={onEdit}
@@ -113,7 +146,8 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                 <span className="w-8 h-1 bg-primary-cyan rounded-full"></span>
                 About the Chapter
               </h2>
-              <p className="text-lg text-ocean-deep/80 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
+              {/* ✅ ADDED text-justify */}
+              <p className="text-lg text-ocean-deep/80 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-justify">
                 {chapter.description || "This chapter is dedicated to environmental sustainability in its local community."}
               </p>
             </div>
@@ -129,13 +163,22 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                 {chapter.activities && chapter.activities.length > 0 ? (
                   <div className="space-y-4 p-2">
                     {chapter.activities.map((activity: any, i: number) => (
-                      <div key={activity.id || i} className="glass-card p-6 rounded-2xl flex flex-col md:flex-row gap-6 hover:bg-white/5 transition-colors group">
-                        <div className="w-full md:w-48 h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-white/5">
+                      <div 
+                        key={activity.id || i} 
+                        onClick={() => setSelectedActivity(activity)}
+                        className="glass-card p-6 rounded-2xl flex flex-col md:flex-row gap-6 hover:bg-white/10 transition-all duration-300 group cursor-pointer border border-transparent hover:border-primary-cyan/30"
+                      >
+                        <div className="w-full md:w-48 h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-white/5 relative">
                           {activity.imageUrl ? (
                             <img src={activity.imageUrl} alt="Activity" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
                           )}
+                          
+                          {/* Hover Overlay Hint */}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span className="text-white text-xs font-bold uppercase tracking-wider border border-white/50 px-3 py-1 rounded-full">View Details</span>
+                          </div>
                         </div>
                         <div className="flex-grow">
                           {activity.date && (
@@ -147,7 +190,8 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                           <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2 group-hover:text-primary-cyan transition-colors">
                             {activity.title || 'Untitled Activity'}
                           </h3>
-                          <p className="text-sm text-ocean-deep/60 dark:text-gray-400 line-clamp-2">
+                          {/* ✅ ADDED text-justify */}
+                          <p className="text-sm text-ocean-deep/60 dark:text-gray-400 line-clamp-2 text-justify">
                             {activity.description || 'No description provided.'}
                           </p>
                         </div>
@@ -258,6 +302,85 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
           </div>
         </div>
       </div>
+
+      {/* Activity Detail Modal */}
+      {selectedActivity && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div 
+            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+            onClick={() => setSelectedActivity(null)}
+          ></div>
+
+          {/* Modal Content - ✅ REMOVED animate-rise, ADDED animate-pop-in */}
+          <div className="bg-white dark:bg-[#051923] w-full max-w-3xl max-h-[90vh] rounded-3xl shadow-2xl overflow-hidden relative z-10 flex flex-col animate-pop-in">
+            
+            {/* Close Button */}
+            <button 
+              onClick={() => setSelectedActivity(null)}
+              className="absolute top-4 right-4 z-20 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors backdrop-blur-md"
+            >
+              <X size={20} />
+            </button>
+
+            {/* Image Area */}
+            <div className="h-64 md:h-80 w-full bg-gray-200 dark:bg-black/20 flex-shrink-0 relative">
+              {selectedActivity.imageUrl ? (
+                <img 
+                  src={selectedActivity.imageUrl} 
+                  alt={selectedActivity.title} 
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center text-gray-500">
+                  <div className="text-center">
+                    <span className="block text-4xl mb-2">📷</span>
+                    <span className="text-sm">No Image Available</span>
+                  </div>
+                </div>
+              )}
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-black/80 to-transparent"></div>
+            </div>
+
+            {/* Content Area */}
+            <div className="p-6 md:p-8 overflow-y-auto custom-scrollbar">
+              <div className="flex flex-col gap-4">
+                <div>
+                   {selectedActivity.date && (
+                    <div className="flex items-center gap-2 text-primary-cyan font-bold text-sm mb-2 uppercase tracking-wide">
+                      <Calendar size={16} />
+                      {selectedActivity.date}
+                    </div>
+                  )}
+                  <h2 className="text-3xl font-black text-ocean-deep dark:text-white leading-tight">
+                    {selectedActivity.title}
+                  </h2>
+                </div>
+
+                <div className="h-px w-full bg-gray-200 dark:bg-white/10 my-2"></div>
+
+                <div className="prose dark:prose-invert max-w-none">
+                  {/* ✅ ADDED text-justify */}
+                  <p className="text-lg text-ocean-deep/80 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-justify">
+                    {selectedActivity.description}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer (Optional Actions) */}
+            <div className="p-4 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/20 flex justify-end">
+              <button 
+                onClick={() => setSelectedActivity(null)}
+                className="px-6 py-2 bg-ocean-deep text-white rounded-xl font-bold hover:bg-primary-blue transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

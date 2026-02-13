@@ -5,9 +5,9 @@ import {
   UserPlus, Search, Shield, Key, Upload, Loader,
   Eye, EyeOff
 } from 'lucide-react';
-import { DataService, AuthService } from '../services/DriveService';
-import { uploadImageToDrive } from '../utils/driveUpload';
-import { Chapter, User } from '../types';
+import { DataService, AuthService } from '../../services/DriveService';
+import { uploadImageToDrive } from '../../utils/driveUpload';
+import { Chapter, User } from '../../types';
 
 // --- Types ---
 type ViewState = 'LIST' | 'CREATE_CHAPTER' | 'CHAPTER_DETAIL';

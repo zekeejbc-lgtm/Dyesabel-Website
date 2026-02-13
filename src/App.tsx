@@ -18,12 +18,11 @@ import { PillarsEditor } from './components/PillarsEditor';
 import { PartnersEditor } from './components/PartnersEditor';
 import { FoundersEditor } from './components/FoundersEditor';
 import { LogoEditor } from './components/LogoEditor';
-// ✅ Import the new LoadingScreen component
 import { LoadingScreen } from './components/LoadingScreen'; 
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Chapter, Pillar } from './types';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { Chapter, Pillar } from '../types';
 import { pillarsData } from './components/Stories';
-import { DataService } from './services/DriveService';
+import { DataService } from '../services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 
 function AppContent() {
@@ -118,32 +117,20 @@ function AppContent() {
           DataService.loadFounders()
         ]);
 
-        // --- DEBUG PILLARS ---
-        console.log("📊 Pillars Response:", pillarsRes);
         if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
           const mergedPillars = pillarsRes.pillars.map((p: any, index: number) => ({
             ...p,
             icon: getIconForIndex(index)
           }));
-          console.log("✅ Pillars State Updated:", mergedPillars);
           setPillars(mergedPillars);
-        } else {
-          console.warn("⚠️ Pillars data empty or failed:", pillarsRes);
         }
 
-        // --- DEBUG CHAPTERS ---
-        console.log("cx Chapters Response:", chaptersRes);
         if (chaptersRes.success && chaptersRes.chapters && chaptersRes.chapters.length > 0) {
           setChapters(chaptersRes.chapters);
-        } else {
-          console.warn("⚠️ Chapters data empty or failed:", chaptersRes);
         }
 
-        // --- DEBUG PARTNERS ---
         if (partnersRes.success && partnersRes.partners) {
           setPartners(partnersRes.partners);
-        } else {
-          console.error("❌ Partners fetch failed:", partnersRes);
         }
 
         console.groupEnd(); 
@@ -249,6 +236,7 @@ function AppContent() {
     setIsFoundersEditorOpen(false);
   };
 
+  // ✅ UPDATED: Ensure Dashboard is closed when going home
   const handleBackToHome = () => {
     setSelectedChapter(null);
     setSelectedPillar(null);
@@ -258,6 +246,7 @@ function AppContent() {
     setIsPartnersEditorOpen(false);
     setIsFoundersEditorOpen(false);
     setIsLogoEditorOpen(false);
+    setShowDashboard(false); // <--- Added this line
     window.scrollTo(0, 0);
   };
 
@@ -310,7 +299,6 @@ function AppContent() {
     window.scrollTo(0, 0);
   };
 
-  // ✅ USE THE NEW LOADING COMPONENT
   if (isGlobalLoading) {
     return <LoadingScreen />;
   }
@@ -345,6 +333,7 @@ function AppContent() {
         onSignInClick={() => setIsLoginModalOpen(true)}
         onEditLogo={handleEditLogo}
         onOpenDashboard={() => setShowDashboard(true)}
+        isDashboardOpen={showDashboard} // ✅ Added prop to update button text
       />
       
       <main className="relative">

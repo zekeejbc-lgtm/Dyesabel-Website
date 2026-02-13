@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Story } from '../types';
+import { Story } from '../../types';
 import { X, Save, Plus, Trash2, Upload } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StoriesEditorProps {
   stories: Story[];

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Sun, Moon, LogIn, LogOut, Edit, LayoutDashboard } from 'lucide-react';
-import { NavLink } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { Menu, X, Sun, Moon, LogIn, LogOut, LayoutDashboard, Home } from 'lucide-react'; // Added Home icon
+import { NavLink } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 
 const VOLUNTEER_URL = "https://forms.gle/W6WVpftGDwM7fUm19";
 
@@ -19,7 +19,8 @@ interface HeaderProps {
   onHomeClick?: () => void;
   onSignInClick: () => void;
   onEditLogo?: () => void;
-  onOpenDashboard?: () => void; // ✅ Added Prop
+  onOpenDashboard?: () => void;
+  isDashboardOpen?: boolean; // ✅ New prop to track state
 }
 
 export const Header: React.FC<HeaderProps> = ({ 
@@ -28,7 +29,8 @@ export const Header: React.FC<HeaderProps> = ({
   onHomeClick, 
   onSignInClick, 
   onEditLogo,
-  onOpenDashboard 
+  onOpenDashboard,
+  isDashboardOpen = false // Default to false
 }) => {
   const { user, logout } = useAuth();
   const [isScrolled, setIsScrolled] = useState(false);
@@ -54,13 +56,11 @@ export const Header: React.FC<HeaderProps> = ({
     if (confirm('Are you sure you want to log out?')) {
       logout();
       setIsMobileMenuOpen(false);
-      // Optional: Force home view after logout
       if (onHomeClick) onHomeClick();
     }
   };
 
   const handleNavigation = (e: React.MouseEvent<HTMLAnchorElement>, link: NavLink) => {
-    // Check for empty volunteer URL
     if (link.label === 'Volunteer' && !link.href) {
       e.preventDefault();
       alert("No membership application open yet");
@@ -68,23 +68,18 @@ export const Header: React.FC<HeaderProps> = ({
       return;
     }
 
-    // Handle External Links
     if (link.href.startsWith('http')) {
       setIsMobileMenuOpen(false);
-      // Allow default browser behavior (navigation)
       return;
     }
 
-    // Handle Internal Anchors
     e.preventDefault();
     setIsMobileMenuOpen(false);
     
-    // Reset view to Home if needed
     if (onHomeClick) {
       onHomeClick();
     }
     
-    // Scroll with offset
     setTimeout(() => {
       const element = document.querySelector(link.href);
       if (element) {
@@ -98,6 +93,16 @@ export const Header: React.FC<HeaderProps> = ({
         });
       }
     }, 100);
+  };
+
+  // Helper to handle the toggle action
+  const handleDashboardToggle = () => {
+    setIsMobileMenuOpen(false);
+    if (isDashboardOpen && onHomeClick) {
+      onHomeClick();
+    } else if (!isDashboardOpen && onOpenDashboard) {
+      onOpenDashboard();
+    }
   };
 
   return (
@@ -137,7 +142,6 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center">
-             {/* Only show public navigation links if NOT logged in */}
              {!user && (
                <>
                  <div className="flex items-center">
@@ -162,35 +166,28 @@ export const Header: React.FC<HeaderProps> = ({
                     </React.Fragment>
                     ))}
                  </div>
-
-                {/* Separator between links and buttons */}
                 <div className={`h-4 lg:h-5 w-px mx-3 lg:mx-5 ${isScrolled ? 'bg-gray-300 dark:bg-gray-700' : 'bg-ocean-deep/20 dark:bg-white/20'}`}></div>
                </>
              )}
 
-            {/* Edit Logo Button (Admin/Editor only) */}
-            {onEditLogo && (user?.role === 'admin' || user?.role === 'editor') && (
-              <button
-                onClick={onEditLogo}
-                className="bg-amber-500 hover:bg-amber-600 text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-amber-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap mr-2"
-              >
-                Edit Logo
-                <Edit size={14} className="lg:w-4 lg:h-4" />
-              </button>
-            )}
+            {/* REMOVED: Edit Logo Button */}
 
-            {/* ✅ DASHBOARD BUTTON (Visible only when logged in) */}
-            {user && onOpenDashboard && (
+            {/* ✅ DASHBOARD / HOMEPAGE TOGGLE BUTTON */}
+            {user && (
               <button
-                onClick={onOpenDashboard}
+                onClick={handleDashboardToggle}
                 className="bg-primary-cyan text-ocean-deep px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-cyan-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap mr-2"
               >
-                Dashboard
-                <LayoutDashboard size={14} className="lg:w-4 lg:h-4" />
+                {isDashboardOpen ? "Homepage" : "Dashboard"}
+                {isDashboardOpen ? (
+                  <Home size={14} className="lg:w-4 lg:h-4" />
+                ) : (
+                  <LayoutDashboard size={14} className="lg:w-4 lg:h-4" />
+                )}
               </button>
             )}
 
-            {/* Conditional Sign In / Log Out Button */}
+            {/* Log Out Button */}
             {user ? (
               <button
                 onClick={handleLogout}
@@ -209,7 +206,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
             
-            {/* Theme Toggle Button (Desktop) */}
+            {/* Theme Toggle Button */}
             <button 
               onClick={toggleTheme}
               className={`ml-2 p-1.5 lg:p-2 rounded-full transition-all hover:scale-110 flex-shrink-0 ${
@@ -252,7 +249,6 @@ export const Header: React.FC<HeaderProps> = ({
         }`}
       >
         <div className="flex flex-col px-4 py-4 space-y-2">
-          {/* Only show public links if NOT logged in */}
           {!user && navLinks.map((link) => (
             <a
               key={link.label}
@@ -266,31 +262,16 @@ export const Header: React.FC<HeaderProps> = ({
             </a>
           ))}
           
-          {/* Mobile Edit Logo Button */}
-          {onEditLogo && (user?.role === 'admin' || user?.role === 'editor') && (
-            <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                onEditLogo();
-              }}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
-            >
-              Edit Logo
-              <Edit size={18} />
-            </button>
-          )}
+          {/* REMOVED: Mobile Edit Logo Button */}
 
-          {/* ✅ MOBILE DASHBOARD BUTTON */}
-          {user && onOpenDashboard && (
+          {/* ✅ MOBILE DASHBOARD / HOMEPAGE TOGGLE */}
+          {user && (
             <button
-              onClick={() => {
-                setIsMobileMenuOpen(false);
-                onOpenDashboard();
-              }}
+              onClick={handleDashboardToggle}
               className="w-full bg-primary-cyan text-ocean-deep font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
             >
-              Dashboard
-              <LayoutDashboard size={18} />
+              {isDashboardOpen ? "Homepage" : "Dashboard"}
+              {isDashboardOpen ? <Home size={18} /> : <LayoutDashboard size={18} />}
             </button>
           )}
           

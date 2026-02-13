@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Pillar, PillarActivity } from '../types';
+import { Pillar, PillarActivity } from '../../types';
 import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, Loader } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { uploadImageToDrive } from '../utils/driveUpload';
+import { useAuth } from '../../contexts/AuthContext';
+import { uploadImageToDrive } from '../../utils/driveUpload';
 
 interface PillarsEditorProps {
   pillars: Pillar[];

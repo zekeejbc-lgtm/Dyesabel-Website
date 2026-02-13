@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, BookOpen, Users as UsersIcon, Image as ImageIcon, FileText, Building2, Loader2, Edit, Globe } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
 import { FoundersEditor } from './FoundersEditor';
@@ -8,8 +8,8 @@ import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
 import { ChaptersManagement } from './ChaptersManagement';
 import { pillarsData } from './Stories';
-import { DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY } from '../types';
+import { DataService } from '../../services/DriveService';
+import { SESSION_TOKEN_KEY } from '../../types';
 
 // Initial Data Constants (Fallbacks)
 const initialPartnerCategories = [

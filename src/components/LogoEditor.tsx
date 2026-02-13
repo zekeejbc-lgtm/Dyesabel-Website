@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Image as ImageIcon, Loader } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { uploadLogo, getOrganizationSettings, updateOrganizationSettings } from '../utils/driveUpload';
+import { useAuth } from '../../contexts/AuthContext';
+import { uploadLogo, getOrganizationSettings, updateOrganizationSettings } from '../../utils/driveUpload';
 
 interface LogoEditorProps {
   onClose: () => void;

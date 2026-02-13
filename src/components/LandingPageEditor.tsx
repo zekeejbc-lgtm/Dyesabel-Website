@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Layout, Type, Image } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY } from '../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { DataService } from '../../services/DriveService';
+import { SESSION_TOKEN_KEY } from '../../types';
 
 interface LandingPageEditorProps {
   onBack: () => void;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { UserPlus, Trash2, Key, X, Save, User as UserIcon } from 'lucide-react';
-import { AuthService } from '../services/DriveService';
-import { useAuth } from '../contexts/AuthContext';
-import { User, SESSION_TOKEN_KEY, USER_ROLES, ROLE_LABELS, ROLE_COLORS, UserRole } from '../types';
+import { AuthService } from '../../services/DriveService';
+import { useAuth } from '../../contexts/AuthContext';
+import { User, SESSION_TOKEN_KEY, USER_ROLES, ROLE_LABELS, ROLE_COLORS, UserRole } from '../../types';
 
 interface NewUserState {
   username: string;

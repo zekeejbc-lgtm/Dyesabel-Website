@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Building2, Globe2, Flag, Edit, Mail, Handshake } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { DataService } from '../services/DriveService';
+import { useAuth } from '../../contexts/AuthContext';
+import { DataService } from '../../services/DriveService';
 
 // Interfaces matching your backend structure
 export interface Partner {

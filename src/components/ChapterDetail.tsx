@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Edit, Loader, X } from 'lucide-react';
-import { Chapter } from '../types';
-import { useAuth } from '../contexts/AuthContext';
-import { DataService } from '../services/DriveService';
+import { Chapter } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
+import { DataService } from '../../services/DriveService';
 
 // Add a simple pop-in animation for the modal
 const modalStyles = `

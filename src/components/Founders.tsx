@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Founder } from '../types';
+import { Founder } from '../../types';
 import { Edit } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { DataService } from '../services/DriveService';
+import { useAuth } from '../../contexts/AuthContext';
+import { DataService } from '../../services/DriveService';
 
 // Fallback data (Initial state)
 const initialFounders: Founder[] = [

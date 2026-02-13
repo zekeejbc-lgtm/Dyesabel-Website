@@ -26,8 +26,12 @@ export default defineConfig(({ mode }) => {
           registerType: 'autoUpdate',
           includeAssets: [
             'favicon.ico', 
-            'apple-touch-icon.png', 
-            'maskable-icon-512x512.png'
+            'icons/favicon-16x16.png',
+            'icons/favicon-32x32.png',
+            'icons/apple-touch-icon.png', 
+            'icons/pwa-192x192.png',
+            'icons/pwa-512x512.png',
+            'icons/maskable-512x512.png'
           ],
           manifest: {
             name: 'Dyesabel Philippines, Inc.',
@@ -39,8 +43,8 @@ export default defineConfig(({ mode }) => {
             display: 'standalone',
             display_override: ['standalone', 'minimal-ui', 'browser'],
             orientation: 'portrait',
-            theme_color: '#051923', // Your ocean-deep color
-            background_color: '#00080a', // Your ocean-dark color
+            theme_color: '#051923',
+            background_color: '#00080a',
             lang: 'en',
             categories: ['non-profit', 'community', 'education'],
             icons: [

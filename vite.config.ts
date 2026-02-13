@@ -99,13 +99,7 @@ export default defineConfig(({ mode }) => {
         chunkSizeWarningLimit: 1200,
         rollupOptions: {
           output: {
-            manualChunks: (id) => {
-              if (id.includes('node_modules')) {
-                if (id.includes('react')) return 'vendor-react';
-                if (id.includes('lucide')) return 'vendor-icons';
-                return 'vendor-libs';
-              }
-            },
+            // manualChunks removed to prevent circular dependency errors
           },
         },
       },

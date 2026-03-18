@@ -19,7 +19,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Check permission
-  const canEdit = user?.role === 'admin' || user?.role === 'editor';
+  const canEdit = user?.role === 'admin';
 
   useEffect(() => {
     loadCurrentSettings();

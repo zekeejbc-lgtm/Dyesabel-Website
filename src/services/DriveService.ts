@@ -445,6 +445,20 @@ export const DataService = {
     });
   },
 
+  saveExecutiveOfficers: async (executiveOfficers: any, sessionToken: string) => {
+    return sendRequest({
+      action: 'saveExecutiveOfficers',
+      sessionToken,
+      executiveOfficers
+    });
+  },
+
+  loadExecutiveOfficers: async () => {
+    return sendRequest<{ executiveOfficers: any }>({
+      action: 'loadExecutiveOfficers'
+    });
+  },
+
   // --- Stories ---
   saveStories: async (stories: any, sessionToken: string) => {
     return sendRequest({

@@ -8,7 +8,7 @@ import { LandingPageEditor } from './LandingPageEditor';
 import { LogoEditor } from './LogoEditor';
 import { ChaptersManagement } from './ChaptersManagement';
 import { DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY } from '../types';
+import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
 
 // Initial Data Constants (Fallbacks - You can keep or remove these as needed)
 const initialPartnerCategories = [
@@ -38,7 +38,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   // ✅ FIXED: Initialize as empty arrays, do NOT import pillarsData
   const [pillars, setPillars] = useState<any[]>([]);
   const [partners, setPartners] = useState(initialPartnerCategories);
-  const [founders, setFounders] = useState<any[]>([]);
+  const [founders, setFounders] = useState<Founder[]>([]);
+  const [executiveOfficers, setExecutiveOfficers] = useState<ExecutiveOfficer[]>([]);
   
   // Loading State
   const [isLoading, setIsLoading] = useState(true);
@@ -50,10 +51,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         setIsLoading(true);
         console.log('Fetching dashboard data...');
 
-        const [pillarsRes, partnersRes, foundersRes] = await Promise.all([
+        const [pillarsRes, partnersRes, foundersRes, executiveOfficersRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.loadPartners(),
-          DataService.loadFounders()
+          DataService.loadFounders(),
+          DataService.loadExecutiveOfficers()
         ]);
 
         if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
@@ -66,6 +68,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
         if (foundersRes.success && foundersRes.founders && foundersRes.founders.length > 0) {
           setFounders(foundersRes.founders);
+        }
+
+        if (executiveOfficersRes.success && executiveOfficersRes.executiveOfficers) {
+          setExecutiveOfficers(executiveOfficersRes.executiveOfficers);
         }
 
       } catch (error) {
@@ -114,24 +120,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   };
 
-  const handleSaveFounders = async (updatedFounders: any) => {
-    try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
-      if (!sessionToken) {
-        alert('Session expired. Please login again.');
-        return;
-      }
-      setFounders(updatedFounders);
-      const result = await DataService.saveFounders(updatedFounders, sessionToken);
-      if (!result.success) {
-        alert('Error saving founders: ' + (result.error || 'Unknown error'));
-      }
-    } catch (error) {
-      alert('Error saving founders: ' + (error instanceof Error ? error.message : String(error)));
-    }
-  };
-
-  const canEdit = user?.role === 'admin' || user?.role === 'editor';
+  const canEdit = user?.role === 'admin';
 
   if (!canEdit) {
     return (
@@ -180,7 +169,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     Content Management Dashboard
                   </h1>
                   <p className="text-ocean-deep/60 dark:text-gray-400 mt-1">
-                    Welcome back, {user?.email || 'Admin'} • Role: {user?.role}
+                    Welcome back, {user?.username || user?.email || 'Admin'} • Role: {user?.role}
                   </p>
                 </div>
               </div>
@@ -401,7 +390,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       {activeEditor === 'founders' && (
         <FoundersEditor
           founders={founders}
-          onSave={handleSaveFounders}
+          executiveOfficers={executiveOfficers}
+          onSave={({ founders: nextFounders, executiveOfficers: nextExecutiveOfficers }) => {
+            setFounders(nextFounders);
+            setExecutiveOfficers(nextExecutiveOfficers);
+          }}
           onClose={() => setActiveEditor(null)}
         />
       )}

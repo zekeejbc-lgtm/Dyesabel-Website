@@ -19,14 +19,16 @@ import { PartnersEditor } from './components/PartnersEditor';
 import { FoundersEditor } from './components/FoundersEditor';
 import { LogoEditor } from './components/LogoEditor';
 import { BackgroundBubbles } from './components/BackgroundBubbles';
+import { LoadingScreen } from './components/LoadingScreen';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Chapter, Pillar } from './types';
+import { Chapter, ExecutiveOfficer, Pillar } from './types';
 import { DataService } from './services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 
 function AppContent() {
   const { user, isAuthenticated } = useAuth();
+  const isAdmin = user?.role === 'admin';
   
   // Initialize theme
   const [theme, setTheme] = useState(() => {
@@ -61,6 +63,7 @@ function AppContent() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [partners, setPartners] = useState<any[]>([]);
   const [founders, setFounders] = useState<any[]>([]);
+  const [executiveOfficers, setExecutiveOfficers] = useState<ExecutiveOfficer[]>([]);
 
   // Helper to map index to icon
   const getIconForIndex = (index: number) => {
@@ -102,11 +105,12 @@ function AppContent() {
     const loadAllData = async () => {
       setIsLoading(true);
       try {
-        const [pillarsRes, chaptersRes, partnersRes, foundersRes] = await Promise.all([
+        const [pillarsRes, chaptersRes, partnersRes, foundersRes, executiveOfficersRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.listChapters(),
           DataService.loadPartners(),
-          DataService.loadFounders()
+          DataService.loadFounders(),
+          DataService.loadExecutiveOfficers()
         ]);
 
         if (pillarsRes.success && pillarsRes.pillars?.length > 0) {
@@ -118,6 +122,9 @@ function AppContent() {
         if (chaptersRes.success && chaptersRes.chapters) setChapters(chaptersRes.chapters);
         if (partnersRes.success && partnersRes.partners) setPartners(partnersRes.partners);
         if (foundersRes.success && foundersRes.founders) setFounders(foundersRes.founders);
+        if (executiveOfficersRes.success && executiveOfficersRes.executiveOfficers) {
+          setExecutiveOfficers(executiveOfficersRes.executiveOfficers);
+        }
 
       } catch (error) {
         console.error("Fetch error:", error);
@@ -180,15 +187,16 @@ function AppContent() {
 
   return (
     <div className="min-h-screen relative text-ocean-deep dark:text-white transition-colors duration-500 overflow-x-hidden">
+      {isLoading && <LoadingScreen />}
       <BackgroundBubbles />
-
+      
       <Header 
         theme={theme} 
         toggleTheme={toggleTheme} 
         onHomeClick={handleBackToHome} 
         onSignInClick={() => setIsLoginModalOpen(true)}
-        onEditLogo={() => setIsLogoEditorOpen(true)}
-        onOpenDashboard={() => setShowDashboard(true)}
+        onEditLogo={isAdmin ? () => setIsLogoEditorOpen(true) : undefined}
+        onOpenDashboard={isAdmin ? () => setShowDashboard(true) : undefined}
         isDashboardOpen={showDashboard}
       />
       
@@ -210,7 +218,12 @@ function AppContent() {
         ) : isFoundersEditorOpen ? (
           <FoundersEditor 
             founders={founders} 
-            onSave={(f) => { setFounders(f); setIsFoundersEditorOpen(false); }} 
+            executiveOfficers={executiveOfficers}
+            onSave={({ founders: nextFounders, executiveOfficers: nextExecutiveOfficers }) => {
+              setFounders(nextFounders);
+              setExecutiveOfficers(nextExecutiveOfficers);
+              setIsFoundersEditorOpen(false);
+            }}
             onClose={() => setIsFoundersEditorOpen(false)} 
           />
         ) : isPillarEditorOpen ? (
@@ -230,14 +243,9 @@ function AppContent() {
             ADMIN DASHBOARD & NAVIGATION
            ========================================================= */
         : showDashboard && isAuthenticated ? (
-          user?.role === 'admin' ? (
+          isAdmin ? (
             <AdminDashboard onBack={() => setShowDashboard(false)} />
-          ) : user?.role === 'chapter_head' ? (
-            <ChapterEditor onBack={() => setShowDashboard(false)} />
-          ) : user?.role === 'editor' ? (
-            <LandingPageEditor onBack={() => setShowDashboard(false)} />
           ) : (
-            /* Fallback for unknown roles */
             <div className="pt-32 text-center">
               <h2 className="text-2xl font-bold">Access Denied</h2>
             </div>
@@ -286,6 +294,7 @@ function AppContent() {
             />
             <Founders 
               founders={founders}
+              executiveOfficers={executiveOfficers}
               isLoading={isLoading}
               onEdit={() => setIsFoundersEditorOpen(true)} 
             />

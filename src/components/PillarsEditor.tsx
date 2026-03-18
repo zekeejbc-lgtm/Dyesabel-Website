@@ -26,7 +26,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   const [uploadingImage, setUploadingImage] = useState(false);
 
   // Check permission
-  if (!user || (user.role !== 'admin' && user.role !== 'editor')) {
+  if (!user || user.role !== 'admin') {
     return null;
   }
 

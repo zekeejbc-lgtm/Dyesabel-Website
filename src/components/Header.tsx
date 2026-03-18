@@ -33,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   isDashboardOpen = false // Default to false
 }) => {
   const { user, logout } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -173,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
             {/* REMOVED: Edit Logo Button */}
 
             {/* ✅ DASHBOARD / HOMEPAGE TOGGLE BUTTON */}
-            {user && (
+            {isAdmin && (
               <button
                 onClick={handleDashboardToggle}
                 className="bg-primary-cyan text-ocean-deep px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-cyan-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap mr-2"
@@ -265,7 +266,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* REMOVED: Mobile Edit Logo Button */}
 
           {/* ✅ MOBILE DASHBOARD / HOMEPAGE TOGGLE */}
-          {user && (
+          {isAdmin && (
             <button
               onClick={handleDashboardToggle}
               className="w-full bg-primary-cyan text-ocean-deep font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"

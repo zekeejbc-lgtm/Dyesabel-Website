@@ -1,225 +1,742 @@
-import React, { useState } from 'react';
-import { Founder } from '../types';
-import { X, Save, Plus, Trash2, Upload } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { Check, ChevronDown, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
+import { DataService, DriveService, convertToCORSFreeLink } from '../services/DriveService';
 
 interface FoundersEditorProps {
   founders: Founder[];
-  onSave: (founders: Founder[]) => void;
+  executiveOfficers: ExecutiveOfficer[];
+  onSave: (payload: { founders: Founder[]; executiveOfficers: ExecutiveOfficer[] }) => void;
   onClose: () => void;
 }
 
-export const FoundersEditor: React.FC<FoundersEditorProps> = ({ founders, onSave, onClose }) => {
-  const { user } = useAuth();
-  const [editedFounders, setEditedFounders] = useState<Founder[]>(founders);
-  const [saving, setSaving] = useState(false);
+interface RoleGroup {
+  label: string;
+  options: string[];
+}
 
-  // Check permission
-  if (!user || (user.role !== 'admin' && user.role !== 'editor')) {
+const EXECUTIVE_ROLE_GROUPS: RoleGroup[] = [
+  {
+    label: 'Executive Officers',
+    options: [
+      'National Executive Director',
+      'Internal Deputy Director',
+      'External Deputy Director',
+      'Chief-of-Staff',
+      'National Secretary',
+      'National Treasurer',
+      'Public Relations Officer',
+      'Chairperson, Advisory Council',
+      'Chairperson, Board of Trustees',
+      'Board Secretary'
+    ]
+  },
+  {
+    label: 'Program Directors',
+    options: [
+      'Program Director, Good Governance',
+      'Program Director, Research, Education and Direct Action',
+      'Program Director, Culture and Arts',
+      'Program Director, Sustainable Livelihood',
+      'Program Director, Community Health'
+    ]
+  },
+  {
+    label: 'Other Directors',
+    options: [
+      'Director for Creatives',
+      'Director for Partnership',
+      'Director for Productions Management',
+      'Director for Logistics',
+      'Director for Monitoring, Evaluation, and Learning'
+    ]
+  }
+];
+
+const ALL_EXECUTIVE_ROLES = EXECUTIVE_ROLE_GROUPS.flatMap((group) => group.options);
+
+type DropdownDirection = 'up' | 'down';
+
+interface DropdownPosition {
+  top: number;
+  left: number;
+  width: number;
+}
+
+export const FoundersEditor: React.FC<FoundersEditorProps> = ({
+  founders,
+  executiveOfficers,
+  onSave,
+  onClose
+}) => {
+  const { user } = useAuth();
+  const getAvatarUrl = (name: string) =>
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=256&bold=true`;
+  const [editedFounders, setEditedFounders] = useState<Founder[]>(founders);
+  const [editedExecutiveOfficers, setEditedExecutiveOfficers] = useState<ExecutiveOfficer[]>(executiveOfficers);
+  const [saving, setSaving] = useState(false);
+  const [uploadingImageKey, setUploadingImageKey] = useState<string | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+  const [dropdownDirection, setDropdownDirection] = useState<DropdownDirection>('down');
+  const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
+  const [roleSearch, setRoleSearch] = useState('');
+  const [customRoleMode, setCustomRoleMode] = useState<Record<string, boolean>>({});
+  const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const dropdownMenuRef = useRef<HTMLDivElement | null>(null);
+
+  if (!user || user.role !== 'admin') {
     return null;
   }
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (!openDropdownId) return;
+      const container = dropdownRefs.current[openDropdownId];
+      const menu = dropdownMenuRef.current;
+      const target = event.target as Node;
+
+      if (container && !container.contains(target) && (!menu || !menu.contains(target))) {
+        setOpenDropdownId(null);
+        setDropdownPosition(null);
+        setRoleSearch('');
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenDropdownId(null);
+        setDropdownPosition(null);
+        setRoleSearch('');
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [openDropdownId]);
+
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalBodyPaddingRight = document.body.style.paddingRight;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.paddingRight = originalBodyPaddingRight;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!openDropdownId) return;
+
+    const updateDropdownPosition = () => {
+      const container = dropdownRefs.current[openDropdownId];
+      const rect = container?.getBoundingClientRect();
+      if (!rect) return;
+
+      const menuHeight = 360;
+      const viewportHeight = window.innerHeight;
+      const viewportWidth = window.innerWidth;
+      const horizontalMargin = 16;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      const direction = spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down';
+      const width = Math.min(rect.width, viewportWidth - horizontalMargin * 2);
+      const left = Math.min(
+        Math.max(rect.left, horizontalMargin),
+        Math.max(horizontalMargin, viewportWidth - width - horizontalMargin)
+      );
+      const top = direction === 'up' ? rect.top - 8 : rect.bottom + 8;
+
+      setDropdownDirection(direction);
+      setDropdownPosition({ top, left, width });
+    };
+
+    updateDropdownPosition();
+
+    const handleWindowScroll = (event: Event) => {
+      const target = event.target as Node | null;
+
+      // Ignore scroll events from inside the dropdown menu so its own
+      // results list can scroll without constantly re-positioning.
+      if (target && dropdownMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      updateDropdownPosition();
+    };
+
+    window.addEventListener('resize', updateDropdownPosition);
+    window.addEventListener('scroll', handleWindowScroll, true);
+
+    return () => {
+      window.removeEventListener('resize', updateDropdownPosition);
+      window.removeEventListener('scroll', handleWindowScroll, true);
+    };
+  }, [openDropdownId]);
+
   const updateFounder = (index: number, field: keyof Founder, value: string) => {
-    const updated = [...editedFounders];
-    updated[index] = { ...updated[index], [field]: value };
-    setEditedFounders(updated);
+    setEditedFounders((current) => {
+      const next = [...current];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const updateExecutiveOfficer = (index: number, field: keyof ExecutiveOfficer, value: string) => {
+    setEditedExecutiveOfficers((current) => {
+      const next = [...current];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
   };
 
   const addFounder = () => {
-    const newFounder: Founder = {
-      id: `f${Date.now()}`,
-      name: 'New Founder',
-      role: 'Position/Role',
-      bio: 'Short biography and background...',
-      imageUrl: 'https://picsum.photos/seed/newfounder/400/400'
-    };
-    setEditedFounders([...editedFounders, newFounder]);
+    setEditedFounders((current) => [
+      ...current,
+      {
+        id: `founder-${Date.now()}`,
+        name: 'New Founder',
+        role: 'Position/Role',
+        bio: 'Short biography and background...',
+        imageUrl: 'https://picsum.photos/seed/newfounder/400/400'
+      }
+    ]);
+  };
+
+  const addExecutiveOfficer = () => {
+    const nextId = `executive-${Date.now()}`;
+    setEditedExecutiveOfficers((current) => [
+      ...current,
+      {
+        id: nextId,
+        name: 'New Executive Officer',
+        role: '',
+        imageUrl: ''
+      }
+    ]);
+    setCustomRoleMode((current) => ({ ...current, [nextId]: false }));
   };
 
   const removeFounder = (index: number) => {
     if (!confirm('Are you sure you want to remove this founder?')) return;
-    setEditedFounders(editedFounders.filter((_, i) => i !== index));
+    setEditedFounders((current) => current.filter((_, i) => i !== index));
   };
 
-  const handleImageUpload = (index: number, file: File) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const imageUrl = reader.result as string;
-      updateFounder(index, 'imageUrl', imageUrl);
-    };
-    reader.readAsDataURL(file);
+  const removeExecutiveOfficer = (index: number) => {
+    if (!confirm('Are you sure you want to remove this executive officer?')) return;
+    const targetId = editedExecutiveOfficers[index]?.id;
+    setEditedExecutiveOfficers((current) => current.filter((_, i) => i !== index));
+    if (targetId) {
+      setCustomRoleMode((current) => {
+        const next = { ...current };
+        delete next[targetId];
+        return next;
+      });
+      if (openDropdownId === targetId) {
+        setOpenDropdownId(null);
+        setDropdownPosition(null);
+        setRoleSearch('');
+      }
+    }
+  };
+
+  const uploadProfileImage = async (
+    file: File,
+    onUploaded: (value: string) => void,
+    uploadKey: string
+  ) => {
+    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (!sessionToken) {
+      alert('Session expired. Please log in again.');
+      return;
+    }
+
+    setUploadingImageKey(uploadKey);
+
+    try {
+      const result = await DriveService.uploadImage(file, sessionToken);
+      if (!result.success || !result.fileUrl) {
+        throw new Error(result.error || 'Upload failed');
+      }
+
+      onUploaded(result.fileUrl);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Error uploading image.');
+    } finally {
+      setUploadingImageKey((current) => (current === uploadKey ? null : current));
+    }
+  };
+
+  const saveContent = async () => {
+    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    if (!sessionToken) {
+      throw new Error('Session expired. Please log in again.');
+    }
+
+    const [foundersResult, executiveOfficersResult] = await Promise.all([
+      DataService.saveFounders(editedFounders, sessionToken),
+      DataService.saveExecutiveOfficers(editedExecutiveOfficers, sessionToken)
+    ]);
+
+    if (!foundersResult.success) {
+      throw new Error(foundersResult.error || 'Failed to save founders');
+    }
+    if (!executiveOfficersResult.success) {
+      throw new Error(executiveOfficersResult.error || 'Failed to save executive officers');
+    }
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await onSave(editedFounders);
-      alert('Founders saved successfully!');
+      await saveContent();
+      onSave({ founders: editedFounders, executiveOfficers: editedExecutiveOfficers });
+      alert('Founders and executive officers saved successfully.');
       onClose();
     } catch (error) {
-      alert('Error saving founders. Please try again.');
+      alert(error instanceof Error ? error.message : 'Error saving content. Please try again.');
     } finally {
       setSaving(false);
     }
   };
 
+  const toggleRoleDropdown = (officerId: string) => {
+    if (openDropdownId === officerId) {
+      setOpenDropdownId(null);
+      setDropdownPosition(null);
+      setRoleSearch('');
+      return;
+    }
+    setOpenDropdownId(officerId);
+    setRoleSearch('');
+  };
+
+  const selectPresetRole = (index: number, role: string) => {
+    updateExecutiveOfficer(index, 'role', role);
+    const officerId = editedExecutiveOfficers[index]?.id;
+    if (officerId) {
+      setCustomRoleMode((current) => ({ ...current, [officerId]: false }));
+    }
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+    setRoleSearch('');
+  };
+
+  const enableCustomRole = (officerId: string) => {
+    setCustomRoleMode((current) => ({ ...current, [officerId]: true }));
+    setOpenDropdownId(null);
+    setDropdownPosition(null);
+    setRoleSearch('');
+  };
+
+  const filteredRoleGroups = useMemo(() => {
+    const normalizedSearch = roleSearch.trim().toLowerCase();
+    if (!normalizedSearch) {
+      return EXECUTIVE_ROLE_GROUPS;
+    }
+
+    return EXECUTIVE_ROLE_GROUPS
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((option) => option.toLowerCase().includes(normalizedSearch))
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [roleSearch]);
+
+  const totalFilteredRoleCount = useMemo(
+    () => filteredRoleGroups.reduce((sum, group) => sum + group.options.length, 0),
+    [filteredRoleGroups]
+  );
+
+  const openDropdownOfficer = useMemo(
+    () => editedExecutiveOfficers.find((entry) => entry.id === openDropdownId) ?? null,
+    [editedExecutiveOfficers, openDropdownId]
+  );
+
+  const openDropdownOfficerIndex = useMemo(
+    () => editedExecutiveOfficers.findIndex((entry) => entry.id === openDropdownId),
+    [editedExecutiveOfficers, openDropdownId]
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto">
-      <div className="min-h-screen p-4 md:p-8">
-        <div className="max-w-5xl mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Founders</h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Manage your organization's founders and leadership team
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-            >
-              <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-            </button>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm">
+      <div className="flex min-h-screen items-center justify-center p-4 md:p-8">
+        <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 md:max-h-[calc(100vh-4rem)]">
+        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700 sm:px-6 sm:py-5">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">Edit Founders and Executives</h2>
+            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+              Founders and executive officers are saved in separate sheets in the same workbook.
+            </p>
           </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+          >
+            <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+          </button>
+        </div>
 
-          {/* Main Content */}
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Founders & Leadership
-              </h3>
-              <button
-                onClick={addFounder}
-                className="flex items-center gap-2 px-4 py-2 bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                Add Founder
-              </button>
-            </div>
-
-            <div className="space-y-6">
-              {editedFounders.map((founder, index) => (
-                <div
-                  key={founder.id}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl p-6 space-y-4"
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6">
+          <div className="space-y-8 pb-2">
+            <section>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Founders</h3>
+                <button
+                  onClick={addFounder}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors font-medium"
                 >
-                  <div className="flex items-start justify-between">
-                    <h4 className="font-medium text-gray-900 dark:text-white">
-                      Founder {index + 1}
-                    </h4>
-                    <button
-                      onClick={() => removeFounder(index)}
-                      className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <Plus className="w-4 h-4" />
+                  Add Founder
+                </button>
+              </div>
 
-                  <div className="flex flex-col md:flex-row gap-6">
-                    {/* Image Upload */}
-                    <div className="flex-shrink-0">
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Profile Photo
-                      </label>
-                      <div className="relative w-32 h-32 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
-                        <img
-                          src={founder.imageUrl}
-                          alt={founder.name}
-                          className="w-full h-full object-cover"
-                        />
-                        <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => e.target.files?.[0] && handleImageUpload(index, e.target.files[0])}
-                            className="hidden"
+              <div className="space-y-6">
+                {editedFounders.map((founder, index) => (
+                    <div key={founder.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <h4 className="font-medium text-gray-900 dark:text-white">Founder {index + 1}</h4>
+                      <button
+                        onClick={() => removeFounder(index)}
+                        className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-6">
+                      <div className="flex-shrink-0">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Profile Photo
+                        </label>
+                        <div className="relative w-32 h-32 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+                          <img
+                            src={convertToCORSFreeLink(founder.imageUrl) || getAvatarUrl(founder.name)}
+                            alt={founder.name}
+                            onError={(event) => {
+                              event.currentTarget.src = getAvatarUrl(founder.name);
+                            }}
+                            className="w-full h-full object-cover"
                           />
-                          <div className="text-white text-center">
-                            <Upload className="w-6 h-6 mx-auto mb-1" />
-                            <span className="text-xs font-medium">Upload</span>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Details */}
-                    <div className="flex-1 space-y-4">
-                      {/* Name */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Full Name
-                        </label>
-                        <input
-                          type="text"
-                          value={founder.name}
-                          onChange={(e) => updateFounder(index, 'name', e.target.value)}
-                          placeholder="Enter full name"
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
-                        />
-                      </div>
-
-                      {/* Role */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Role/Position
-                        </label>
-                        <input
-                          type="text"
-                          value={founder.role}
-                          onChange={(e) => updateFounder(index, 'role', e.target.value)}
-                          placeholder="e.g., Co-Founder & Executive Director"
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
-                        />
+                          <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                void uploadProfileImage(
+                                  file,
+                                  (imageUrl) => updateFounder(index, 'imageUrl', imageUrl),
+                                  `founder-${founder.id}`
+                                );
+                              }}
+                              className="hidden"
+                            />
+                            <div className="text-white text-center">
+                              <Upload className="w-6 h-6 mx-auto mb-1" />
+                              <span className="text-xs font-medium">Upload</span>
+                            </div>
+                          </label>
+                        </div>
                       </div>
 
-                      {/* Bio */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                          Biography
-                        </label>
-                        <textarea
-                          value={founder.bio}
-                          onChange={(e) => updateFounder(index, 'bio', e.target.value)}
-                          placeholder="Brief biography and background..."
-                          rows={4}
-                          className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent resize-none"
-                        />
+                      <div className="flex-1 space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                          <input
+                            type="text"
+                            value={founder.name}
+                            onChange={(e) => updateFounder(index, 'name', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role/Position</label>
+                          <input
+                            type="text"
+                            value={founder.role}
+                            onChange={(e) => updateFounder(index, 'role', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Biography</label>
+                          <textarea
+                            value={founder.bio}
+                            onChange={(e) => updateFounder(index, 'bio', e.target.value)}
+                            rows={4}
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent resize-none"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
 
-              {editedFounders.length === 0 && (
-                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                  <p className="font-medium mb-2">No founders added yet</p>
-                  <p className="text-sm">Click "Add Founder" to get started</p>
+                {editedFounders.length === 0 && (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <p className="font-medium mb-2">No founders added yet</p>
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section>
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Executive Officers</h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Pick from preset executive and program-director positions, or switch to custom.
+                  </p>
                 </div>
-              )}
+                <button
+                  onClick={addExecutiveOfficer}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors font-medium"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Executive
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {editedExecutiveOfficers.map((officer, index) => {
+                  const isCustomMode = !!customRoleMode[officer.id];
+                  const isDropdownOpen = openDropdownId === officer.id;
+
+                  return (
+                    <div key={officer.id} className="rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+                      <div className="flex items-start justify-between">
+                        <h4 className="font-medium text-gray-900 dark:text-white">Executive Officer {index + 1}</h4>
+                        <button
+                          onClick={() => removeExecutiveOfficer(index)}
+                          className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-600 dark:text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col md:flex-row gap-6">
+                        <div className="flex-shrink-0">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Profile Photo
+                          </label>
+                          <div className="relative w-32 h-32 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
+                            {officer.imageUrl ? (
+                              <img
+                                src={convertToCORSFreeLink(officer.imageUrl) || getAvatarUrl(officer.name)}
+                                alt={officer.name}
+                                onError={(event) => {
+                                  event.currentTarget.src = getAvatarUrl(officer.name);
+                                }}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-xs text-gray-500 dark:text-gray-400 px-3 text-center">
+                                No image
+                              </div>
+                            )}
+                            <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  void uploadProfileImage(
+                                    file,
+                                    (imageUrl) => updateExecutiveOfficer(index, 'imageUrl', imageUrl),
+                                    `executive-${officer.id}`
+                                  );
+                                }}
+                                className="hidden"
+                              />
+                              <div className="text-white text-center">
+                                <Upload className="w-6 h-6 mx-auto mb-1" />
+                                <span className="text-xs font-medium">Upload</span>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="flex-1 space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                            <input
+                              type="text"
+                              value={officer.name}
+                              onChange={(e) => updateExecutiveOfficer(index, 'name', e.target.value)}
+                              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                            />
+                          </div>
+
+                          <div ref={(element) => { dropdownRefs.current[officer.id] = element; }} className="relative">
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role/Position</label>
+                              <button
+                                type="button"
+                                onClick={() => setCustomRoleMode((current) => ({ ...current, [officer.id]: !isCustomMode }))}
+                                className="text-xs font-semibold text-primary-blue hover:text-primary-cyan transition-colors"
+                              >
+                                {isCustomMode ? 'Use preset list' : 'Add custom role'}
+                              </button>
+                            </div>
+
+                            {isCustomMode ? (
+                              <input
+                                type="text"
+                                value={officer.role}
+                                onChange={(e) => updateExecutiveOfficer(index, 'role', e.target.value)}
+                                placeholder="Type a custom role or position"
+                                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
+                              />
+                            ) : (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleRoleDropdown(officer.id)}
+                                  className="w-full flex items-center justify-between gap-3 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-left text-gray-900 dark:text-white hover:border-primary-blue dark:hover:border-primary-cyan transition-colors"
+                                >
+                                  <span className={officer.role ? '' : 'text-gray-400 dark:text-gray-500'}>
+                                    {officer.role || 'Select a position'}
+                                  </span>
+                                  <ChevronDown
+                                    className={`w-4 h-4 text-gray-500 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`}
+                                  />
+                                </button>
+                              </>
+                            )}
+
+                            {!isCustomMode && officer.role && !ALL_EXECUTIVE_ROLES.includes(officer.role) && (
+                              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                                This role is custom. Switch to custom mode to edit it directly.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {editedExecutiveOfficers.length === 0 && (
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                    <p className="font-medium mb-2">No executive officers added yet</p>
+                  </div>
+                )}
+              </div>
+            </section>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
-            <button
-              onClick={onClose}
-              className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2 bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors font-medium disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-5 py-4 dark:border-gray-700 sm:px-6 sm:py-5">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-gray-300 px-6 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !!uploadingImageKey}
+            className="flex items-center gap-2 rounded-lg bg-primary-blue px-6 py-2 font-medium text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? 'Saving...' : uploadingImageKey ? 'Uploading image...' : 'Save Changes'}
+          </button>
+        </div>
         </div>
       </div>
+
+      {openDropdownId && dropdownPosition && createPortal(
+        <div
+          ref={dropdownMenuRef}
+          className="fixed z-[60] flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+          style={{
+            left: dropdownPosition.left,
+            top: dropdownPosition.top,
+            width: dropdownPosition.width,
+            maxHeight: 320,
+            transform: dropdownDirection === 'up' ? 'translateY(-100%)' : undefined
+          }}
+        >
+          <div className="border-b border-gray-200 p-3 dark:border-gray-700">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={roleSearch}
+                onChange={(e) => setRoleSearch(e.target.value)}
+                placeholder="Search positions"
+                className="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-9 pr-3 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-primary-blue dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
+            {filteredRoleGroups.map((group) => (
+              <div key={group.label} className="py-2">
+                <div className="px-4 pb-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gray-400 dark:text-gray-500">
+                  {group.label}
+                </div>
+                {group.options.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      if (openDropdownOfficerIndex >= 0) {
+                        selectPresetRole(openDropdownOfficerIndex, option);
+                      }
+                    }}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm text-gray-900 transition-colors hover:bg-primary-blue/10 dark:text-white dark:hover:bg-primary-cyan/10"
+                  >
+                    <span>{option}</span>
+                    {openDropdownOfficer?.role === option && <Check className="h-4 w-4 text-primary-blue dark:text-primary-cyan" />}
+                  </button>
+                ))}
+              </div>
+            ))}
+
+            {filteredRoleGroups.length === 0 && (
+              <div className="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                No matching preset roles.
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-1 border-t border-gray-200 p-2 dark:border-gray-700">
+            {totalFilteredRoleCount > 0 && (
+              <div className="px-3 py-1 text-xs text-gray-500 dark:text-gray-400">
+                Scroll to see more results.
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => enableCustomRole(openDropdownId)}
+              className="w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-primary-blue transition-colors hover:bg-primary-blue/10 dark:hover:bg-primary-cyan/10"
+            >
+              Add custom role instead
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
-

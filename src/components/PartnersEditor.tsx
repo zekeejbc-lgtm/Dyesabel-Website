@@ -36,7 +36,7 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
   const [saving, setSaving] = useState(false);
 
   // Check permission
-  if (!user || (user.role !== 'admin' && user.role !== 'editor')) {
+  if (!user || user.role !== 'admin') {
     return null;
   }
 

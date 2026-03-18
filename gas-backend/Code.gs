@@ -83,6 +83,14 @@ function doPost(e) {
       case 'loadStories':       result = handleLoadData('Stories'); break;
       case 'saveFounders':      result = handleSaveData('Founders', data.founders, data.sessionToken); break;
       case 'loadFounders':      result = handleLoadData('Founders'); break;
+      case 'saveExecutiveOfficers': result = handleSaveData('ExecutiveOfficers', data.executiveOfficers, data.sessionToken); break;
+      case 'loadExecutiveOfficers': result = handleLoadData('ExecutiveOfficers'); break;
+      case 'migrateLegacyContent': result = handleMigrateLegacyContent(data); break;
+
+      // ✅ NEWSLETTER HANDLER (Routes to Newsletter.gs)
+      case 'subscribeNewsletter': 
+        result = handleNewsletterSubscription(data); 
+        break;
 
       default:
         throw new Error('Unknown action: ' + data.action);
@@ -108,18 +116,24 @@ function handleLogin(data) {
 
   for (let i = 1; i < rows.length; i++) {
     // Row: [Username, Password, Email, Role, UserId, ChapterId]
-    if (rows[i][0] === data.username && rows[i][1] === data.password) {
-      const token = Utilities.getUuid() + '_' + new Date().getTime();
-      const user = {
-        username: rows[i][0],
-        email: rows[i][2],
-        role: rows[i][3],
-        id: rows[i][4],
-        chapterId: rows[i][5]
-      };
-      
-      storeSession(token, user);
-      return { sessionToken: token, user: user };
+    const storedUsername = rows[i][0];
+    const storedPassword = rows[i][1];
+
+    if (storedUsername === data.username) {
+      if (verifyPassword(data.password, storedPassword)) {
+        
+        // Success: Create Session
+        const token = Utilities.getUuid() + '_' + new Date().getTime();
+        const user = {
+          username: rows[i][0],
+          email: rows[i][2],
+          role: rows[i][3],
+          id: rows[i][4],
+          chapterId: rows[i][5]
+        };
+        storeSession(token, user);
+        return { sessionToken: token, user: user };
+      }
     }
   }
   throw new Error('Invalid credentials');
@@ -129,7 +143,7 @@ function handleRegister(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(SHEET_USERS);
   const rows = sheet.getDataRange().getValues();
-
+  
   // Check duplicates
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === data.username) throw new Error('Username taken');
@@ -137,8 +151,10 @@ function handleRegister(data) {
   }
 
   const newId = Utilities.getUuid();
+  const securePassword = hashPassword(data.password); // <--- HASHING HERE
+
   // Default role is 'user'
-  sheet.appendRow([data.username, data.password, data.email, 'user', newId, '']);
+  sheet.appendRow([data.username, securePassword, data.email, 'user', newId, '']);
   return { message: 'Registration successful' };
 }
 
@@ -307,29 +323,294 @@ function handleDeleteImage(data) {
 // 5. CONTENT / DATA HANDLERS
 // ============================================
 
-// Generic handler for Landing Page, Stories, Founders
+const DATA_SHEET_CONFIG = {
+  LandingPage: {
+    type: 'object',
+    responseKey: 'landingPage',
+    sheetName: 'LandingPage',
+    fields: ['heroTitle', 'heroSubtitle', 'heroButtonText', 'sloganText', 'aboutText', 'featuredImageUrl']
+  },
+  Stories: {
+    type: 'array',
+    responseKey: 'stories',
+    sheetName: 'Stories',
+    fields: ['id', 'title', 'excerpt', 'imageUrl', 'date']
+  },
+  Founders: {
+    type: 'array',
+    responseKey: 'founders',
+    sheetName: 'Founders',
+    fields: ['id', 'name', 'role', 'bio', 'imageUrl']
+  },
+  ExecutiveOfficers: {
+    type: 'array',
+    responseKey: 'executiveOfficers',
+    sheetName: 'ExecutiveOfficers',
+    fields: ['id', 'name', 'role', 'imageUrl']
+  },
+  Pillars: {
+    type: 'nested',
+    responseKey: 'pillars',
+    sheetName: 'Pillars',
+    childSheetName: 'PillarActivities',
+    parentFields: ['id', 'title', 'excerpt', 'description', 'aim', 'imageUrl', 'sortOrder'],
+    childFields: ['pillarId', 'id', 'title', 'date', 'description', 'imageUrl', 'sortOrder']
+  }
+};
+
 function handleSaveData(sheetName, contentData, token) {
   validateAdminOrEditor(token);
-  
+
+  const config = DATA_SHEET_CONFIG[sheetName];
+  if (!config) {
+    throw new Error('Unsupported mapped sheet: ' + sheetName);
+  }
+
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+
+  if (config.type === 'object') {
+    saveMappedObjectData(ss, config, processAndUploadImages(contentData || {}));
+  } else if (config.type === 'array') {
+    const items = Array.isArray(contentData) ? contentData.map(item => processAndUploadImages(item || {})) : [];
+    saveMappedArrayData(ss, config, items);
+  } else if (config.type === 'nested') {
+    saveMappedNestedData(ss, config, Array.isArray(contentData) ? contentData : []);
+  } else {
+    throw new Error('Unsupported data config type: ' + config.type);
+  }
+
+  return { message: sheetName + ' saved' };
+}
+
+function saveMappedObjectData(ss, config, item) {
+  const sheet = getOrCreateSheet(ss, config.sheetName);
+  const rows = config.fields.map(function(field) {
+    return [field, item && item[field] != null ? item[field] : ''];
+  });
+  writeSheetRows(sheet, ['Key', 'Value'], rows);
+}
+
+function saveMappedArrayData(ss, config, items) {
+  const sheet = getOrCreateSheet(ss, config.sheetName);
+  const rows = items.map(function(item) {
+    return config.fields.map(function(field) {
+      return item && item[field] != null ? item[field] : '';
+    });
+  });
+  writeSheetRows(sheet, config.fields, rows);
+}
+
+function saveMappedNestedData(ss, config, items) {
+  const parentSheet = getOrCreateSheet(ss, config.sheetName);
+  const childSheet = getOrCreateSheet(ss, config.childSheetName);
+  const parentRows = [];
+  const childRows = [];
+
+  items.forEach(function(rawItem, itemIndex) {
+    const item = processAndUploadImages(rawItem || {});
+    const parentId = item.id || Utilities.getUuid();
+    parentRows.push([
+      parentId,
+      item.title || '',
+      item.excerpt || '',
+      item.description || '',
+      item.aim || '',
+      item.imageUrl || '',
+      itemIndex
+    ]);
+
+    const activities = Array.isArray(item.activities) ? item.activities : [];
+    activities.forEach(function(rawActivity, activityIndex) {
+      const activity = processAndUploadImages(rawActivity || {});
+      childRows.push([
+        parentId,
+        activity.id || Utilities.getUuid(),
+        activity.title || '',
+        activity.date || '',
+        activity.description || '',
+        activity.imageUrl || '',
+        activityIndex
+      ]);
+    });
+  });
+
+  writeSheetRows(parentSheet, config.parentFields, parentRows);
+  writeSheetRows(childSheet, config.childFields, childRows);
+}
+
+function getMappedObjectData(ss, config) {
+  const sheet = ss.getSheetByName(config.sheetName);
+  if (!sheet || sheet.getLastRow() < 2 || !sheetHasHeaders(sheet, ['Key', 'Value'])) {
+    return {};
+  }
+
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  const item = {};
+  rows.forEach(function(row) {
+    if (row[0]) {
+      item[row[0]] = row[1];
+    }
+  });
+  return item;
+}
+
+function getMappedArrayData(ss, config) {
+  const sheet = ss.getSheetByName(config.sheetName);
+  if (!sheet || sheet.getLastRow() < 2 || !sheetHasHeaders(sheet, config.fields)) {
+    return [];
+  }
+
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, config.fields.length).getValues();
+  return rows
+    .filter(function(row) {
+      return row.some(function(cell) { return cell !== ''; });
+    })
+    .map(function(row) {
+      const item = {};
+      config.fields.forEach(function(field, index) {
+        item[field] = row[index];
+      });
+      return item;
+    });
+}
+
+function getMappedNestedData(ss, config) {
+  const parentSheet = ss.getSheetByName(config.sheetName);
+  if (!parentSheet || parentSheet.getLastRow() < 2 || !sheetHasHeaders(parentSheet, config.parentFields)) {
+    return [];
+  }
+
+  const parentRows = parentSheet.getRange(2, 1, parentSheet.getLastRow() - 1, config.parentFields.length).getValues();
+  const childSheet = ss.getSheetByName(config.childSheetName);
+  const activitiesByParent = {};
+
+  if (childSheet && childSheet.getLastRow() >= 2 && sheetHasHeaders(childSheet, config.childFields)) {
+    const childRows = childSheet.getRange(2, 1, childSheet.getLastRow() - 1, config.childFields.length).getValues();
+    childRows.forEach(function(row) {
+      const pillarId = String(row[0] || '');
+      if (!pillarId) return;
+      if (!activitiesByParent[pillarId]) {
+        activitiesByParent[pillarId] = [];
+      }
+      activitiesByParent[pillarId].push({
+        id: row[1],
+        title: row[2],
+        date: row[3],
+        description: row[4],
+        imageUrl: row[5],
+        sortOrder: Number(row[6] || 0)
+      });
+    });
+  }
+
+  return parentRows
+    .filter(function(row) {
+      return row.some(function(cell) { return cell !== ''; });
+    })
+    .sort(function(a, b) {
+      return Number(a[6] || 0) - Number(b[6] || 0);
+    })
+    .map(function(row) {
+      const pillarId = String(row[0] || '');
+      const activities = (activitiesByParent[pillarId] || [])
+        .sort(function(a, b) { return a.sortOrder - b.sortOrder; })
+        .map(function(activity) {
+          return {
+            id: activity.id,
+            title: activity.title,
+            date: activity.date,
+            description: activity.description,
+            imageUrl: activity.imageUrl
+          };
+        });
+
+      return {
+        id: row[0],
+        title: row[1],
+        excerpt: row[2],
+        description: row[3],
+        aim: row[4],
+        imageUrl: row[5],
+        activities: activities
+      };
+    });
+}
+
+function getOrCreateSheet(ss, sheetName) {
   let sheet = ss.getSheetByName(sheetName);
-  if (!sheet) sheet = ss.insertSheet(sheetName);
-  
-  // --- Process Images before saving ---
-  if (Array.isArray(contentData)) {
-    contentData = contentData.map(item => processAndUploadImages(item));
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
   }
-  
-  // Clear old data and rewrite
-  sheet.clear();
-  
-  if (contentData.length > 0) {
-    sheet.appendRow(['JSON_DATA']);
-    const jsonString = JSON.stringify(contentData);
-    sheet.getRange(2, 1).setValue(jsonString);
+  return sheet;
+}
+
+function writeSheetRows(sheet, headers, rows) {
+  ensureSheetSize(sheet, Math.max(headers.length, 1), Math.max(rows.length + 1, 2));
+  sheet.clearContents();
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  if (rows.length > 0) {
+    sheet.getRange(2, 1, rows.length, headers.length).setValues(rows);
   }
-  
-  return { message: `${sheetName} saved` };
+  sheet.setFrozenRows(1);
+}
+
+function sheetHasHeaders(sheet, expectedHeaders) {
+  if (!sheet || sheet.getLastRow() < 1) {
+    return false;
+  }
+
+  const actualHeaders = sheet.getRange(1, 1, 1, expectedHeaders.length).getValues()[0];
+  return expectedHeaders.every(function(header, index) {
+    return actualHeaders[index] === header;
+  });
+}
+
+function ensureSheetSize(sheet, minColumns, minRows) {
+  if (sheet.getMaxColumns() < minColumns) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), minColumns - sheet.getMaxColumns());
+  }
+  if (sheet.getMaxRows() < minRows) {
+    sheet.insertRowsAfter(sheet.getMaxRows(), minRows - sheet.getMaxRows());
+  }
+}
+
+function loadLegacyJsonSheet(sheet) {
+  if (!sheet || sheet.getLastRow() < 2) {
+    return [];
+  }
+
+  const jsonString = sheet.getRange(2, 1).getValue();
+  if (!jsonString) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(jsonString);
+  } catch (e) {
+    Logger.log('Error parsing legacy JSON for ' + sheet.getName() + ': ' + e.toString());
+    return [];
+  }
+}
+
+function getLegacyJsonSheetPayload(sheet) {
+  if (!sheet || sheet.getLastRow() < 2) {
+    return { hasLegacyFormat: false, value: null };
+  }
+
+  if (sheet.getRange(1, 1).getValue() !== 'JSON_DATA') {
+    return { hasLegacyFormat: false, value: null };
+  }
+
+  const jsonString = sheet.getRange(2, 1).getValue();
+  if (!jsonString) {
+    return { hasLegacyFormat: true, value: null };
+  }
+
+  try {
+    return { hasLegacyFormat: true, value: JSON.parse(jsonString) };
+  } catch (e) {
+    throw new Error('Invalid legacy JSON in sheet "' + sheet.getName() + '": ' + e.toString());
+  }
 }
 
 /**
@@ -369,20 +650,71 @@ function processAndUploadImages(item) {
   return item;
 }
 
-function handleLoadData(sheetName) {
+const PARTNER_HEADERS = ['CategoryID', 'CategoryTitle', 'PartnerID', 'PartnerName', 'PartnerLogo'];
+
+function saveMappedPartnersData(ss, categories) {
+  const sheet = getOrCreateSheet(ss, 'Partners');
+  const rows = [];
+
+  (Array.isArray(categories) ? categories : []).forEach(function(rawCategory) {
+    const category = rawCategory || {};
+    const partners = Array.isArray(category.partners) ? category.partners : [];
+
+    if (partners.length > 0) {
+      partners.forEach(function(rawPartner) {
+        const partner = processAndUploadImages(rawPartner || {});
+        rows.push([
+          category.id || '',
+          category.title || '',
+          partner.id || '',
+          partner.name || '',
+          partner.logo || ''
+        ]);
+      });
+      return;
+    }
+
+    rows.push([
+      category.id || '',
+      category.title || '',
+      '',
+      '',
+      ''
+    ]);
+  });
+
+  writeSheetRows(sheet, PARTNER_HEADERS, rows);
+}
+
+function handleLoadChapter(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName(sheetName);
-  if (!sheet) return { [sheetName.toLowerCase()]: [] };
+  const sheet = ss.getSheetByName('Chapters');
+  if (!sheet) return { chapter: null };
+  const rows = sheet.getDataRange().getValues();
   
-  const data = sheet.getDataRange().getValues();
-  if (data.length < 2) return { [sheetName.toLowerCase()]: [] };
-  
-  const jsonString = data[1][0];
-  try {
-    return { [sheetName.toLowerCase()]: JSON.parse(jsonString) };
-  } catch (e) {
-    return { [sheetName.toLowerCase()]: [] };
+  for (let i = 1; i < rows.length; i++) {
+    // ✅ FIX 1: Convert IDs to String for safe comparison
+    if (String(rows[i][0]) === String(data.chapterId)) {
+      let activities = [];
+      let extended = {};
+      try { activities = JSON.parse(rows[i][4]); } catch(e) {}
+      try { extended = JSON.parse(rows[i][6]); } catch(e) {}
+
+      const chapter = {
+        id: rows[i][0],
+        name: rows[i][1],
+        description: rows[i][2],
+        imageUrl: rows[i][3], 
+        image: rows[i][3],   
+        activities: activities,
+        // ✅ FIX 2: Explicitly grab logo from Column F (Index 5) if missing in extended
+        logo: extended.logo || rows[i][5], 
+        ...extended
+      };
+      return { chapter: chapter };
+    }
   }
+  return { chapter: null };
 }
 
 // ==========================================
@@ -399,59 +731,7 @@ function handleSavePartners(data) {
   }
 
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  let sheet = ss.getSheetByName('Partners');
-  if (!sheet) {
-    sheet = ss.insertSheet('Partners');
-    // Create Headers
-    sheet.appendRow(['CategoryID', 'CategoryTitle', 'PartnerID', 'PartnerName', 'PartnerLogo']);
-    sheet.setFrozenRows(1);
-  }
-
-  // 1. Process Images (Handle Base64 uploads nested inside partners)
-  let categories = data.partners || [];
-  categories.forEach(cat => {
-    if (cat.partners && Array.isArray(cat.partners)) {
-      cat.partners = cat.partners.map(p => processAndUploadImages(p));
-    }
-  });
-
-  // 2. Clear existing data (preserve headers)
-  const lastRow = sheet.getLastRow();
-  if (lastRow > 1) {
-    sheet.getRange(2, 1, lastRow - 1, 5).clearContent();
-  }
-
-  // 3. Flatten Data for Sheet
-  const rows = [];
-  categories.forEach(cat => {
-    if (cat.partners && cat.partners.length > 0) {
-      // If category has partners, add a row for each
-      cat.partners.forEach(p => {
-        rows.push([
-          cat.id,
-          cat.title,
-          p.id,
-          p.name,
-          p.logo || ''
-        ]);
-      });
-    } else {
-      // If category is empty, add a placeholder row so we don't lose the category
-      rows.push([
-        cat.id,
-        cat.title,
-        '', // No Partner ID
-        '', // No Name
-        ''  // No Logo
-      ]);
-    }
-  });
-
-  // 4. Write to Sheet
-  if (rows.length > 0) {
-    sheet.getRange(2, 1, rows.length, 5).setValues(rows);
-  }
-  
+  saveMappedPartnersData(ss, data.partners || []);
   return { message: 'Partners saved successfully' };
 }
 
@@ -505,8 +785,9 @@ function handleSaveChapter(data) {
   const session = getSession(data.sessionToken);
   if (!session) throw new Error('Unauthorized');
   
-  // Permission check
-  if (session.user.role !== 'admin' && session.user.chapterId !== data.chapterId) {
+  // ✅ FIX 1: Convert IDs to String for permission check
+  // (Prevents "1" !== 1 errors)
+  if (session.user.role !== 'admin' && String(session.user.chapterId) !== String(data.chapterId)) {
     throw new Error('Insufficient permissions for this chapter');
   }
 
@@ -514,6 +795,8 @@ function handleSaveChapter(data) {
   let sheet = ss.getSheetByName('Chapters');
   if (!sheet) {
     sheet = ss.insertSheet('Chapters');
+    // Note: Column 6 (Index 5) is labeled 'Members' but you are using it for 'Logo'. 
+    // This is fine as long as you are consistent.
     sheet.appendRow(['ChapterID', 'Title', 'Description', 'ImageURL', 'ActivitiesJSON', 'Members', 'ExtendedData']);
   }
 
@@ -521,7 +804,8 @@ function handleSaveChapter(data) {
   let rowIndex = -1;
 
   for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === data.chapterId) {
+    // ✅ FIX 2: Convert to String to find the existing row correctly
+    if (String(rows[i][0]) === String(data.chapterId)) {
       rowIndex = i + 1; 
       break;
     }
@@ -533,15 +817,15 @@ function handleSaveChapter(data) {
   const rowData = [
     data.chapterId,                        
     cData.name || cData.title,             
-    cData.description,                     
-    cData.imageUrl || cData.image,         
+    cData.description,                    
+    cData.imageUrl || cData.image,        
     activitiesJson,                        
-    cData.logo || ''                       
+    cData.logo || ''  // Saves to Column F (Index 5)                    
   ];
 
   const extendedData = {
     location: cData.location,
-    logo: cData.logo,
+    logo: cData.logo, // Saves to JSON
     headName: cData.headName,
     headRole: cData.headRole,
     headImageUrl: cData.headImageUrl,
@@ -564,24 +848,28 @@ function handleLoadChapter(data) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName('Chapters');
   if (!sheet) return { chapter: null };
-
   const rows = sheet.getDataRange().getValues();
   
   for (let i = 1; i < rows.length; i++) {
-    if (rows[i][0] === data.chapterId) {
+    // Match ID (String conversion is safer)
+    if (String(rows[i][0]) === String(data.chapterId)) {
       let activities = [];
       let extended = {};
       try { activities = JSON.parse(rows[i][4]); } catch(e) {}
       try { extended = JSON.parse(rows[i][6]); } catch(e) {}
 
+      // ✅ LOGIC: If extended.logo is broken/empty, use Column F (rows[i][5])
+      const finalLogo = (extended.logo && extended.logo !== "") ? extended.logo : rows[i][5];
+
       const chapter = {
+        ...extended, // 1. Spread extended FIRST
         id: rows[i][0],
         name: rows[i][1],
         description: rows[i][2],
         imageUrl: rows[i][3], 
         image: rows[i][3],   
         activities: activities,
-        ...extended
+        logo: finalLogo // 2. Set logo LAST so it wins
       };
       return { chapter: chapter };
     }
@@ -634,6 +922,297 @@ function handleDeleteChapter(data) {
     }
   }
   throw new Error('Chapter not found');
+}
+
+const CHAPTER_HEADERS = [
+  'ChapterID',
+  'Title',
+  'Description',
+  'ImageURL',
+  'LogoURL',
+  'Location',
+  'HeadName',
+  'HeadRole',
+  'HeadQuote',
+  'HeadImageUrl',
+  'Email',
+  'Phone',
+  'Facebook',
+  'Twitter',
+  'Instagram',
+  'JoinUrl',
+  'JoinCtaDescription'
+];
+
+const CHAPTER_ACTIVITY_HEADERS = [
+  'ChapterID',
+  'ActivityID',
+  'Title',
+  'Description',
+  'Date',
+  'ImageURL',
+  'SortOrder'
+];
+
+function normalizeChapterRecord(chapterId, chapterData) {
+  const baseChapter = processAndUploadImages({
+    id: chapterId,
+    name: chapterData.name || chapterData.title || '',
+    description: chapterData.description || '',
+    image: chapterData.imageUrl || chapterData.image || '',
+    imageUrl: chapterData.imageUrl || chapterData.image || '',
+    logo: chapterData.logo || '',
+    location: chapterData.location || '',
+    headName: chapterData.headName || '',
+    headRole: chapterData.headRole || '',
+    headQuote: chapterData.headQuote || '',
+    headImageUrl: chapterData.headImageUrl || '',
+    email: chapterData.email || '',
+    phone: chapterData.phone || '',
+    facebook: chapterData.facebook || '',
+    twitter: chapterData.twitter || '',
+    instagram: chapterData.instagram || '',
+    joinUrl: chapterData.joinUrl || '',
+    joinCtaDescription: chapterData.joinCtaDescription || ''
+  });
+
+  baseChapter.activities = (Array.isArray(chapterData.activities) ? chapterData.activities : []).map(function(activity) {
+    const nextActivity = processAndUploadImages(activity || {});
+    return {
+      id: nextActivity.id || Utilities.getUuid(),
+      title: nextActivity.title || '',
+      description: nextActivity.description || '',
+      date: nextActivity.date || '',
+      imageUrl: nextActivity.imageUrl || ''
+    };
+  });
+
+  return baseChapter;
+}
+
+function createHeaderIndexMap(headers) {
+  const indexMap = {};
+  headers.forEach(function(header, index) {
+    indexMap[header] = index;
+  });
+  return indexMap;
+}
+
+function loadChapterActivitiesByChapterId(ss) {
+  const activitySheet = ss.getSheetByName('ChapterActivities');
+  const activitiesByChapter = {};
+  if (!activitySheet || activitySheet.getLastRow() < 2 || !sheetHasHeaders(activitySheet, CHAPTER_ACTIVITY_HEADERS)) {
+    return activitiesByChapter;
+  }
+
+  const rows = activitySheet.getRange(2, 1, activitySheet.getLastRow() - 1, CHAPTER_ACTIVITY_HEADERS.length).getValues();
+  rows.forEach(function(row) {
+    const chapterId = String(row[0] || '');
+    if (!chapterId) return;
+    if (!activitiesByChapter[chapterId]) {
+      activitiesByChapter[chapterId] = [];
+    }
+    activitiesByChapter[chapterId].push({
+      id: row[1],
+      title: row[2],
+      description: row[3],
+      date: row[4],
+      imageUrl: row[5],
+      sortOrder: Number(row[6] || 0)
+    });
+  });
+
+  Object.keys(activitiesByChapter).forEach(function(chapterId) {
+    activitiesByChapter[chapterId] = activitiesByChapter[chapterId]
+      .sort(function(a, b) { return a.sortOrder - b.sortOrder; })
+      .map(function(activity) {
+        return {
+          id: activity.id,
+          title: activity.title,
+          description: activity.description,
+          date: activity.date,
+          imageUrl: activity.imageUrl
+        };
+      });
+  });
+
+  return activitiesByChapter;
+}
+
+function loadLegacyChapters(rows) {
+  return rows.slice(1)
+    .filter(function(row) {
+      return row[0] !== '' && row[0] != null;
+    })
+    .map(function(row) {
+      let activities = [];
+      let extended = {};
+
+      try { activities = JSON.parse(row[4] || '[]'); } catch (e) {}
+      try { extended = JSON.parse(row[6] || '{}'); } catch (e) {}
+
+      return {
+        id: row[0],
+        name: row[1] || '',
+        description: row[2] || '',
+        imageUrl: row[3] || '',
+        image: row[3] || '',
+        logo: extended.logo || row[5] || '',
+        location: extended.location || '',
+        headName: extended.headName || '',
+        headRole: extended.headRole || '',
+        headQuote: extended.headQuote || '',
+        headImageUrl: extended.headImageUrl || '',
+        email: extended.email || '',
+        phone: extended.phone || '',
+        facebook: extended.facebook || '',
+        twitter: extended.twitter || '',
+        instagram: extended.instagram || '',
+        joinUrl: extended.joinUrl || '',
+        joinCtaDescription: extended.joinCtaDescription || '',
+        activities: Array.isArray(activities) ? activities : []
+      };
+    });
+}
+
+function loadAllChaptersNormalized(ss) {
+  const chapterSheet = ss.getSheetByName('Chapters');
+  if (!chapterSheet || chapterSheet.getLastRow() < 2) {
+    return [];
+  }
+
+  const rows = chapterSheet.getDataRange().getValues();
+  const headers = rows[0];
+  if (headers.indexOf('ActivitiesJSON') >= 0 || headers.indexOf('ExtendedData') >= 0) {
+    return loadLegacyChapters(rows);
+  }
+
+  const indexMap = createHeaderIndexMap(headers);
+  const activitiesByChapter = loadChapterActivitiesByChapterId(ss);
+
+  return rows.slice(1)
+    .filter(function(row) {
+      const chapterId = row[indexMap.ChapterID];
+      return chapterId !== '' && chapterId != null;
+    })
+    .map(function(row) {
+      const chapterId = row[indexMap.ChapterID];
+      return {
+        id: chapterId,
+        name: row[indexMap.Title] || '',
+        description: row[indexMap.Description] || '',
+        imageUrl: row[indexMap.ImageURL] || '',
+        image: row[indexMap.ImageURL] || '',
+        logo: row[indexMap.LogoURL] || '',
+        location: row[indexMap.Location] || '',
+        headName: row[indexMap.HeadName] || '',
+        headRole: row[indexMap.HeadRole] || '',
+        headQuote: row[indexMap.HeadQuote] || '',
+        headImageUrl: row[indexMap.HeadImageUrl] || '',
+        email: row[indexMap.Email] || '',
+        phone: row[indexMap.Phone] || '',
+        facebook: row[indexMap.Facebook] || '',
+        twitter: row[indexMap.Twitter] || '',
+        instagram: row[indexMap.Instagram] || '',
+        joinUrl: row[indexMap.JoinUrl] || '',
+        joinCtaDescription: row[indexMap.JoinCtaDescription] || '',
+        activities: activitiesByChapter[String(chapterId)] || []
+      };
+    });
+}
+
+function rewriteChaptersSheets(ss, chapters) {
+  const chapterSheet = getOrCreateSheet(ss, 'Chapters');
+  const activitySheet = getOrCreateSheet(ss, 'ChapterActivities');
+  const chapterRows = [];
+  const activityRows = [];
+
+  chapters.forEach(function(rawChapter) {
+    const chapter = normalizeChapterRecord(rawChapter.id, rawChapter);
+    chapterRows.push([
+      chapter.id,
+      chapter.name || '',
+      chapter.description || '',
+      chapter.imageUrl || chapter.image || '',
+      chapter.logo || '',
+      chapter.location || '',
+      chapter.headName || '',
+      chapter.headRole || '',
+      chapter.headQuote || '',
+      chapter.headImageUrl || '',
+      chapter.email || '',
+      chapter.phone || '',
+      chapter.facebook || '',
+      chapter.twitter || '',
+      chapter.instagram || '',
+      chapter.joinUrl || '',
+      chapter.joinCtaDescription || ''
+    ]);
+
+    (chapter.activities || []).forEach(function(activity, index) {
+      activityRows.push([
+        chapter.id,
+        activity.id || Utilities.getUuid(),
+        activity.title || '',
+        activity.description || '',
+        activity.date || '',
+        activity.imageUrl || '',
+        index
+      ]);
+    });
+  });
+
+  writeSheetRows(chapterSheet, CHAPTER_HEADERS, chapterRows);
+  writeSheetRows(activitySheet, CHAPTER_ACTIVITY_HEADERS, activityRows);
+}
+
+function handleSaveChapter(data) {
+  const session = getSession(data.sessionToken);
+  if (!session) throw new Error('Unauthorized');
+
+  if (session.user.role !== 'admin' && String(session.user.chapterId) !== String(data.chapterId)) {
+    throw new Error('Insufficient permissions for this chapter');
+  }
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const chapters = loadAllChaptersNormalized(ss);
+  const nextChapter = normalizeChapterRecord(data.chapterId, data.chapterData || {});
+  const existingIndex = chapters.findIndex(function(chapter) {
+    return String(chapter.id) === String(data.chapterId);
+  });
+
+  if (existingIndex >= 0) {
+    chapters[existingIndex] = nextChapter;
+  } else {
+    chapters.push(nextChapter);
+  }
+
+  rewriteChaptersSheets(ss, chapters);
+  return { message: 'Chapter saved successfully' };
+}
+
+function handleLoadChapter(data) {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const chapters = loadAllChaptersNormalized(ss);
+  const chapter = chapters.find(function(item) {
+    return String(item.id) === String(data.chapterId);
+  }) || null;
+  return { chapter: chapter };
+}
+
+function handleListChapters() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return { chapters: loadAllChaptersNormalized(ss) };
+}
+
+function handleDeleteChapter(data) {
+  validateAdminOrEditor(data.sessionToken);
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const chapters = loadAllChaptersNormalized(ss).filter(function(chapter) {
+    return String(chapter.id) !== String(data.chapterId);
+  });
+  rewriteChaptersSheets(ss, chapters);
+  return { message: 'Chapter deleted' };
 }
 
 function handleGetOrgSettings(data) {
@@ -754,9 +1333,11 @@ function handleCreateUser(data) {
   }
   
   const newId = Utilities.getUuid();
+  const securePassword = hashPassword(data.password); // <--- HASHING HERE
+
   sheet.appendRow([
     data.username, 
-    data.password, 
+    securePassword, 
     data.email, 
     data.role, 
     newId, 
@@ -790,7 +1371,8 @@ function handleUpdatePassword(data) {
   
   for (let i = 1; i < rows.length; i++) {
     if (rows[i][0] === targetUsername) {
-      sheet.getRange(i + 1, 2).setValue(data.newPassword);
+      const securePassword = hashPassword(data.newPassword); // <--- HASHING HERE
+      sheet.getRange(i + 1, 2).setValue(securePassword);
       return { message: 'Password updated successfully' };
     }
   }
@@ -867,5 +1449,235 @@ function initializeSystem() {
     s.appendRow(['organizationName', 'Dyesabel PH']);
   }
 
+  if (!ss.getSheetByName('Founders')) {
+    const s = ss.insertSheet('Founders');
+    s.appendRow(DATA_SHEET_CONFIG.Founders.fields);
+  }
+
+  if (!ss.getSheetByName('ExecutiveOfficers')) {
+    const s = ss.insertSheet('ExecutiveOfficers');
+    s.appendRow(DATA_SHEET_CONFIG.ExecutiveOfficers.fields);
+  }
+
   Logger.log('Initialization Complete.');
+}
+
+function migrateLegacyMappedSheet(ss, sheetKey) {
+  const config = DATA_SHEET_CONFIG[sheetKey];
+  if (!config) {
+    throw new Error('Unsupported mapped sheet: ' + sheetKey);
+  }
+
+  const sheet = ss.getSheetByName(config.sheetName);
+  const legacy = getLegacyJsonSheetPayload(sheet);
+
+  if (!legacy.hasLegacyFormat) {
+    return { sheet: config.sheetName, status: 'skipped', reason: 'already mapped or missing' };
+  }
+
+  if (config.type === 'object') {
+    const value = legacy.value && typeof legacy.value === 'object' && !Array.isArray(legacy.value) ? legacy.value : {};
+    saveMappedObjectData(ss, config, value);
+    return { sheet: config.sheetName, status: 'migrated', records: Object.keys(value).length };
+  }
+
+  if (config.type === 'array') {
+    const items = Array.isArray(legacy.value) ? legacy.value : [];
+    saveMappedArrayData(ss, config, items);
+    return { sheet: config.sheetName, status: 'migrated', records: items.length };
+  }
+
+  if (config.type === 'nested') {
+    const items = Array.isArray(legacy.value) ? legacy.value : [];
+    saveMappedNestedData(ss, config, items);
+    return { sheet: config.sheetName, status: 'migrated', records: items.length };
+  }
+
+  return { sheet: config.sheetName, status: 'skipped', reason: 'unsupported type' };
+}
+
+function migrateLegacyPartnersSheet(ss) {
+  const sheet = ss.getSheetByName('Partners');
+  const legacy = getLegacyJsonSheetPayload(sheet);
+
+  if (!legacy.hasLegacyFormat) {
+    return { sheet: 'Partners', status: 'skipped', reason: 'already mapped or missing' };
+  }
+
+  const categories = Array.isArray(legacy.value) ? legacy.value : [];
+  saveMappedPartnersData(ss, categories);
+  return { sheet: 'Partners', status: 'migrated', records: categories.length };
+}
+
+function migrateLegacyChaptersSheet(ss) {
+  const sheet = ss.getSheetByName('Chapters');
+  if (!sheet || sheet.getLastRow() < 1) {
+    return { sheet: 'Chapters', status: 'skipped', reason: 'missing' };
+  }
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('ActivitiesJSON') === -1 && headers.indexOf('ExtendedData') === -1) {
+    return { sheet: 'Chapters', status: 'skipped', reason: 'already mapped' };
+  }
+
+  const chapters = loadLegacyChapters(sheet.getDataRange().getValues());
+  rewriteChaptersSheets(ss, chapters);
+  return { sheet: 'Chapters', status: 'migrated', records: chapters.length };
+}
+
+function migrateLegacyContentToColumnMappings() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return {
+    migratedAt: new Date().toISOString(),
+    results: [
+      migrateLegacyMappedSheet(ss, 'LandingPage'),
+      migrateLegacyMappedSheet(ss, 'Stories'),
+      migrateLegacyMappedSheet(ss, 'Founders'),
+      migrateLegacyMappedSheet(ss, 'ExecutiveOfficers'),
+      migrateLegacyMappedSheet(ss, 'Pillars'),
+      migrateLegacyPartnersSheet(ss),
+      migrateLegacyChaptersSheet(ss)
+    ]
+  };
+}
+
+function handleMigrateLegacyContent(data) {
+  validateAdminOnly(data.sessionToken);
+  return migrateLegacyContentToColumnMappings();
+}
+// ==========================================
+// ✅ ADD THIS MISSING FUNCTION
+// ==========================================
+function handleLoadData(sheetName) {
+  const config = DATA_SHEET_CONFIG[sheetName];
+  const result = {};
+
+  if (!config) {
+    result[sheetName.toLowerCase()] = [];
+    return result;
+  }
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(config.sheetName);
+  const legacyData = loadLegacyJsonSheet(sheet);
+
+  if (config.type === 'object') {
+    const mappedObject = getMappedObjectData(ss, config);
+    result[config.responseKey] = Object.keys(mappedObject).length > 0
+      ? mappedObject
+      : (legacyData && typeof legacyData === 'object' && !Array.isArray(legacyData) ? legacyData : {});
+    return result;
+  }
+
+  if (config.type === 'array') {
+    const mappedArray = getMappedArrayData(ss, config);
+    result[config.responseKey] = mappedArray.length > 0 ? mappedArray : (Array.isArray(legacyData) ? legacyData : []);
+    return result;
+  }
+
+  if (config.type === 'nested') {
+    const mappedNested = getMappedNestedData(ss, config);
+    result[config.responseKey] = mappedNested.length > 0 ? mappedNested : (Array.isArray(legacyData) ? legacyData : []);
+    return result;
+  }
+
+  result[config.responseKey] = [];
+  return result;
+}
+
+// ============================================
+// 8. SECURITY UTILITIES (HASHING)
+// ============================================
+
+/**
+ * Generates a salted hash for a password.
+ * Format: "SALT$HASH"
+ */
+function hashPassword(password) {
+  // Generate a random salt (UUID is sufficient for this use case)
+  const salt = Utilities.getUuid(); 
+  const payload = salt + password;
+  
+  // SHA-256 Hashing
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, payload);
+  const hash = Utilities.base64Encode(digest);
+  
+  return salt + '$' + hash;
+}
+
+/**
+ * Verifies an input password against the stored string.
+ * Supports both new (Salt$Hash) and legacy (Plaintext) formats.
+ */
+function verifyPassword(inputPassword, storedPassword) {
+  // 1. Legacy Plain Text Check (Backward Compatibility)
+  if (storedPassword.indexOf('$') === -1) {
+    return inputPassword === storedPassword;
+  }
+
+  // 2. Hashed Check
+  const parts = storedPassword.split('$');
+  const salt = parts[0];
+  const originalHash = parts[1];
+  
+  const payload = salt + inputPassword;
+  const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, payload);
+  const newHash = Utilities.base64Encode(digest);
+  
+  return newHash === originalHash;
+}
+
+function migratePasswordsToHash() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_USERS);
+  const data = sheet.getDataRange().getValues();
+  
+  // Start loop at 1 to skip headers
+  for (let i = 1; i < data.length; i++) {
+    const currentPassword = data[i][1]; // Column Index 1 is Password
+    
+    // Only hash if it's not already hashed (doesn't contain $)
+    if (currentPassword && currentPassword.toString().indexOf('$') === -1) {
+      const newHash = hashPassword(currentPassword);
+      
+      // Update the cell (Row is i+1 because sheet is 1-indexed)
+      sheet.getRange(i + 1, 2).setValue(newHash);
+      Logger.log(`Migrated user: ${data[i][0]}`);
+    }
+  }
+  Logger.log('Password migration complete.');
+}
+
+// ============================================
+// 9. AUTOMATIC HASHING ON EDIT (SECURE VERSION)
+// ============================================
+
+function onEdit(e) {
+  const sheet = e.source.getActiveSheet();
+  const range = e.range;
+
+  // 1. Validation: 'Users' sheet, Column 2 (Password), Row > 1
+  if (sheet.getName() === SHEET_USERS && range.getColumn() === 2 && range.getRow() > 1) {
+    
+    const cellValue = range.getValue().toString();
+    
+    // 2. Security Regex: Check for UUID format (8-4-4-4-12 hex chars) followed by '$'
+    // This strictly identifies a "System Salt", distinguishing it from a user password like "Money$100"
+    const isSystemHash = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\$/.test(cellValue);
+
+    // 3. Only hash if it is NOT already a system hash
+    if (cellValue && !isSystemHash) {
+      
+      const salt = Utilities.getUuid(); 
+      const payload = salt + cellValue;
+      const digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, payload);
+      const hash = Utilities.base64Encode(digest);
+      
+      // The result will look like: "UUID-STRING$BASE64HASH"
+      const finalString = salt + '$' + hash;
+
+      range.setValue(finalString);
+      Logger.log('Auto-hashed password for row ' + range.getRow());
+    }
+  }
 }

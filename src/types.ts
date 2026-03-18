@@ -14,6 +14,13 @@ export interface Founder {
   imageUrl: string;
 }
 
+export interface ExecutiveOfficer {
+  id: string;
+  name: string;
+  role: string;
+  imageUrl: string;
+}
+
 export interface NavLink {
   label: string;
   href: string;

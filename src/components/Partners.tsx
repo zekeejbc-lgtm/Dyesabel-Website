@@ -70,7 +70,7 @@ export const Partners: React.FC<PartnersProps> = ({ partners = [], isLoading = f
             Collaborating with diverse organizations across sectors to amplify our impact and drive sustainable change.
           </p>
 
-          {onEdit && (user?.role === 'admin' || user?.role === 'editor') && (
+          {onEdit && user?.role === 'admin' && (
             <button 
               onClick={onEdit}
               className="mt-6 flex items-center gap-2 bg-primary-blue hover:bg-primary-cyan text-white font-medium px-6 py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl"

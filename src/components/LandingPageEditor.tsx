@@ -11,6 +11,10 @@ interface LandingPageEditorProps {
 export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) => {
   const { user, logout } = useAuth();
   const [isSaving, setIsSaving] = useState(false);
+
+  if (!user || user.role !== 'admin') {
+    return null;
+  }
   
   // Landing page data (this would be fetched from your backend/GAS)
   const [pageData, setPageData] = useState({

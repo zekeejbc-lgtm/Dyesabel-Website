@@ -74,6 +74,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   onClose
 }) => {
   const { user } = useAuth();
+  const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const getAvatarUrl = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=256&bold=true`;
   const [editedFounders, setEditedFounders] = useState<Founder[]>(founders);
@@ -88,7 +89,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const dropdownMenuRef = useRef<HTMLDivElement | null>(null);
 
-  if (!user || user.role !== 'admin') {
+  if (!canEdit) {
     return null;
   }
 

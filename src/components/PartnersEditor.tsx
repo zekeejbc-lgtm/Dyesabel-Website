@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Save, Plus, Trash2, Upload, Users, Building2, Globe2, Flag, FolderPlus } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
 interface Partner {
@@ -30,13 +31,14 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSave, onClose }) => {
   const { user } = useAuth();
+  const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   // ✅ FIX: Ensure we default to an empty array if undefined passed
   const [editedCategories, setEditedCategories] = useState<PartnerCategory[]>(categories || []);
   const [selectedCategoryIndex, setSelectedCategoryIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
 
   // Check permission
-  if (!user || user.role !== 'admin') {
+  if (!canEdit) {
     return null;
   }
 
@@ -54,13 +56,23 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
   };
 
   const removeCategory = (index: number) => {
-    if (!confirm('Delete this entire category and all its partners?')) return;
-    const updated = editedCategories.filter((_, i) => i !== index);
-    setEditedCategories(updated);
-    // Adjust selection if we deleted the current or last item
-    if (selectedCategoryIndex >= updated.length) {
-      setSelectedCategoryIndex(Math.max(0, updated.length - 1));
-    }
+    toast.warning('Delete this entire category and all its partners?', {
+      description: 'This action removes the category and every partner inside it.',
+      action: {
+        label: 'Delete',
+        onClick: () => {
+          const updated = editedCategories.filter((_, i) => i !== index);
+          setEditedCategories(updated);
+          if (selectedCategoryIndex >= updated.length) {
+            setSelectedCategoryIndex(Math.max(0, updated.length - 1));
+          }
+        }
+      },
+      cancel: {
+        label: 'Cancel',
+        onClick: () => {}
+      }
+    });
   };
 
   const updateCategory = (index: number, field: keyof PartnerCategory, value: any) => {

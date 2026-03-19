@@ -71,12 +71,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkPermission = (requiredRole: UserRole | null, chapterId?: string): boolean => {
     if (!user) return false;
+    const isGlobalEditor = user.role === 'editor' && !user.chapterId;
+    const isScopedEditor = user.role === 'editor' && !!chapterId && user.chapterId === chapterId;
 
     // Admin has access to everything
     if (user.role === 'admin') return true;
 
-    // Editor can only edit landing page
-    if (user.role === 'editor' && requiredRole === 'editor') return true;
+    // Global editor can manage shared content and all chapters
+    if (isGlobalEditor && requiredRole === 'editor') return true;
+
+    // Chapter-scoped editor can manage only their chapter
+    if (isScopedEditor && requiredRole === 'chapter_head') return true;
 
     // Chapter head can edit their specific chapter
     if (user.role === 'chapter_head' && requiredRole === 'chapter_head') {

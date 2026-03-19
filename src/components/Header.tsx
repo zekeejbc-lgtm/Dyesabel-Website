@@ -33,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const canAccessDashboard = isAdmin || (user?.role === 'editor' && !user?.chapterId);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -157,7 +158,7 @@ export const Header: React.FC<HeaderProps> = ({
               </>
             ) : null}
 
-            {isAdmin ? (
+            {canAccessDashboard ? (
               <button
                 onClick={handleDashboardToggle}
                 className="mr-2 flex items-center gap-2 whitespace-nowrap rounded-full border border-white/20 bg-primary-cyan px-4 py-1.5 text-[10px] font-bold tracking-wide text-ocean-deep shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-cyan-500/50 lg:px-6 lg:py-2 lg:text-sm"
@@ -232,7 +233,7 @@ export const Header: React.FC<HeaderProps> = ({
             </a>
           )) : null}
 
-          {isAdmin ? (
+          {canAccessDashboard ? (
             <button
               onClick={handleDashboardToggle}
               className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-cyan py-3 font-bold text-ocean-deep shadow-lg"

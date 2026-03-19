@@ -32,7 +32,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
   // --- Form States ---
   const [chapterFormData, setChapterFormData] = useState<Partial<Chapter>>({});
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'chapter_head' });
+  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'member' });
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -165,7 +165,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
         
         alert(`User added to ${selectedChapter.name}!`);
         setIsUserModalOpen(false);
-        setNewUser({ username: '', email: '', password: '', role: 'chapter_head' });
+        setNewUser({ username: '', email: '', password: '', role: 'member' });
       } else {
         alert("Failed to add user: " + res.message);
       }
@@ -468,7 +468,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                         {chapterUsers.length === 0 ? (
                           <div className="p-12 text-center text-white/40">
                              <Users size={48} className="mx-auto mb-4 opacity-30" />
-                             <p>No members assigned to this chapter yet.</p>
+                             <p>No chapter head or members assigned to this chapter yet.</p>
                           </div>
                         ) : (
                           <table className="w-full text-left">
@@ -595,9 +595,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                       onChange={e => setNewUser({...newUser, role: e.target.value})}
                       className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-white focus:border-primary-cyan focus:outline-none appearance-none cursor-pointer"
                     >
+                      <option value="member" className="bg-[#1e293b]">Member</option>
                       <option value="chapter_head" className="bg-[#1e293b]">Chapter Head</option>
-                      <option value="editor" className="bg-[#1e293b]">Editor</option>
-                      <option value="admin" className="bg-[#1e293b]">Admin</option>
                     </select>
                   </div>
                </div>

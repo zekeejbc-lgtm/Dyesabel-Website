@@ -23,6 +23,11 @@ interface ChapterDetailProps {
 
 export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialChapter, onBack, onEdit }) => {
   const { user } = useAuth();
+  const canEditChapter = !!user && (
+    user.role === 'admin' ||
+    (user.role === 'editor' && (!user.chapterId || user.chapterId === initialChapter.id)) ||
+    (user.role === 'chapter_head' && user.chapterId === initialChapter.id)
+  );
   const [chapter, setChapter] = useState<Chapter>(initialChapter);
   const [loading, setLoading] = useState(false);
   
@@ -95,7 +100,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       </button>
 
       {/* Edit Button */}
-      {onEdit && user?.role === 'admin' && (
+      {onEdit && canEditChapter && (
         <button 
           onClick={onEdit}
           className="fixed top-24 right-4 md:right-8 z-40 flex items-center gap-2 bg-primary-blue/90 text-white backdrop-blur-md hover:bg-primary-cyan transition-all duration-300 font-medium px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] border border-white/10 group"

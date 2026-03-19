@@ -22,7 +22,7 @@ import { BackgroundBubbles } from './components/BackgroundBubbles';
 import { LoadingScreen } from './components/LoadingScreen';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { Chapter, ExecutiveOfficer, Pillar } from './types';
+import { Chapter, ExecutiveOfficer, Pillar, USER_STORAGE_KEY, User } from './types';
 import { DataService } from './services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 import { APP_CONFIG } from './config';
@@ -30,6 +30,8 @@ import { APP_CONFIG } from './config';
 function AppContent() {
   const { user, isAuthenticated } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const isGlobalEditor = user?.role === 'editor' && !user?.chapterId;
+  const canAccessDashboard = isAdmin || isGlobalEditor;
   
   // Initialize theme
   const [theme, setTheme] = useState(() => {
@@ -46,6 +48,11 @@ function AppContent() {
   // Navigation & Editor States
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null);
+  const canEditSelectedChapter = !!user && !!selectedChapter && (
+    user.role === 'admin' ||
+    (user.role === 'editor' && (!user.chapterId || user.chapterId === selectedChapter.id)) ||
+    (user.role === 'chapter_head' && user.chapterId === selectedChapter.id)
+  );
   
   const [isChapterEditorOpen, setIsChapterEditorOpen] = useState(false);
   const [isPillarEditorOpen, setIsPillarEditorOpen] = useState(false);
@@ -64,6 +71,14 @@ function AppContent() {
   const [partners, setPartners] = useState<any[]>([]);
   const [founders, setFounders] = useState<any[]>([]);
   const [executiveOfficers, setExecutiveOfficers] = useState<ExecutiveOfficer[]>([]);
+
+  const visibleChapters = user && (
+    user.role === 'chapter_head' ||
+    user.role === 'member' ||
+    (user.role === 'editor' && !!user.chapterId)
+  )
+    ? chapters.filter(chapter => chapter.id === user.chapterId)
+    : chapters;
 
   // Helper to map index to icon
   const getIconForIndex = (index: number) => {
@@ -213,6 +228,31 @@ function AppContent() {
     }, 100);
   };
 
+  const handleLoginSuccess = () => {
+    setIsLoginModalOpen(false);
+    let storedUser: User | null = null;
+    try {
+      const raw = localStorage.getItem(USER_STORAGE_KEY);
+      storedUser = raw ? JSON.parse(raw) as User : null;
+    } catch (error) {
+      storedUser = null;
+    }
+
+    if (!storedUser) return;
+    if (storedUser.role === 'admin' || (storedUser.role === 'editor' && !storedUser.chapterId)) {
+      setShowDashboard(true);
+      return;
+    }
+
+    setShowDashboard(false);
+    if (storedUser.chapterId) {
+      const matchedChapter = chapters.find(chapter => chapter.id === storedUser.chapterId);
+      if (matchedChapter) {
+        setSelectedChapter(matchedChapter);
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen relative text-ocean-deep dark:text-white transition-colors duration-500 overflow-x-hidden">
       {isLoading && <LoadingScreen />}
@@ -224,7 +264,7 @@ function AppContent() {
         onHomeClick={handleBackToHome} 
         onSignInClick={() => setIsLoginModalOpen(true)}
         onEditLogo={isAdmin ? () => setIsLogoEditorOpen(true) : undefined}
-        onOpenDashboard={isAdmin ? () => setShowDashboard(true) : undefined}
+        onOpenDashboard={canAccessDashboard ? () => setShowDashboard(true) : undefined}
         isDashboardOpen={showDashboard}
       />
       
@@ -271,7 +311,7 @@ function AppContent() {
             ADMIN DASHBOARD & NAVIGATION
            ========================================================= */
         : showDashboard && isAuthenticated ? (
-          isAdmin ? (
+          canAccessDashboard ? (
             <AdminDashboard onBack={() => setShowDashboard(false)} />
           ) : (
             <div className="pt-32 text-center">
@@ -295,7 +335,7 @@ function AppContent() {
           <ChapterDetail 
             chapter={selectedChapter} 
             onBack={handleBackToHome} 
-            onEdit={() => setIsChapterEditorOpen(true)} 
+            onEdit={canEditSelectedChapter ? () => setIsChapterEditorOpen(true) : undefined} 
           />
         ) : (
           /* =========================================================
@@ -311,7 +351,7 @@ function AppContent() {
             />
             
             <Chapters 
-              chapters={chapters} 
+              chapters={visibleChapters} 
               isLoading={isLoading}
               onSelectChapter={(c) => { setSelectedChapter(c); window.scrollTo(0,0); }} 
             />
@@ -337,7 +377,7 @@ function AppContent() {
       <LoginModal 
         isOpen={isLoginModalOpen} 
         onClose={() => setIsLoginModalOpen(false)}
-        onLoginSuccess={() => { setShowDashboard(true); setIsLoginModalOpen(false); }}
+        onLoginSuccess={handleLoginSuccess}
       />
     </div>
   );

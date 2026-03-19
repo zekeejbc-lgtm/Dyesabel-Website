@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, Trash2, Key, X, Save, User as UserIcon } from 'lucide-react';
 import { AuthService } from '../services/DriveService';
 import { useAuth } from '../contexts/AuthContext';
-import { User, SESSION_TOKEN_KEY, USER_ROLES, ROLE_LABELS, ROLE_COLORS, UserRole } from '../types';
+import { User, USER_ROLES, ROLE_LABELS, ROLE_COLORS, UserRole } from '../types';
 import { getSessionToken } from '../utils/session';
 
 interface NewUserState {
@@ -29,7 +29,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
     username: '',
     password: '',
     email: '',
-    role: 'editor',
+    role: 'member',
     chapterId: ''
   });
 
@@ -63,9 +63,13 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
       return;
     }
 
-    // Validate Chapter ID if creating a Chapter Head
-    if (newUser.role === 'chapter_head' && !newUser.chapterId) {
-      alert('Chapter ID is required for Chapter Heads');
+    if ((newUser.role === 'chapter_head' || newUser.role === 'member') && !newUser.chapterId) {
+      alert('Chapter ID is required for chapter heads and members');
+      return;
+    }
+
+    if (newUser.role === 'admin' && newUser.chapterId) {
+      alert('Admin accounts cannot be assigned to a chapter');
       return;
     }
 
@@ -85,7 +89,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
         username: '',
         password: '',
         email: '',
-        role: 'editor',
+        role: 'member',
         chapterId: ''
       });
       loadUsers();
@@ -164,7 +168,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
             <div>
               <h2 className="text-xl font-bold text-ocean-deep dark:text-white">User Management</h2>
               <p className="text-ocean-deep/60 dark:text-gray-400 mt-1 text-sm">
-                Create and manage admin, editor, and chapter head accounts.
+                Create and manage admin, editor, chapter head, and member accounts. Editors without a chapter are global editors.
               </p>
             </div>
             <button
@@ -292,7 +296,14 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
                     <label className="block text-xs font-bold text-ocean-deep dark:text-gray-400 uppercase mb-1">Role *</label>
                     <select
                       value={newUser.role}
-                      onChange={(e) => setNewUser({ ...newUser, role: e.target.value as UserRole })}
+                      onChange={(e) => {
+                        const nextRole = e.target.value as UserRole;
+                        setNewUser({
+                          ...newUser,
+                          role: nextRole,
+                          chapterId: nextRole === 'admin' ? '' : newUser.chapterId
+                        });
+                      }}
                       className="w-full px-4 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-ocean-deep dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-cyan/50 text-sm"
                     >
                       {USER_ROLES.map((role) => (
@@ -302,10 +313,10 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
                   </div>
 
                   {/* ✅ THE "ADD CHAPTER" FUNCTIONALITY IS HERE */}
-                  {newUser.role === 'chapter_head' && (
+                  {newUser.role !== 'admin' && (
                     <div className="bg-primary-blue/10 border border-primary-blue/30 rounded-lg p-3">
                       <label className="block text-xs font-bold text-primary-blue dark:text-primary-cyan uppercase mb-1">
-                        Chapter ID (Required)
+                        Chapter ID {newUser.role === 'editor' ? '(Optional)' : '(Required)'}
                       </label>
                       <input
                         type="text"
@@ -315,7 +326,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
                         placeholder="e.g. panabo-chapter"
                       />
                       <p className="text-[10px] text-primary-blue/80 dark:text-primary-cyan/80 mt-1">
-                        This ID will create a new chapter page once the user logs in and saves details.
+                        `editor` without a chapter is global. `editor`, `chapter_head`, and `member` with a chapter are scoped to that chapter.
                       </p>
                     </div>
                   )}

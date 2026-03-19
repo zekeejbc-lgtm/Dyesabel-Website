@@ -21,13 +21,14 @@ const PILLAR_ICONS = {
 
 export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, onClose }) => {
   const { user } = useAuth();
+  const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const [editedPillars, setEditedPillars] = useState<Pillar[]>(pillars);
   const [selectedPillarIndex, setSelectedPillarIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   // Check permission
-  if (!user || user.role !== 'admin') {
+  if (!canEdit) {
     return null;
   }
 

@@ -12,9 +12,10 @@ interface LandingPageEditorProps {
 
 export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) => {
   const { user, logout } = useAuth();
+  const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const [isSaving, setIsSaving] = useState(false);
 
-  if (!user || user.role !== 'admin') {
+  if (!canEdit) {
     return null;
   }
   

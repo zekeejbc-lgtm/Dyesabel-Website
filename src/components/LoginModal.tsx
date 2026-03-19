@@ -61,8 +61,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
       setError(result.error || 'Login failed. Please try again.');
       return;
     }
-
-    onLoginSuccess?.();
   };
 
   if (!isOpen && !isVisible) return null;

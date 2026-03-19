@@ -34,6 +34,9 @@ interface AdminDashboardProps {
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   // ✅ FIXED: Use email if name/username isn't on the type
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const isGlobalEditor = user?.role === 'editor' && !user?.chapterId;
+  const canEdit = isAdmin || isGlobalEditor;
   const [activeEditor, setActiveEditor] = useState<string | null>(null);
   
   // ✅ FIXED: Initialize as empty arrays, do NOT import pillarsData
@@ -118,8 +121,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   };
 
-  const canEdit = user?.role === 'admin';
-
   if (!canEdit) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-ocean-light to-ocean-mint dark:from-ocean-deep dark:to-ocean-dark flex items-center justify-center p-4">
@@ -172,13 +173,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </div>
               </div>
               
-              <button
-                onClick={() => setActiveEditor('logo')}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-amber-500/30"
-              >
-                <Edit size={18} />
-                Edit Logo
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setActiveEditor('logo')}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-amber-500/30"
+                >
+                  <Edit size={18} />
+                  Edit Logo
+                </button>
+              )}
             </div>
           </div>
 
@@ -319,6 +322,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
               </button>
 
               {/* Logo & Branding Card */}
+              {isAdmin && (
               <button
                 onClick={() => setActiveEditor('logo')}
                 className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-pink-500 dark:hover:border-pink-400 transition-all hover:shadow-xl text-left group"
@@ -339,9 +343,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   Stored in Google Drive
                 </div>
               </button>
+              )}
 
               {/* Chapters & Members Management Card (Admin Only) */}
-              {user?.role === 'admin' && (
+              {isAdmin && (
                 <button
                   onClick={() => setActiveEditor('chapters')}
                   className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-teal-500 dark:hover:border-teal-400 transition-all hover:shadow-xl text-left group"
@@ -403,14 +408,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         />
       )}
 
-      {activeEditor === 'logo' && (
+      {activeEditor === 'logo' && isAdmin && (
         <LogoEditor
           onClose={() => setActiveEditor(null)}
           onLogoUpdate={() => {}}
         />
       )}
 
-      {activeEditor === 'chapters' && user?.role === 'admin' && (
+      {activeEditor === 'chapters' && isAdmin && (
         <ChaptersManagement
           onBack={() => setActiveEditor(null)}
         />

@@ -66,13 +66,25 @@ function requireSession_(sessionToken) {
 
 function requireAdminOrEditor_(sessionToken) {
   var user = getSessionUser_(sessionToken);
-  if (user.role !== 'admin' && user.role !== 'editor') throw new Error('Insufficient permissions');
+  if (user.role !== 'admin' && !(user.role === 'editor' && !user.chapterId)) throw new Error('Insufficient permissions');
   return user;
 }
 
 function requireAdminOnly_(sessionToken) {
   var user = getSessionUser_(sessionToken);
   if (user.role !== 'admin') throw new Error('Admin access required');
+  return user;
+}
+
+function requireChapterManager_(sessionToken, chapterId) {
+  var user = getSessionUser_(sessionToken);
+  var sameChapter = String(user.chapterId || '') === String(chapterId || '');
+  var isGlobalEditor = user.role === 'editor' && !user.chapterId;
+  var isScopedEditor = user.role === 'editor' && sameChapter;
+  var isScopedChapterHead = user.role === 'chapter_head' && sameChapter;
+  if (user.role !== 'admin' && !isGlobalEditor && !isScopedEditor && !isScopedChapterHead) {
+    throw new Error('Insufficient permissions for this chapter');
+  }
   return user;
 }
 
@@ -692,8 +704,7 @@ function rewriteChaptersSheets_(ss, chapters) {
 }
 
 function saveChapter_(data) {
-  var user = getSessionUser_(data.sessionToken);
-  if (user.role !== 'admin' && String(user.chapterId) !== String(data.chapterId)) throw new Error('Insufficient permissions for this chapter');
+  requireChapterManager_(data.sessionToken, data.chapterId);
   var ss = getMainSpreadsheet_();
   var chapters = loadAllChaptersNormalized_(ss);
   var nextChapter = normalizeChapterRecord_(data.chapterId, data.chapterData || {});

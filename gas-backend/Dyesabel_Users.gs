@@ -2,6 +2,8 @@ var USERS_SHEET = 'Users';
 var SESSIONS_SHEET = 'Sessions';
 var USER_HEADERS = ['Username', 'Password', 'Email', 'Role', 'UserId', 'ChapterId'];
 var SESSION_HEADERS = ['Token', 'UserData', 'ExpiresAt'];
+var ALLOWED_USER_ROLES = { admin: true, editor: true, chapter_head: true, member: true };
+var USERS_ON_EDIT_TRIGGER_HANDLER = 'runUsersOnEditTrigger';
 
 function doGet() {
   return dyesabelCreateResponse_(true, null, { message: 'Dyesabel Users API is online.' });
@@ -55,6 +57,10 @@ function getSessionTimeoutMs_() {
   return Number(dyesabelRequireScriptProperty_('SESSION_TIMEOUT_MS'));
 }
 
+function onEdit(e) {
+  handleUsersSheetEdit_(e);
+}
+
 function initializeUsersSystem_() {
   var usersSheet = getUsersSheet_();
   if (usersSheet.getLastRow() === 0) usersSheet.appendRow(USER_HEADERS);
@@ -66,9 +72,10 @@ function initializeUsersSystem_() {
 function login_(data) {
   var rows = getUsersSheet_().getDataRange().getValues();
   for (var i = 1; i < rows.length; i++) {
-    if (rows[i][0] === data.username && verifyPassword_(data.password, rows[i][1])) {
+    var normalized = normalizeStoredUserRow_(rows[i], i + 1);
+    if (normalized.username === data.username && verifyPassword_(data.password, normalized.password)) {
       var token = Utilities.getUuid() + '_' + new Date().getTime();
-      var user = { username: rows[i][0], email: rows[i][2], role: rows[i][3], id: rows[i][4], chapterId: rows[i][5] };
+      var user = buildUserObjectFromRow_(normalized);
       storeSession_(token, user);
       return { sessionToken: token, user: user };
     }
@@ -78,8 +85,10 @@ function login_(data) {
 
 function register_(data) {
   if (!dyesabelGetBooleanProperty_('ALLOW_PUBLIC_REGISTER', true)) throw new Error('Registration is disabled');
+  if (!data.chapterId) throw new Error('Chapter ID is required for member registration');
   ensureUniqueUser_(data.username, data.email);
-  getUsersSheet_().appendRow([data.username, hashPassword_(data.password), data.email, 'user', Utilities.getUuid(), '']);
+  var userId = generateUserId_();
+  getUsersSheet_().appendRow([data.username, hashPassword_(data.password), data.email, 'member', userId, data.chapterId]);
   return { message: 'Registration successful' };
 }
 
@@ -104,9 +113,14 @@ function logout_(data) {
 function createUser_(data) {
   validateAdminOnly_(data.sessionToken);
   ensureUniqueUser_(data.username, data.email);
-  var userId = Utilities.getUuid();
-  getUsersSheet_().appendRow([data.username, hashPassword_(data.password), data.email, data.role, userId, data.chapterId || '']);
-  return { message: 'User created successfully', user: { username: data.username, email: data.email, role: data.role, id: userId, chapterId: data.chapterId || '' } };
+  var role = normalizeUserRole_(data.role);
+  if ((role === 'chapter_head' || role === 'member') && !data.chapterId) throw new Error('Chapter ID is required for chapter heads and members');
+  if (role === 'admin' && data.chapterId) throw new Error('Admin accounts cannot be assigned to a chapter');
+  var userId = data.userId || generateUserId_();
+  if (!isValidUserId_(userId)) throw new Error('User ID must match format dyesabel-yy-xxxx');
+  ensureUniqueUserId_(userId);
+  getUsersSheet_().appendRow([data.username, hashPassword_(data.password), data.email, role, userId, role === 'admin' ? '' : (data.chapterId || '')]);
+  return { message: 'User created successfully', user: { username: data.username, email: data.email, role: role, id: userId, chapterId: role === 'admin' ? '' : (data.chapterId || '') } };
 }
 
 function updatePassword_(data) {
@@ -125,9 +139,10 @@ function updatePassword_(data) {
 
 function listUsers_(data) {
   validateAdminOnly_(data.sessionToken);
+  var rows = getUsersSheet_().getDataRange().getValues();
   return {
-    users: getUsersSheet_().getDataRange().getValues().slice(1).filter(function(row) { return row[0]; }).map(function(row) {
-      return { username: row[0], email: row[2], role: row[3], id: row[4], chapterId: row[5] };
+    users: rows.slice(1).filter(function(row) { return row[0]; }).map(function(row, index) {
+      return buildUserObjectFromRow_(normalizeStoredUserRow_(row, index + 2));
     })
   };
 }
@@ -159,7 +174,7 @@ function validateAdminOnlyAction_(data) {
 
 function validateAdminOrEditor_(sessionToken) {
   var user = getSessionOrThrow_(sessionToken).user;
-  if (user.role !== 'admin' && user.role !== 'editor') throw new Error('Insufficient permissions');
+  if (user.role !== 'admin' && !(user.role === 'editor' && !user.chapterId)) throw new Error('Insufficient permissions');
   return user;
 }
 
@@ -200,6 +215,96 @@ function ensureUniqueUser_(username, email) {
   });
 }
 
+function ensureUniqueUserId_(userId) {
+  getUsersSheet_().getDataRange().getValues().slice(1).forEach(function(row) {
+    if (String(row[4] || '') === String(userId)) throw new Error('User ID already exists');
+  });
+}
+
+function buildUserObjectFromRow_(row) {
+  return {
+    username: row.username,
+    email: row.email,
+    role: row.role,
+    id: row.userId,
+    chapterId: row.chapterId
+  };
+}
+
+function normalizeStoredUserRow_(row, rowNumber) {
+  var normalized = {
+    username: String(row[0] || ''),
+    password: String(row[1] || ''),
+    email: String(row[2] || ''),
+    role: normalizeUserRole_(row[3]),
+    userId: String(row[4] || ''),
+    chapterId: String(row[5] || '')
+  };
+  var sheet = getUsersSheet_();
+
+  if (!normalized.password) throw new Error('User record has no password for username: ' + normalized.username);
+
+  if (normalized.password.indexOf('$') === -1) {
+    normalized.password = hashPassword_(normalized.password);
+    sheet.getRange(rowNumber, 2).setValue(normalized.password);
+  }
+
+  if (!normalized.userId || !isValidUserId_(normalized.userId)) {
+    normalized.userId = generateUniqueUserId_();
+    sheet.getRange(rowNumber, 5).setValue(normalized.userId);
+  }
+
+  if (normalized.role === 'admin' && normalized.chapterId) {
+    normalized.chapterId = '';
+    sheet.getRange(rowNumber, 6).setValue('');
+  }
+
+  if (String(row[3] || '') !== normalized.role) {
+    sheet.getRange(rowNumber, 4).setValue(normalized.role);
+  }
+
+  if ((normalized.role === 'chapter_head' || normalized.role === 'member') && !normalized.chapterId) {
+    throw new Error('Chapter-bound role missing chapter assignment for username: ' + normalized.username);
+  }
+
+  return normalized;
+}
+
+function normalizeUserRole_(role) {
+  var normalized = String(role || 'member').toLowerCase();
+  if (normalized === 'user') normalized = 'member';
+  if (!ALLOWED_USER_ROLES[normalized]) throw new Error('Unsupported role: ' + role);
+  return normalized;
+}
+
+function generateUserId_() {
+  var yearSuffix = String(new Date().getFullYear()).slice(-2);
+  var alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  var code = '';
+  for (var i = 0; i < 4; i++) {
+    code += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+  }
+  return 'dyesabel-' + yearSuffix + '-' + code;
+}
+
+function generateUniqueUserId_() {
+  var userId = generateUserId_();
+  while (doesUserIdExist_(userId)) {
+    userId = generateUserId_();
+  }
+  return userId;
+}
+
+function doesUserIdExist_(userId) {
+  return getUsersSheet_().getDataRange().getValues().slice(1).some(function(row) {
+    return String(row[4] || '') === String(userId);
+  });
+}
+
+function isValidUserId_(userId) {
+  return /^dyesabel-\d{2}-[a-z0-9]{4}$/.test(String(userId || ''));
+}
+
 function hashPassword_(password) {
   var salt = Utilities.getUuid();
   return salt + '$' + Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, salt + password));
@@ -210,6 +315,70 @@ function verifyPassword_(inputPassword, storedPassword) {
   if (storedPassword.indexOf('$') === -1) return inputPassword === storedPassword;
   var parts = storedPassword.split('$');
   return Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, parts[0] + inputPassword)) === parts[1];
+}
+
+function normalizeAllUsers_() {
+  var sheet = getUsersSheet_();
+  var rows = sheet.getDataRange().getValues();
+  var updated = 0;
+  for (var i = 1; i < rows.length; i++) {
+    var before = JSON.stringify(rows[i]);
+    normalizeStoredUserRow_(rows[i], i + 1);
+    var after = JSON.stringify(sheet.getRange(i + 1, 1, 1, USER_HEADERS.length).getValues()[0]);
+    if (before !== after) updated++;
+  }
+  return { message: 'Users normalized successfully.', updated: updated };
+}
+
+function handleUsersSheetEdit_(e) {
+  if (!e || !e.range) return;
+  var sheet = e.range.getSheet();
+  if (!sheet || sheet.getName() !== USERS_SHEET) return;
+  if (e.range.getRow() <= 1) return;
+
+  var editedColumn = e.range.getColumn();
+  var rowNumber = e.range.getRow();
+  if (editedColumn < 1 || editedColumn > USER_HEADERS.length) return;
+
+  var rowValues = sheet.getRange(rowNumber, 1, 1, USER_HEADERS.length).getValues()[0];
+  if (!rowValues[0]) return;
+  normalizeStoredUserRow_(rowValues, rowNumber);
+}
+
+function ensureUsersOnEditTrigger_() {
+  var spreadsheet = getUsersSpreadsheet_();
+  var spreadsheetId = spreadsheet.getId();
+  var triggers = ScriptApp.getProjectTriggers();
+  var created = false;
+
+  for (var i = 0; i < triggers.length; i++) {
+    var trigger = triggers[i];
+    if (trigger.getHandlerFunction() === USERS_ON_EDIT_TRIGGER_HANDLER && trigger.getTriggerSourceId() === spreadsheetId) {
+      return { message: 'Users on-edit trigger already exists.' };
+    }
+  }
+
+  ScriptApp.newTrigger(USERS_ON_EDIT_TRIGGER_HANDLER)
+    .forSpreadsheet(spreadsheetId)
+    .onEdit()
+    .create();
+  created = true;
+
+  return { message: created ? 'Users on-edit trigger created successfully.' : 'Users on-edit trigger already exists.' };
+}
+
+function removeUsersOnEditTriggers_() {
+  var spreadsheetId = getUsersSpreadsheet_().getId();
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  for (var i = 0; i < triggers.length; i++) {
+    var trigger = triggers[i];
+    if (trigger.getHandlerFunction() === USERS_ON_EDIT_TRIGGER_HANDLER && trigger.getTriggerSourceId() === spreadsheetId) {
+      ScriptApp.deleteTrigger(trigger);
+      removed++;
+    }
+  }
+  return { message: 'Users on-edit triggers removed.', removed: removed };
 }
 
 function migrateUsersFromSourceWorkbook_() {
@@ -244,4 +413,20 @@ function runMigrateUsersFromSourceWorkbook() {
 
 function runMigrateSessionsFromSourceWorkbook() {
   return migrateSessionsFromSourceWorkbook_();
+}
+
+function runNormalizeAllUsers() {
+  return normalizeAllUsers_();
+}
+
+function runUsersOnEditTrigger(e) {
+  handleUsersSheetEdit_(e);
+}
+
+function runSetupUsersOnEditTrigger() {
+  return ensureUsersOnEditTrigger_();
+}
+
+function runRemoveUsersOnEditTriggers() {
+  return removeUsersOnEditTriggers_();
 }

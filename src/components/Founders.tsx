@@ -69,7 +69,14 @@ export const Founders: React.FC<FoundersProps> = ({
                   <img
                     src={convertToCORSFreeLink(founder.imageUrl) || getAvatarUrl(founder.name)}
                     alt={founder.name}
+                    referrerPolicy="no-referrer"
                     onError={(event) => {
+                      console.error('[Founders] Founder image failed to load', {
+                        founder,
+                        attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                        rawImageUrl: founder.imageUrl,
+                        normalizedImageUrl: convertToCORSFreeLink(founder.imageUrl)
+                      });
                       event.currentTarget.src = getAvatarUrl(founder.name);
                     }}
                     className="w-full h-full object-cover rounded-full border-[3px] border-white/30 dark:border-white/20 shadow-xl transform group-hover:scale-105 transition-transform duration-500 relative z-10"
@@ -123,7 +130,14 @@ export const Founders: React.FC<FoundersProps> = ({
                         <img
                           src={convertToCORSFreeLink(executive.imageUrl) || getAvatarUrl(executive.name)}
                           alt={executive.name}
+                          referrerPolicy="no-referrer"
                           onError={(event) => {
+                            console.error('[Founders] Executive image failed to load', {
+                              executive,
+                              attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                              rawImageUrl: executive.imageUrl,
+                              normalizedImageUrl: convertToCORSFreeLink(executive.imageUrl)
+                            });
                             event.currentTarget.src = getAvatarUrl(executive.name);
                           }}
                           className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-white/30 shadow-lg flex-shrink-0"

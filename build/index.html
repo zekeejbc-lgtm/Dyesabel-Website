@@ -18,6 +18,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;900&family=Lobster&display=swap" rel="stylesheet">
 
     <style>
+      html.dark {
+        color-scheme: dark;
+      }
       html {
         scroll-behavior: smooth;
         scroll-padding-top: 80px;
@@ -42,11 +45,22 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
       }
     </style>
-    <script type="module" crossorigin src="/assets/index-D0qQK59C.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-BOEUbeWS.css">
+    <script type="module" crossorigin src="/assets/index-Iq6LEbI-.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BWGSNXxI.css">
   <link rel="manifest" href="/manifest.webmanifest"></head>
   <body class="text-slate-900 dark:text-white transition-colors duration-500 antialiased">
     <div id="root"></div>
+    <script>
+      (function() {
+        var savedTheme = localStorage.getItem('theme');
+        var theme = savedTheme || 'dark';
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      })();
+    </script>
     <script>
       function reveal() {
         var reveals = document.querySelectorAll(".reveal");

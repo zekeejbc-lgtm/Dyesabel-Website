@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, Pencil, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { DriveService, DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY, Chapter } from '../types';
+import { Chapter } from '../types';
+import { getSessionToken } from '../utils/session';
 
 interface ChapterEditorProps {
   onBack: () => void;
@@ -62,8 +63,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       try {
         const result = await DataService.loadChapter(chapterId);
         if (result.success && result.chapter) {
-          console.log("Fetched fresh chapter data for editor:", result.chapter);
-          
           const newData = {
             ...chapterData, // Keep defaults for missing fields
             ...result.chapter, // Overwrite with backend data
@@ -79,9 +78,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
           setChapterData(newData);
           setOriginalData(newData); // Update backup
         }
-      } catch (error) {
-        console.error("Failed to load chapter for editing:", error);
-      }
+      } catch (error) {}
     };
 
     fetchFreshData();
@@ -97,7 +94,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please login again.');
         setIsSaving(false);
@@ -133,7 +130,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         activities: chapterData.activities
       };
 
-      console.log('Saving chapter data:', payload);
       const result = await DataService.saveChapter(chapterId, payload, sessionToken);
 
       if (result.success) {
@@ -144,7 +140,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         alert('Error saving changes: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error saving chapter:', error);
       alert('Error saving chapter: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsSaving(false);
@@ -154,7 +149,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   // Generalized Image Upload Handler
   const handleUpload = async (file: File, field: string) => {
     try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY) || '';
+      const sessionToken = getSessionToken();
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        return;
+      }
       const result = await DriveService.uploadImage(file, sessionToken);
       
       if (result.success && result.fileUrl) {
@@ -175,7 +174,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
 
   const handleActivityImageUpload = async (index: number, file: File) => {
     try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY) || '';
+      const sessionToken = getSessionToken();
+      if (!sessionToken) {
+        alert('Session expired. Please login again.');
+        return;
+      }
       const result = await DriveService.uploadImage(file, sessionToken);
       if (result.success && result.fileUrl) {
         handleActivityChange(index, 'imageUrl', result.fileUrl);

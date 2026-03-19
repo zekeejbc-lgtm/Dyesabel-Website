@@ -203,6 +203,23 @@ function getTargetFolder(customId) {
   }
 }
 
+function buildDriveImageUrl(fileId) {
+  return `https://drive.google.com/uc?export=view&id=${fileId}`;
+}
+
+function ensureFileIsPublic(file) {
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (e) {
+    throw new Error('Uploaded image could not be shared publicly. Check Drive sharing settings for the target folder.');
+  }
+
+  const sharingAccess = file.getSharingAccess();
+  if (sharingAccess !== DriveApp.Access.ANYONE && sharingAccess !== DriveApp.Access.ANYONE_WITH_LINK) {
+    throw new Error('Uploaded image is not publicly accessible. Check Drive sharing settings for the target folder.');
+  }
+}
+
 function handleUploadImage(data) {
   validateSessionOrThrow(data.sessionToken);
 
@@ -214,25 +231,20 @@ function handleUploadImage(data) {
   const blob = Utilities.newBlob(decoded, data.fileType, data.fileName);
   const file = folder.createFile(blob);
 
-  // 3. Set Public Access (Silent Fail Safe)
-  try {
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  } catch (e) {
-    Logger.log('Warning: Could not set public permission. ' + e.toString());
-  }
+  // 3. Ensure the uploaded image can be rendered publicly on the site
+  ensureFileIsPublic(file);
 
   // 4. Log
   logUpload(data.sessionToken, file.getId(), file.getName(), folder.getName());
 
-  // Use the "thumbnail" hack with size w4000 (high res) to bypass CORS issues
-  const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+  const publicImageUrl = buildDriveImageUrl(file.getId());
 
   return {
     fileId: file.getId(),
     fileName: file.getName(),
-    fileUrl: corsFreeUrl,
+    fileUrl: publicImageUrl,
     originalUrl: file.getDownloadUrl(),
-    thumbnailUrl: corsFreeUrl
+    thumbnailUrl: publicImageUrl
   };
 }
 
@@ -246,14 +258,14 @@ function handleUploadFromUrl(data) {
   blob.setName(data.fileName);
   
   const file = folder.createFile(blob);
-  try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch(e){}
+  ensureFileIsPublic(file);
 
-  const corsFreeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+  const publicImageUrl = buildDriveImageUrl(file.getId());
 
   return {
     fileId: file.getId(),
     fileName: file.getName(),
-    fileUrl: corsFreeUrl 
+    fileUrl: publicImageUrl 
   };
 }
 
@@ -300,7 +312,7 @@ function handleListImages(data) {
   while (files.hasNext()) {
     const file = files.next();
     if (file.getMimeType().indexOf('image/') > -1) {
-      const safeUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+      const safeUrl = buildDriveImageUrl(file.getId());
       list.push({
         fileId: file.getId(),
         fileName: file.getName(),
@@ -636,9 +648,9 @@ function processAndUploadImages(item) {
         const folder = getTargetFolder(null); 
         const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, fileName);
         const file = folder.createFile(blob);
-        
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-        const driveUrl = `https://drive.google.com/thumbnail?id=${file.getId()}&sz=w4000`;
+
+        ensureFileIsPublic(file);
+        const driveUrl = buildDriveImageUrl(file.getId());
         
         item[key] = driveUrl;
         
@@ -1429,8 +1441,7 @@ function initializeSystem() {
   if (!ss.getSheetByName(SHEET_USERS)) {
     const s = ss.insertSheet(SHEET_USERS);
     s.appendRow(['Username', 'Password', 'Email', 'Role', 'UserId', 'ChapterId']);
-    s.appendRow(['admin', 'admin123', 'admin@example.com', 'admin', Utilities.getUuid(), '']);
-    Logger.log('Created Users sheet with default admin.');
+    Logger.log('Created Users sheet headers. Add users explicitly before enabling login.');
   }
 
   if (!ss.getSheetByName(SHEET_SESSIONS)) {

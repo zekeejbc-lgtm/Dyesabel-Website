@@ -9,6 +9,7 @@ import { LogoEditor } from './LogoEditor';
 import { ChaptersManagement } from './ChaptersManagement';
 import { DataService } from '../services/DriveService';
 import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
+import { getSessionToken } from '../utils/session';
 
 // Initial Data Constants (Fallbacks - You can keep or remove these as needed)
 const initialPartnerCategories = [
@@ -49,8 +50,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        console.log('Fetching dashboard data...');
-
         const [pillarsRes, partnersRes, foundersRes, executiveOfficersRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.loadPartners(),
@@ -75,7 +74,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         }
 
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
       } finally {
         setIsLoading(false);
       }
@@ -88,7 +86,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const handleSavePillars = async (updatedPillars: any) => {
     try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please login again.');
         return;
@@ -105,7 +103,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   const handleSavePartners = async (updatedPartners: any) => {
     try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please login again.');
         return;
@@ -408,9 +406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
       {activeEditor === 'logo' && (
         <LogoEditor
           onClose={() => setActiveEditor(null)}
-          onLogoUpdate={(newLogoUrl) => {
-            console.log('Logo updated:', newLogoUrl);
-          }}
+          onLogoUpdate={() => {}}
         />
       )}
 

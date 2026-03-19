@@ -30,7 +30,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             logout(); // Token expired or invalid
           }
         } catch (error) {
-          console.error("Session validation failed", error);
           logout(); // Clear session on error
         }
       }
@@ -55,7 +54,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: result.error || 'Invalid credentials' };
       }
     } catch (error) {
-      console.error('Login error:', error);
       const errorMsg = error instanceof Error ? error.message : 'Network error';
       const userFriendlyError = errorMsg.includes('fetch') || errorMsg.includes('Network')
         ? 'Unable to reach server. Please check your internet connection and try again.'

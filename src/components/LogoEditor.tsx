@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Image as ImageIcon, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadLogo, getOrganizationSettings, updateOrganizationSettings } from '../utils/driveUpload';
+import { getSessionToken } from '../utils/session';
 
 interface LogoEditorProps {
   onClose: () => void;
@@ -30,20 +31,18 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
     
     setLoading(true);
     try {
-      const sessionToken = localStorage.getItem('dyesabel_session');
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please log in again.');
         return;
       }
 
-      const result = await getOrganizationSettings(sessionToken);
+      const result = await getOrganizationSettings();
       if (result.success) {
         setLogoUrl(result.logoUrl || '');
         setPreviewUrl(result.logoUrl || '');
         setOrganizationName(result.organizationName || 'Dyesabel PH');
       }
-    } catch (error) {
-      console.error('Error loading settings:', error);
     } finally {
       setLoading(false);
     }
@@ -65,7 +64,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
 
     setUploading(true);
     try {
-      const sessionToken = localStorage.getItem('dyesabel_session');
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please log in again.');
         return;
@@ -83,7 +82,6 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
       }
     } catch (error) {
       alert('Error uploading logo. Please try again.');
-      console.error('Upload error:', error);
     } finally {
       setUploading(false);
     }
@@ -94,7 +92,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
 
     setSaving(true);
     try {
-      const sessionToken = localStorage.getItem('dyesabel_session');
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please log in again.');
         return;
@@ -116,7 +114,6 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
       }
     } catch (error) {
       alert('Error saving settings. Please try again.');
-      console.error('Save error:', error);
     } finally {
       setSaving(false);
     }

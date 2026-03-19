@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
 import { DataService, DriveService, convertToCORSFreeLink } from '../services/DriveService';
+import { getSessionToken } from '../utils/session';
 
 interface FoundersEditorProps {
   founders: Founder[];
@@ -261,7 +263,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
     onUploaded: (value: string) => void,
     uploadKey: string
   ) => {
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const sessionToken = getSessionToken();
     if (!sessionToken) {
       alert('Session expired. Please log in again.');
       return;
@@ -284,7 +286,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   };
 
   const saveContent = async () => {
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const sessionToken = getSessionToken();
     if (!sessionToken) {
       throw new Error('Session expired. Please log in again.');
     }
@@ -307,7 +309,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
     try {
       await saveContent();
       onSave({ founders: editedFounders, executiveOfficers: editedExecutiveOfficers });
-      alert('Founders and executive officers saved successfully.');
+      toast.success('Founders and executive officers saved successfully.');
       onClose();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Error saving content. Please try again.');
@@ -429,7 +431,14 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                           <img
                             src={convertToCORSFreeLink(founder.imageUrl) || getAvatarUrl(founder.name)}
                             alt={founder.name}
+                            referrerPolicy="no-referrer"
                             onError={(event) => {
+                              console.error('[FoundersEditor] Founder preview image failed to load', {
+                                founder,
+                                attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                                rawImageUrl: founder.imageUrl,
+                                normalizedImageUrl: convertToCORSFreeLink(founder.imageUrl)
+                              });
                               event.currentTarget.src = getAvatarUrl(founder.name);
                             }}
                             className="w-full h-full object-cover"
@@ -542,7 +551,14 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                               <img
                                 src={convertToCORSFreeLink(officer.imageUrl) || getAvatarUrl(officer.name)}
                                 alt={officer.name}
+                                referrerPolicy="no-referrer"
                                 onError={(event) => {
+                                  console.error('[FoundersEditor] Executive preview image failed to load', {
+                                    officer,
+                                    attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                                    rawImageUrl: officer.imageUrl,
+                                    normalizedImageUrl: convertToCORSFreeLink(officer.imageUrl)
+                                  });
                                   event.currentTarget.src = getAvatarUrl(officer.name);
                                 }}
                                 className="w-full h-full object-cover"

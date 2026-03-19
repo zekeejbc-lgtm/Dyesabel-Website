@@ -14,7 +14,7 @@ declare let self: ServiceWorkerGlobalScope;
 self.skipWaiting();
 clientsClaim();
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAMES = {
   pages: `pages-${CACHE_VERSION}`,
   gasApi: `gas-api-${CACHE_VERSION}`,
@@ -137,7 +137,26 @@ registerRoute(
 
 // Strategy for Images
 registerRoute(
-  ({ request }) => request.destination === 'image',
+  ({ request, url }) =>
+    request.destination === 'image' &&
+    (
+      url.hostname === 'drive.google.com' ||
+      url.hostname === 'lh3.googleusercontent.com' ||
+      url.hostname === 'drive.usercontent.google.com' ||
+      url.hostname.endsWith('.googleusercontent.com')
+    ),
+  new NetworkOnly()
+);
+
+registerRoute(
+  ({ request, url }) =>
+    request.destination === 'image' &&
+    !(
+      url.hostname === 'drive.google.com' ||
+      url.hostname === 'lh3.googleusercontent.com' ||
+      url.hostname === 'drive.usercontent.google.com' ||
+      url.hostname.endsWith('.googleusercontent.com')
+    ),
   new CacheFirst({
     cacheName: CACHE_NAMES.images,
     plugins: [

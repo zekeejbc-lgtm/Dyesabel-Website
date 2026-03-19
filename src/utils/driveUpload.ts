@@ -52,11 +52,9 @@ export async function uploadImageToDrive(
       try {
         const deleteResult = await DriveService.deleteImage(oldFileId, sessionToken);
         if (!deleteResult.success) {
-          console.warn('Failed to delete old image:', deleteResult.error);
           // Continue anyway - old image stays but new one will be uploaded
         }
       } catch (deleteError) {
-        console.warn('Error deleting old image:', deleteError);
         // Continue with upload despite delete failure
       }
     }
@@ -77,7 +75,6 @@ export async function uploadImageToDrive(
       };
     }
   } catch (error) {
-    console.error('Upload error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Network error. Please try again.'
@@ -135,7 +132,6 @@ export async function deleteImageFromDrive(
       error: result.error
     };
   } catch (error) {
-    console.error('Delete error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Network error. Please try again.'
@@ -191,7 +187,6 @@ export async function getOrganizationSettings(): Promise<{
       };
     }
   } catch (error) {
-    console.error('Error fetching org settings:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to load organization settings'
@@ -221,7 +216,6 @@ export async function updateOrganizationSettings(
       error: result.error
     };
   } catch (error) {
-    console.error('Error updating org settings:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update organization settings'

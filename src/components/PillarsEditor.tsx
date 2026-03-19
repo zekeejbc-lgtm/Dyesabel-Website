@@ -3,6 +3,7 @@ import { Pillar, PillarActivity } from '../types';
 import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { uploadImageToDrive } from '../utils/driveUpload';
+import { getSessionToken } from '../utils/session';
 
 interface PillarsEditorProps {
   pillars: Pillar[];
@@ -67,7 +68,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   const handleImageUpload = async (pillarIndex: number, activityIndex: number | null, file: File) => {
     setUploadingImage(true);
     try {
-      const sessionToken = localStorage.getItem('dyesabel_session');
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please log in again.');
         setUploadingImage(false);
@@ -75,13 +76,10 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
       }
 
       const folder = activityIndex !== null ? 'pillar-activities' : 'pillars';
-      console.log('Starting image upload...', { folder, fileName: file.name, size: file.size });
       
       const result = await uploadImageToDrive(file, folder, sessionToken);
-      console.log('Upload result:', result);
 
       if (result.success && result.url) {
-        console.log('Image uploaded successfully:', result.url);
         if (activityIndex !== null) {
           updateActivity(pillarIndex, activityIndex, 'imageUrl', result.url);
         } else {
@@ -89,11 +87,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
         }
         alert('Image uploaded successfully!');
       } else {
-        console.error('Upload failed:', result.error);
         alert('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Upload error:', error);
       alert('Error uploading image. Please try again.');
     } finally {
       setUploadingImage(false);

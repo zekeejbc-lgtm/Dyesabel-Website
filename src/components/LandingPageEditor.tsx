@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Layout, Type, Image } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY } from '../types';
+import { getSessionToken } from '../utils/session';
 
 interface LandingPageEditorProps {
   onBack: () => void;
@@ -29,16 +31,14 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const sessionToken = getSessionToken();
       if (!sessionToken) {
         alert('Session expired. Please login again.');
         setIsSaving(false);
         return;
       }
 
-      console.log('Saving landing page data:', pageData);
       const result = await DataService.saveLandingPageData(pageData, sessionToken);
-      console.log('Save result:', result);
 
       if (result.success) {
         alert('Landing page changes saved successfully!');
@@ -46,7 +46,6 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
         alert('Error saving changes: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Error saving landing page:', error);
       alert('Error saving landing page: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsSaving(false);
@@ -54,10 +53,20 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
   };
 
   const handleLogout = () => {
-    if (confirm('Are you sure you want to logout?')) {
-      logout();
-      onBack();
-    }
+    toast.warning('Log out now?', {
+      description: 'Your current session will be ended on this device.',
+      action: {
+        label: 'Log out',
+        onClick: () => {
+          logout();
+          onBack();
+        }
+      },
+      cancel: {
+        label: 'Cancel',
+        onClick: () => {}
+      }
+    });
   };
 
   return (

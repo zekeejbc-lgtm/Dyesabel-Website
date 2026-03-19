@@ -1,308 +1,477 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CreditCard, Smartphone, QrCode, Copy, CheckCircle, Heart, Globe, TrendingUp, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  CheckCircle,
+  Copy,
+  CreditCard,
+  Globe,
+  Heart,
+  Loader2,
+  QrCode,
+  ShieldCheck,
+  Smartphone,
+  TrendingUp
+} from 'lucide-react';
+import {
+  DonationAllocation,
+  DonationMethod,
+  DonationRecord,
+  DonationsService
+} from '../services/DonationsService';
 
 interface DonatePageProps {
   onBack: () => void;
 }
 
-interface RecentDonation {
-  id: string;
-  name: string;
-  amount: string;
-  time: string;
-  method: string;
-}
+const formatCurrency = (amount: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat('en-PH', {
+      style: 'currency',
+      currency: currency || 'PHP',
+      maximumFractionDigits: 2
+    }).format(amount);
+  } catch {
+    return `${currency || 'PHP'} ${amount.toFixed(2)}`;
+  }
+};
 
-const recentDonations: RecentDonation[] = [
-  { id: '1', name: 'Anonymous', amount: '₱500.00', time: '2 mins ago', method: 'GCash' },
-  { id: '2', name: 'Maria C.', amount: '₱1,000.00', time: '15 mins ago', method: 'Maya' },
-  { id: '3', name: 'John D.', amount: '$50.00', time: '1 hour ago', method: 'Debit Card' },
-  { id: '4', name: 'Sarah L.', amount: '₱2,500.00', time: '3 hours ago', method: 'GoTyme' },
-  { id: '5', name: 'Tech Solutions Inc.', amount: '₱10,000.00', time: '5 hours ago', method: 'Bank Transfer' },
-];
+const formatRelativeTime = (dateString: string) => {
+  if (!dateString) return 'Recently';
+
+  const timestamp = new Date(dateString).getTime();
+  if (Number.isNaN(timestamp)) return 'Recently';
+
+  const seconds = Math.round((timestamp - Date.now()) / 1000);
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+  const intervals = [
+    { unit: 'day', seconds: 60 * 60 * 24 },
+    { unit: 'hour', seconds: 60 * 60 },
+    { unit: 'minute', seconds: 60 }
+  ] as const;
+
+  for (const interval of intervals) {
+    if (Math.abs(seconds) >= interval.seconds) {
+      return rtf.format(Math.round(seconds / interval.seconds), interval.unit);
+    }
+  }
+
+  return rtf.format(seconds, 'second');
+};
+
+const CopyRow: React.FC<{
+  label: string;
+  value: string;
+  fieldKey: string;
+  copiedField: string | null;
+  onCopy: (value: string, fieldKey: string) => void;
+  valueClassName?: string;
+}> = ({ label, value, fieldKey, copiedField, onCopy, valueClassName }) => {
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-xl bg-white/5 px-4 py-3 border border-white/10">
+      <div className="min-w-0">
+        <div className="text-xs font-bold text-ocean-deep/50 dark:text-gray-400 uppercase tracking-wider">
+          {label}
+        </div>
+        <div className={`mt-1 break-words font-semibold text-ocean-deep dark:text-white ${valueClassName || ''}`}>
+          {value || 'Not yet available'}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onCopy(value, fieldKey)}
+        className="mt-0.5 shrink-0 rounded-lg bg-white/10 p-2 text-ocean-deep transition-colors hover:bg-primary-cyan/20 dark:text-white"
+        title={`Copy ${label}`}
+        disabled={!value}
+      >
+        {copiedField === fieldKey ? (
+          <CheckCircle size={16} className="text-green-500" />
+        ) : (
+          <Copy size={16} />
+        )}
+      </button>
+    </div>
+  );
+};
+
+const AllocationList: React.FC<{ allocations: DonationAllocation[] }> = ({ allocations }) => {
+  if (!allocations.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-5 text-sm text-ocean-deep/60 dark:text-gray-400">
+        Donation allocation details will appear here once published from the donations backend.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {allocations.map((item) => (
+        <div key={item.label}>
+          <div className="mb-2 flex justify-between text-sm font-bold text-ocean-deep dark:text-white">
+            <span>{item.label}</span>
+            <span>{item.percentage}%</span>
+          </div>
+          <div className="h-3 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={`h-full rounded-full transition-all duration-1000 ${item.color || 'bg-primary-blue'}`}
+              style={{ width: `${item.percentage}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const RecentDonationsList: React.FC<{ recentDonations: DonationRecord[] }> = ({ recentDonations }) => {
+  if (!recentDonations.length) {
+    return (
+      <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-5 text-sm text-ocean-deep/60 dark:text-gray-400">
+        No recent donations have been published yet.
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-h-[300px] space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+      {recentDonations.map((donation) => (
+        <div
+          key={donation.id}
+          className="flex items-center justify-between rounded-xl bg-white/5 p-3 transition-colors hover:bg-white/10"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-primary-cyan to-primary-blue text-xs font-bold text-white">
+              {donation.name.charAt(0)}
+            </div>
+            <div>
+              <div className="text-sm font-bold text-ocean-deep dark:text-white">{donation.name}</div>
+              <div className="text-xs text-ocean-deep/50 dark:text-gray-400">
+                {donation.method} • {formatRelativeTime(donation.donatedAt)}
+              </div>
+            </div>
+          </div>
+          <div className="font-bold text-primary-blue dark:text-primary-cyan">
+            {formatCurrency(donation.amount, donation.currency)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState<'national' | 'international'>('national');
-  const [selectedLocalMethod, setSelectedLocalMethod] = useState<'gcash' | 'maya' | 'gotyme'>('gcash');
+  const [selectedLocalMethodId, setSelectedLocalMethodId] = useState('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [content, setContent] = useState<Awaited<ReturnType<typeof DonationsService.getPublicDonationData>>['data']>(null);
 
-  // Scroll to top on mount
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
 
-  const handleCopy = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
+  useEffect(() => {
+    const loadDonationContent = async () => {
+      setLoading(true);
+      setError(null);
 
-  const localMethods = {
-    gcash: {
-      name: 'GCash',
-      color: 'bg-blue-600',
-      number: '0917 123 4567',
-      accountName: 'Dyesabel Ph Inc.',
-      qr: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=09171234567'
-    },
-    maya: {
-      name: 'Maya',
-      color: 'bg-green-600',
-      number: '0918 987 6543',
-      accountName: 'Dyesabel Philippines',
-      qr: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=09189876543'
-    },
-    gotyme: {
-      name: 'GoTyme',
-      color: 'bg-indigo-600',
-      number: '0123 4567 8901',
-      accountName: 'Dyesabel Ph Treasury',
-      qr: 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=012345678901'
+      const result = await DonationsService.getPublicDonationData();
+
+      if (!result.success || !result.data) {
+        setError(result.error || 'Unable to load donation details right now.');
+      }
+
+      setContent(result.data || null);
+      setLoading(false);
+    };
+
+    void loadDonationContent();
+  }, []);
+
+  useEffect(() => {
+    if (!content?.localMethods.length) {
+      setSelectedLocalMethodId('');
+      return;
+    }
+
+    setSelectedLocalMethodId((current) => {
+      const hasCurrent = content.localMethods.some((method) => method.id === current);
+      return hasCurrent ? current : content.localMethods[0].id;
+    });
+  }, [content]);
+
+  const selectedLocalMethod = useMemo<DonationMethod | null>(() => {
+    if (!content?.localMethods.length) return null;
+    return content.localMethods.find((method) => method.id === selectedLocalMethodId) || content.localMethods[0];
+  }, [content, selectedLocalMethodId]);
+
+  const handleCopy = async (text: string, field: string) => {
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      window.setTimeout(() => setCopiedField(null), 2000);
+    } catch {
+      setCopiedField(null);
     }
   };
 
+  const bankDetails = content?.bankDetails;
+
   return (
-    <div className="min-h-screen pt-24 pb-12 relative">
-      {/* Background elements inherited from App.tsx */}
-      
-      <div className="container mx-auto px-4 relative z-10">
-        
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <button 
+    <div className="relative min-h-screen pb-12 pt-24">
+      <div className="container relative z-10 mx-auto px-4">
+        <div className="mb-8 flex items-center gap-4">
+          <button
             onClick={onBack}
-            className="p-3 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-md text-ocean-deep dark:text-white transition-all hover:-translate-x-1"
+            className="rounded-full bg-white/10 p-3 text-ocean-deep backdrop-blur-md transition-all hover:-translate-x-1 hover:bg-white/20 dark:text-white"
           >
             <ArrowLeft size={24} />
           </button>
-          <h1 className="text-3xl md:text-5xl font-black text-ocean-deep dark:text-white tracking-tight">
+          <h1 className="text-3xl font-black tracking-tight text-ocean-deep dark:text-white md:text-5xl">
             Support Our Cause
           </h1>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          {/* Main Donation Section */}
-          <div className="lg:col-span-7 space-y-8">
-            
-            {/* Payment Method Selector */}
-            <div className="glass-card rounded-3xl p-1 overflow-hidden flex relative">
-              <button 
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+          <div className="space-y-8 lg:col-span-7">
+            <div className="glass-card relative flex overflow-hidden rounded-3xl p-1">
+              <button
                 onClick={() => setActiveTab('national')}
-                className={`flex-1 py-4 text-center font-bold text-lg rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'national' ? 'bg-gradient-to-r from-primary-cyan to-primary-blue text-white shadow-lg' : 'text-ocean-deep/60 dark:text-gray-400 hover:bg-white/5'}`}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-2xl py-4 text-center text-lg font-bold transition-all duration-300 ${
+                  activeTab === 'national'
+                    ? 'bg-gradient-to-r from-primary-cyan to-primary-blue text-white shadow-lg'
+                    : 'text-ocean-deep/60 hover:bg-white/5 dark:text-gray-400'
+                }`}
               >
                 <Smartphone size={20} />
                 National (PH)
               </button>
-              <button 
+              <button
                 onClick={() => setActiveTab('international')}
-                className={`flex-1 py-4 text-center font-bold text-lg rounded-2xl transition-all duration-300 flex items-center justify-center gap-2 ${activeTab === 'international' ? 'bg-gradient-to-r from-primary-blue to-purple-600 text-white shadow-lg' : 'text-ocean-deep/60 dark:text-gray-400 hover:bg-white/5'}`}
+                className={`flex flex-1 items-center justify-center gap-2 rounded-2xl py-4 text-center text-lg font-bold transition-all duration-300 ${
+                  activeTab === 'international'
+                    ? 'bg-gradient-to-r from-primary-blue to-purple-600 text-white shadow-lg'
+                    : 'text-ocean-deep/60 hover:bg-white/5 dark:text-gray-400'
+                }`}
               >
                 <CreditCard size={20} />
                 International
               </button>
             </div>
 
-            {/* Donation Content Area */}
-            <div className="glass-card rounded-3xl p-6 md:p-10 min-h-[500px] border border-white/20">
-              
-              {activeTab === 'national' ? (
-                <div className="space-y-8 animate-fadeIn">
+            <div className="glass-card min-h-[500px] rounded-3xl border border-white/20 p-6 md:p-10">
+              {loading ? (
+                <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
+                  <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary-blue" />
+                  <p className="font-medium text-ocean-deep dark:text-white">Loading donation details...</p>
+                </div>
+              ) : activeTab === 'national' ? (
+                <div className="animate-fadeIn space-y-8">
                   <div className="text-center">
-                    <h2 className="text-2xl font-bold text-ocean-deep dark:text-white mb-2">Scan or Transfer</h2>
-                    <p className="text-ocean-deep/60 dark:text-gray-300">Choose your preferred local wallet</p>
+                    <h2 className="mb-2 text-2xl font-bold text-ocean-deep dark:text-white">Scan or Transfer</h2>
+                    <p className="text-ocean-deep/60 dark:text-gray-300">
+                      Donate through the payment methods published in the donations backend.
+                    </p>
                   </div>
 
-                  {/* Wallet Toggles */}
-                  <div className="flex justify-center gap-4 flex-wrap">
-                    {(Object.keys(localMethods) as Array<keyof typeof localMethods>).map((method) => (
-                      <button
-                        key={method}
-                        onClick={() => setSelectedLocalMethod(method)}
-                        className={`px-6 py-3 rounded-xl font-bold transition-all transform hover:scale-105 ${
-                          selectedLocalMethod === method 
-                            ? `${localMethods[method].color} text-white shadow-lg scale-105 ring-2 ring-white/20` 
-                            : 'bg-white/10 text-ocean-deep dark:text-gray-300 hover:bg-white/20'
-                        }`}
-                      >
-                        {localMethods[method].name}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Active Wallet Details */}
-                  <div className="bg-white/50 dark:bg-black/20 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row items-center gap-8 border border-white/10 backdrop-blur-sm">
-                    {/* QR Code */}
-                    <div className="bg-white p-4 rounded-xl shadow-xl transform hover:scale-105 transition-transform duration-300">
-                      <img 
-                        src={localMethods[selectedLocalMethod].qr} 
-                        alt={`${localMethods[selectedLocalMethod].name} QR Code`}
-                        className="w-48 h-48 md:w-56 md:h-56 object-contain"
-                      />
-                      <div className="text-center mt-2 text-xs font-bold text-gray-500 uppercase tracking-widest">Scan to Pay</div>
+                  {error && (
+                    <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-ocean-deep dark:text-gray-200">
+                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                      <div>{error}</div>
                     </div>
+                  )}
 
-                    {/* Account Info */}
-                    <div className="flex-1 space-y-6 w-full">
-                      <div>
-                        <label className="text-xs font-bold text-ocean-deep/50 dark:text-gray-400 uppercase tracking-wider mb-1 block">Account Name</label>
-                        <div className="text-xl font-bold text-ocean-deep dark:text-white">{localMethods[selectedLocalMethod].accountName}</div>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-bold text-ocean-deep/50 dark:text-gray-400 uppercase tracking-wider mb-1 block">Account Number</label>
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl md:text-3xl font-mono font-bold text-primary-blue dark:text-primary-cyan tracking-wider">
-                            {localMethods[selectedLocalMethod].number}
-                          </span>
-                          <button 
-                            onClick={() => handleCopy(localMethods[selectedLocalMethod].number, 'number')}
-                            className="p-2 rounded-lg bg-white/10 hover:bg-primary-cyan/20 text-ocean-deep dark:text-white transition-colors relative"
-                            title="Copy Number"
+                  {content?.localMethods.length ? (
+                    <>
+                      <div className="flex flex-wrap justify-center gap-4">
+                        {content.localMethods.map((method) => (
+                          <button
+                            key={method.id}
+                            onClick={() => setSelectedLocalMethodId(method.id)}
+                            className={`transform rounded-xl px-6 py-3 font-bold transition-all hover:scale-105 ${
+                              selectedLocalMethod?.id === method.id
+                                ? `${method.color || 'bg-primary-blue'} scale-105 text-white shadow-lg ring-2 ring-white/20`
+                                : 'bg-white/10 text-ocean-deep hover:bg-white/20 dark:text-gray-300'
+                            }`}
                           >
-                            {copiedField === 'number' ? <CheckCircle size={20} className="text-green-500" /> : <Copy size={20} />}
+                            {method.name}
                           </button>
+                        ))}
+                      </div>
+
+                      {selectedLocalMethod && (
+                        <div className="flex flex-col items-center gap-8 rounded-2xl border border-white/10 bg-white/50 p-6 backdrop-blur-sm dark:bg-black/20 md:flex-row md:p-8">
+                          <div className="rounded-xl bg-white p-4 shadow-xl transition-transform duration-300 hover:scale-105">
+                            {selectedLocalMethod.qrImageUrl ? (
+                              <img
+                                src={selectedLocalMethod.qrImageUrl}
+                                alt={`${selectedLocalMethod.name} QR code`}
+                                className="h-48 w-48 object-contain md:h-56 md:w-56"
+                              />
+                            ) : (
+                              <div className="flex h-48 w-48 flex-col items-center justify-center gap-3 text-center text-gray-500 md:h-56 md:w-56">
+                                <QrCode size={56} />
+                                <span className="text-sm font-semibold">
+                                  QR image not uploaded yet for {selectedLocalMethod.name}
+                                </span>
+                              </div>
+                            )}
+                            <div className="mt-2 text-center text-xs font-bold uppercase tracking-widest text-gray-500">
+                              Scan to Pay
+                            </div>
+                          </div>
+
+                          <div className="w-full flex-1 space-y-4">
+                            <CopyRow
+                              label="Method"
+                              value={selectedLocalMethod.name}
+                              fieldKey={`${selectedLocalMethod.id}-name`}
+                              copiedField={copiedField}
+                              onCopy={handleCopy}
+                            />
+                            <CopyRow
+                              label="Account Name"
+                              value={selectedLocalMethod.accountName}
+                              fieldKey={`${selectedLocalMethod.id}-account-name`}
+                              copiedField={copiedField}
+                              onCopy={handleCopy}
+                            />
+                            <CopyRow
+                              label="Account Number"
+                              value={selectedLocalMethod.accountNumber}
+                              fieldKey={`${selectedLocalMethod.id}-account-number`}
+                              copiedField={copiedField}
+                              onCopy={handleCopy}
+                              valueClassName="font-mono text-lg text-primary-blue dark:text-primary-cyan"
+                            />
+
+                            <div className="flex items-center gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3 text-sm text-ocean-deep/60 dark:text-gray-400">
+                              <ShieldCheck size={16} className="text-yellow-500" />
+                              <span>Please save a screenshot of your transaction for reference.</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-sm text-ocean-deep/60 dark:text-gray-400 bg-yellow-500/10 p-3 rounded-lg border border-yellow-500/20">
-                         <ShieldCheck size={16} className="text-yellow-500" />
-                         <span>Please save a screenshot of your transaction for reference.</span>
-                      </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-white/20 bg-white/5 p-6 text-center text-ocean-deep/60 dark:text-gray-400">
+                      No national donation methods have been published yet.
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : (
-                <div className="space-y-8 animate-fadeIn h-full flex flex-col justify-center">
-                   <div className="text-center mb-4">
-                    <h2 className="text-2xl font-bold text-ocean-deep dark:text-white mb-2">International Donation</h2>
-                    <p className="text-ocean-deep/60 dark:text-gray-300">Secure payment via Debit/Credit Card</p>
+                <div className="flex h-full flex-col justify-center space-y-8 animate-fadeIn">
+                  <div className="mb-4 text-center">
+                    <h2 className="mb-2 text-2xl font-bold text-ocean-deep dark:text-white">International Donation</h2>
+                    <p className="text-ocean-deep/60 dark:text-gray-300">
+                      Use the bank transfer details below for international donations.
+                    </p>
                   </div>
 
-                  {/* Card Simulation */}
-                  <div className="max-w-md mx-auto w-full bg-gradient-to-br from-gray-900 to-gray-800 text-white rounded-2xl p-6 shadow-2xl relative overflow-hidden group">
-                     <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-10 -translate-y-10"></div>
-                     <div className="flex justify-between items-start mb-8">
-                        <CreditCard size={32} className="text-gray-300" />
-                        <span className="font-mono text-xl font-bold italic opacity-70">VISA/MC</span>
-                     </div>
-                     <div className="space-y-6 relative z-10">
-                        <div className="space-y-1">
-                           <div className="text-xs text-gray-400 uppercase">Card Number</div>
-                           <div className="text-xl tracking-widest font-mono">**** **** **** ****</div>
-                        </div>
-                        <div className="flex justify-between">
-                           <div>
-                              <div className="text-xs text-gray-400 uppercase">Holder Name</div>
-                              <div className="text-sm font-medium">DONOR NAME</div>
-                           </div>
-                           <div>
-                              <div className="text-xs text-gray-400 uppercase">Expires</div>
-                              <div className="text-sm font-medium">MM/YY</div>
-                           </div>
-                        </div>
-                     </div>
-                  </div>
+                  <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-br from-[#0c1c33] via-[#10274a] to-[#0b4a6f] p-6 text-white shadow-2xl">
+                    <div className="mb-6 flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.35em] text-blue-100/70">Bank Transfer</div>
+                        <h3 className="mt-2 text-2xl font-black">{bankDetails?.bankName}</h3>
+                      </div>
+                      <Globe className="h-8 w-8 text-blue-100/80" />
+                    </div>
 
-                  <div className="max-w-md mx-auto w-full space-y-4">
-                     <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-                        <Globe size={20} className="text-blue-500 flex-shrink-0 mt-0.5" />
-                        <div className="text-sm text-ocean-deep/80 dark:text-gray-300">
-                           <span className="font-bold block text-blue-500 mb-1">Bank Transfer (Swift)</span>
-                           Use the following details for international wire transfers.
-                        </div>
-                     </div>
-                     
-                     <div className="space-y-3 p-4 bg-white/5 rounded-xl border border-white/10">
-                        <div className="flex justify-between items-center text-sm">
-                           <span className="text-ocean-deep/60 dark:text-gray-400">Bank Name</span>
-                           <span className="font-bold text-ocean-deep dark:text-white">Bank of the Philippine Islands (BPI)</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                           <span className="text-ocean-deep/60 dark:text-gray-400">Account Name</span>
-                           <span className="font-bold text-ocean-deep dark:text-white">Dyesabel Philippines Inc.</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                           <span className="text-ocean-deep/60 dark:text-gray-400">SWIFT Code</span>
-                           <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-ocean-deep dark:text-white">BOPIPHMM</span>
-                              <Copy size={14} className="cursor-pointer hover:text-primary-cyan" onClick={() => handleCopy('BOPIPHMM', 'swift')} />
-                           </div>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                           <span className="text-ocean-deep/60 dark:text-gray-400">Account Number</span>
-                           <div className="flex items-center gap-2">
-                              <span className="font-mono font-bold text-ocean-deep dark:text-white">1234-5678-90</span>
-                              <Copy size={14} className="cursor-pointer hover:text-primary-cyan" onClick={() => handleCopy('1234-5678-90', 'iban')} />
-                           </div>
-                        </div>
-                     </div>
+                    <div className="space-y-3">
+                      <CopyRow
+                        label="Bank Name"
+                        value={bankDetails?.bankName || ''}
+                        fieldKey="bank-name"
+                        copiedField={copiedField}
+                        onCopy={handleCopy}
+                      />
+                      <CopyRow
+                        label="Account Name"
+                        value={bankDetails?.accountName || ''}
+                        fieldKey="bank-account-name"
+                        copiedField={copiedField}
+                        onCopy={handleCopy}
+                      />
+                      <CopyRow
+                        label="Account Number"
+                        value={bankDetails?.accountNumber || ''}
+                        fieldKey="bank-account-number"
+                        copiedField={copiedField}
+                        onCopy={handleCopy}
+                        valueClassName="font-mono text-primary-cyan"
+                      />
+                      <CopyRow
+                        label="SWIFT Code"
+                        value={bankDetails?.swiftCode || ''}
+                        fieldKey="bank-swift-code"
+                        copiedField={copiedField}
+                        onCopy={handleCopy}
+                        valueClassName="font-mono text-primary-cyan"
+                      />
+                      <CopyRow
+                        label="Bank Address"
+                        value={bankDetails?.bankAddress || ''}
+                        fieldKey="bank-address"
+                        copiedField={copiedField}
+                        onCopy={handleCopy}
+                      />
+                      <CopyRow
+                        label="Currency"
+                        value={bankDetails?.currency || ''}
+                        fieldKey="bank-currency"
+                        copiedField={copiedField}
+                        onCopy={handleCopy}
+                      />
+                    </div>
+
+                    <div className="mt-5 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm text-blue-50/90">
+                      {content?.referenceNote || 'Reference instructions are not configured yet.'}
+                    </div>
                   </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Sidebar Info */}
-          <div className="lg:col-span-5 space-y-6">
-            
-            {/* Where Money Goes */}
-            <div className="glass-card p-6 rounded-3xl border border-white/20">
-              <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-6 flex items-center gap-2">
+          <div className="space-y-6 lg:col-span-5">
+            <div className="glass-card rounded-3xl border border-white/20 p-6">
+              <h3 className="mb-6 flex items-center gap-2 text-xl font-bold text-ocean-deep dark:text-white">
                 <TrendingUp className="text-primary-cyan" />
                 Where your donation goes
               </h3>
-              
-              <div className="space-y-5">
-                {[
-                  { label: 'Conservation Projects', pct: '40%', color: 'bg-primary-cyan' },
-                  { label: 'Educational Workshops', pct: '30%', color: 'bg-primary-blue' },
-                  { label: 'Community Livelihood', pct: '20%', color: 'bg-purple-500' },
-                  { label: 'Operations & Research', pct: '10%', color: 'bg-pink-500' },
-                ].map((item) => (
-                  <div key={item.label}>
-                    <div className="flex justify-between text-sm font-bold text-ocean-deep dark:text-white mb-2">
-                      <span>{item.label}</span>
-                      <span>{item.pct}</span>
-                    </div>
-                    <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-                      <div className={`h-full ${item.color} rounded-full transition-all duration-1000 w-[${item.pct}]`} style={{ width: item.pct }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <AllocationList allocations={content?.allocations || []} />
             </div>
 
-            {/* Recent Donations */}
-            <div className="glass-card p-6 rounded-3xl border border-white/20">
-               <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-6 flex items-center gap-2">
-                <Heart className="text-red-500 fill-red-500 animate-pulse" />
+            <div className="glass-card rounded-3xl border border-white/20 p-6">
+              <h3 className="mb-6 flex items-center gap-2 text-xl font-bold text-ocean-deep dark:text-white">
+                <Heart className="animate-pulse text-red-500 fill-red-500" />
                 Recent Donations
               </h3>
-              
-              <div className="space-y-4 max-h-[300px] overflow-y-auto custom-scrollbar pr-2">
-                {recentDonations.map((donation) => (
-                  <div key={donation.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-cyan to-primary-blue flex items-center justify-center text-white font-bold text-xs">
-                        {donation.name.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-bold text-ocean-deep dark:text-white text-sm">{donation.name}</div>
-                        <div className="text-xs text-ocean-deep/50 dark:text-gray-400">{donation.method} • {donation.time}</div>
-                      </div>
-                    </div>
-                    <div className="font-bold text-primary-blue dark:text-primary-cyan">
-                      {donation.amount}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/10 text-center text-xs text-ocean-deep/40 dark:text-gray-500">
-                Thank you for being our hero!
+              <RecentDonationsList recentDonations={content?.recentDonations || []} />
+              <div className="mt-4 border-t border-white/10 pt-4 text-center text-xs text-ocean-deep/40 dark:text-gray-500">
+                Thank you for supporting Dyesabel Philippines Inc.
               </div>
             </div>
 
+            <div className="glass-card rounded-3xl border border-emerald-400/20 p-6">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-emerald-500" />
+                <div>
+                  <h3 className="text-lg font-bold text-ocean-deep dark:text-white">Transparency & Trust</h3>
+                  <p className="mt-1 text-sm text-ocean-deep/60 dark:text-gray-400">
+                    Dyesabel Philippines Inc. operates as a registered organization in the Philippines.
+                  </p>
+                  <div className="mt-3 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-ocean-deep dark:text-white">
+                    {content?.secRegistrationNumber ? `SEC Reg. No. ${content.secRegistrationNumber}` : 'SEC registration number not published yet.'}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

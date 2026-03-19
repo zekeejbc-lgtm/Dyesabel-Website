@@ -1,45 +1,36 @@
 import React from 'react';
+import { APP_CONFIG } from '../config';
 
 export const LoadingScreen: React.FC = () => {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-ocean-dark text-white overflow-hidden font-sans">
-      {/* Deep Ocean Background Gradient */}
-      <div className="absolute inset-0 bg-gradient-to-b from-ocean-deep via-[#021017] to-ocean-dark opacity-95"></div>
-      
-      {/* Ambient Center Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary-cyan/10 rounded-full blur-[100px] animate-pulse-slow pointer-events-none"></div>
+    <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden bg-ocean-dark font-sans text-white">
+      <div className="absolute inset-0 bg-gradient-to-b from-ocean-deep via-[#021017] to-ocean-dark opacity-95" />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary-cyan/10 blur-[100px] animate-pulse-slow" />
 
       <div className="relative z-10 flex flex-col items-center">
-        {/* Logo Container System */}
-        <div className="relative w-36 h-36 mb-10 flex items-center justify-center">
-           {/* Spinning Cyan/Blue Gradients (Energy Rings) - No Background, Just Border */}
-           <div className="absolute inset-0 rounded-full border-2 border-t-primary-cyan border-r-transparent border-b-primary-blue border-l-transparent animate-[spin_3s_linear_infinite]"></div>
-           <div className="absolute inset-3 rounded-full border-2 border-t-transparent border-r-primary-cyan/40 border-b-transparent border-l-primary-blue/40 animate-[spin_4s_linear_infinite]" style={{ animationDirection: 'reverse' }}></div>
-           
-           {/* Logo Mechanism (Matches Header: Relative Container + Blur Glow + Rounded Image) */}
-           <div className="absolute inset-0 flex items-center justify-center">
-              {/* Pulse Glow (Similar to Header hover effect, but active for loading) */}
-              <div className="absolute w-24 h-24 bg-primary-cyan/20 rounded-full blur-xl animate-pulse"></div>
-              
-              {/* Actual Logo - Same Styling as Header (No Background, No Float) */}
-              <img 
-                src="https://i.imgur.com/CQCKjQM.png" 
-                className="relative w-20 h-20 object-contain rounded-full drop-shadow-md z-10" 
-                alt="Dyesabel Logo"
-              />
-           </div>
+        <div className="relative mb-10 flex h-36 w-36 items-center justify-center">
+          <div className="absolute inset-0 animate-[spin_3s_linear_infinite] rounded-full border-2 border-b-primary-blue border-l-transparent border-r-transparent border-t-primary-cyan" />
+          <div className="absolute inset-3 animate-[spin_4s_linear_infinite] rounded-full border-2 border-b-transparent border-l-primary-blue/40 border-r-primary-cyan/40 border-t-transparent" style={{ animationDirection: 'reverse' }} />
+
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="absolute h-24 w-24 animate-pulse rounded-full bg-primary-cyan/20 blur-xl" />
+            <img
+              src={APP_CONFIG.logoUrl}
+              className="relative z-10 h-20 w-20 rounded-full object-contain drop-shadow-md"
+              alt="Dyesabel Logo"
+            />
+          </div>
         </div>
 
-        {/* Typography */}
-        <h2 className="text-5xl font-lobster text-transparent bg-clip-text bg-gradient-to-r from-primary-cyan via-white to-primary-cyan animate-pulse tracking-wide drop-shadow-lg pb-2">
+        <h2 className="bg-gradient-to-r from-primary-cyan via-white to-primary-cyan bg-clip-text pb-2 font-lobster text-5xl tracking-wide text-transparent drop-shadow-lg animate-pulse">
           Dyesabel
         </h2>
-        <div className="flex items-center gap-3 mt-4">
-           <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-primary-cyan/50"></div>
-           <p className="text-primary-cyan/80 text-[10px] font-bold uppercase tracking-[0.4em] antialiased">
-             Philippines
-           </p>
-           <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-primary-cyan/50"></div>
+        <div className="mt-4 flex items-center gap-3">
+          <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-primary-cyan/50" />
+          <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-primary-cyan/80 antialiased">
+            Philippines
+          </p>
+          <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-primary-cyan/50" />
         </div>
       </div>
     </div>

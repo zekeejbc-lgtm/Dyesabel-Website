@@ -1,15 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Menu, X, Sun, Moon, LogIn, LogOut, LayoutDashboard, Home } from 'lucide-react'; // Added Home icon
+import React, { useEffect, useState } from 'react';
+import { Menu, X, Sun, Moon, LogIn, LogOut, LayoutDashboard, Home } from 'lucide-react';
+import { toast } from 'sonner';
 import { NavLink } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-
-const VOLUNTEER_URL = "https://forms.gle/W6WVpftGDwM7fUm19";
+import { APP_CONFIG } from '../config';
 
 const navLinks: NavLink[] = [
   { label: 'Our Pillars', href: '#pillars' },
   { label: 'Chapters', href: '#chapters' },
   { label: 'Partners', href: '#partners' },
-  { label: 'Volunteer', href: VOLUNTEER_URL },
+  { label: 'Volunteer', href: APP_CONFIG.volunteerUrl },
   { label: 'About Us', href: '#about' },
 ];
 
@@ -20,17 +20,16 @@ interface HeaderProps {
   onSignInClick: () => void;
   onEditLogo?: () => void;
   onOpenDashboard?: () => void;
-  isDashboardOpen?: boolean; // ✅ New prop to track state
+  isDashboardOpen?: boolean;
 }
 
-export const Header: React.FC<HeaderProps> = ({ 
-  theme, 
-  toggleTheme, 
-  onHomeClick, 
-  onSignInClick, 
-  onEditLogo,
+export const Header: React.FC<HeaderProps> = ({
+  theme,
+  toggleTheme,
+  onHomeClick,
+  onSignInClick,
   onOpenDashboard,
-  isDashboardOpen = false // Default to false
+  isDashboardOpen = false
 }) => {
   const { user, logout } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -38,9 +37,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -54,21 +51,24 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const handleLogout = () => {
-    if (confirm('Are you sure you want to log out?')) {
-      logout();
-      setIsMobileMenuOpen(false);
-      if (onHomeClick) onHomeClick();
-    }
+    toast.warning('Log out now?', {
+      description: 'Your current session will be ended on this device.',
+      action: {
+        label: 'Log out',
+        onClick: () => {
+          logout();
+          setIsMobileMenuOpen(false);
+          onHomeClick?.();
+        }
+      },
+      cancel: {
+        label: 'Cancel',
+        onClick: () => {}
+      }
+    });
   };
 
   const handleNavigation = (e: React.MouseEvent<HTMLAnchorElement>, link: NavLink) => {
-    if (link.label === 'Volunteer' && !link.href) {
-      e.preventDefault();
-      alert("No membership application open yet");
-      setIsMobileMenuOpen(false);
-      return;
-    }
-
     if (link.href.startsWith('http')) {
       setIsMobileMenuOpen(false);
       return;
@@ -76,166 +76,136 @@ export const Header: React.FC<HeaderProps> = ({
 
     e.preventDefault();
     setIsMobileMenuOpen(false);
-    
-    if (onHomeClick) {
-      onHomeClick();
-    }
-    
+    onHomeClick?.();
+
     setTimeout(() => {
       const element = document.querySelector(link.href);
-      if (element) {
-        const headerOffset = 90;
-        const elementPosition = element.getBoundingClientRect().top;
-        const offsetPosition = elementPosition + window.scrollY - headerOffset;
+      if (!element) return;
 
-        window.scrollTo({
-          top: offsetPosition,
-          behavior: "smooth"
-        });
-      }
+      const headerOffset = 90;
+      const elementPosition = element.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.scrollY - headerOffset;
+      window.scrollTo({ top: offsetPosition, behavior: 'smooth' });
     }, 100);
   };
 
-  // Helper to handle the toggle action
   const handleDashboardToggle = () => {
     setIsMobileMenuOpen(false);
-    if (isDashboardOpen && onHomeClick) {
-      onHomeClick();
-    } else if (!isDashboardOpen && onOpenDashboard) {
-      onOpenDashboard();
+    if (isDashboardOpen) {
+      onHomeClick?.();
+    } else {
+      onOpenDashboard?.();
     }
   };
 
   return (
-    <header 
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 border-b ${
-        isScrolled 
-          ? 'bg-white/90 dark:bg-ocean-deep/90 backdrop-blur-md shadow-lg border-ocean-deep/5 dark:border-white/10 py-2' 
-          : 'bg-transparent border-transparent py-4'
+    <header
+      className={`fixed left-0 right-0 top-0 z-50 border-b transition-all duration-500 ${
+        isScrolled
+          ? 'border-ocean-deep/5 bg-white/90 py-2 shadow-lg backdrop-blur-md dark:border-white/10 dark:bg-ocean-deep/90'
+          : 'border-transparent bg-transparent py-4'
       }`}
     >
       <div className="container mx-auto px-4 md:px-6">
         <div className="flex items-center justify-between">
-          {/* Logo Section */}
-          <div className="flex items-center space-x-3 group cursor-pointer flex-shrink-0" onClick={handleLogoClick}>
+          <div className="group flex flex-shrink-0 cursor-pointer items-center space-x-3" onClick={handleLogoClick}>
             <div className="relative">
-                <div className="absolute inset-0 bg-primary-cyan/50 rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                <img 
-                src="https://i.imgur.com/CQCKjQM.png" 
-                alt="Dyesabel Philippines Logo" 
-                className="relative h-10 w-10 md:h-12 md:w-12 lg:h-14 lg:w-14 object-contain rounded-full transition-transform duration-300 drop-shadow-md z-10"
-                />
+              <div className="absolute inset-0 z-0 rounded-full bg-primary-cyan/50 blur-md opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+              <img
+                src={APP_CONFIG.logoUrl}
+                alt="Dyesabel Philippines Logo"
+                className="relative z-10 h-10 w-10 rounded-full object-contain drop-shadow-md transition-transform duration-300 md:h-12 md:w-12 lg:h-14 lg:w-14"
+              />
             </div>
-            
+
             <div className="flex flex-col">
-              <span className={`font-lobster text-lg lg:text-2xl tracking-wide leading-none transition-colors duration-300 ${
-                  isScrolled ? 'text-ocean-deep dark:text-white' : 'text-ocean-deep dark:text-white drop-shadow-md'
-              }`}>
+              <span className={`font-lobster text-lg leading-none tracking-wide transition-colors duration-300 lg:text-2xl ${isScrolled ? 'text-ocean-deep dark:text-white' : 'text-ocean-deep drop-shadow-md dark:text-white'}`}>
                 Dyesabel
               </span>
-              <span className={`font-sans font-bold text-[10px] lg:text-xs tracking-[0.2em] uppercase leading-none mt-0.5 ${
-                  isScrolled ? 'text-gray-600 dark:text-gray-300' : 'text-gray-700 dark:text-gray-200'
-              }`}>
+              <span className={`mt-0.5 font-sans text-[10px] font-bold uppercase leading-none tracking-[0.2em] lg:text-xs ${isScrolled ? 'text-gray-600 dark:text-gray-300' : 'text-gray-700 dark:text-gray-200'}`}>
                 Philippines, Inc.
               </span>
             </div>
           </div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center">
-             {!user && (
-               <>
-                 <div className="flex items-center">
-                    {navLinks.map((link, index) => (
+          <nav className="hidden items-center md:flex">
+            {!user ? (
+              <>
+                <div className="flex items-center">
+                  {navLinks.map((link, index) => (
                     <React.Fragment key={link.label}>
-                        <a
+                      <a
                         href={link.href}
                         target={link.href.startsWith('http') ? '_blank' : undefined}
                         rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
                         onClick={(e) => handleNavigation(e, link)}
-                        className={`text-[10px] lg:text-xs xl:text-sm font-bold tracking-wider uppercase transition-colors duration-200 whitespace-nowrap ${
-                            isScrolled ? 'text-ocean-deep dark:text-gray-200 hover:text-primary-blue dark:hover:text-primary-cyan' : 'text-ocean-deep dark:text-white hover:text-primary-blue dark:hover:text-primary-cyan'
+                        className={`whitespace-nowrap text-[10px] font-bold uppercase tracking-wider transition-colors duration-200 lg:text-xs xl:text-sm ${
+                          isScrolled
+                            ? 'text-ocean-deep hover:text-primary-blue dark:text-gray-200 dark:hover:text-primary-cyan'
+                            : 'text-ocean-deep hover:text-primary-blue dark:text-white dark:hover:text-primary-cyan'
                         }`}
-                        >
+                      >
                         {link.label}
-                        </a>
-                        {index < navLinks.length - 1 && (
-                            <span className={`mx-2 lg:mx-3 xl:mx-4 select-none text-[10px] lg:text-xs ${
-                                isScrolled ? 'text-gray-300 dark:text-gray-600' : 'text-ocean-deep/40 dark:text-white/40'
-                            }`}>|</span>
-                        )}
+                      </a>
+                      {index < navLinks.length - 1 ? (
+                        <span className={`mx-2 select-none text-[10px] lg:mx-3 lg:text-xs xl:mx-4 ${isScrolled ? 'text-gray-300 dark:text-gray-600' : 'text-ocean-deep/40 dark:text-white/40'}`}>|</span>
+                      ) : null}
                     </React.Fragment>
-                    ))}
-                 </div>
-                <div className={`h-4 lg:h-5 w-px mx-3 lg:mx-5 ${isScrolled ? 'bg-gray-300 dark:bg-gray-700' : 'bg-ocean-deep/20 dark:bg-white/20'}`}></div>
-               </>
-             )}
+                  ))}
+                </div>
+                <div className={`mx-3 h-4 w-px lg:mx-5 lg:h-5 ${isScrolled ? 'bg-gray-300 dark:bg-gray-700' : 'bg-ocean-deep/20 dark:bg-white/20'}`} />
+              </>
+            ) : null}
 
-            {/* REMOVED: Edit Logo Button */}
-
-            {/* ✅ DASHBOARD / HOMEPAGE TOGGLE BUTTON */}
-            {isAdmin && (
+            {isAdmin ? (
               <button
                 onClick={handleDashboardToggle}
-                className="bg-primary-cyan text-ocean-deep px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-cyan-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap mr-2"
+                className="mr-2 flex items-center gap-2 whitespace-nowrap rounded-full border border-white/20 bg-primary-cyan px-4 py-1.5 text-[10px] font-bold tracking-wide text-ocean-deep shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-cyan-500/50 lg:px-6 lg:py-2 lg:text-sm"
               >
-                {isDashboardOpen ? "Homepage" : "Dashboard"}
-                {isDashboardOpen ? (
-                  <Home size={14} className="lg:w-4 lg:h-4" />
-                ) : (
-                  <LayoutDashboard size={14} className="lg:w-4 lg:h-4" />
-                )}
+                {isDashboardOpen ? 'Homepage' : 'Dashboard'}
+                {isDashboardOpen ? <Home size={14} className="lg:h-4 lg:w-4" /> : <LayoutDashboard size={14} className="lg:h-4 lg:w-4" />}
               </button>
-            )}
+            ) : null}
 
-            {/* Log Out Button */}
             {user ? (
               <button
                 onClick={handleLogout}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-red-500/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                className="flex items-center gap-2 whitespace-nowrap rounded-full border border-white/20 bg-red-500 px-4 py-1.5 text-[10px] font-bold tracking-wide text-white shadow-lg transition-all duration-200 hover:scale-105 hover:bg-red-600 hover:shadow-red-500/50 lg:px-6 lg:py-2 lg:text-sm"
               >
                 Log Out
-                <LogOut size={14} className="lg:w-4 lg:h-4" />
+                <LogOut size={14} className="lg:h-4 lg:w-4" />
               </button>
             ) : (
               <button
                 onClick={onSignInClick}
-                className="bg-gradient-to-r from-primary-blue to-primary-cyan text-white px-4 lg:px-6 py-1.5 lg:py-2 rounded-full shadow-lg hover:shadow-primary-cyan/50 hover:scale-105 border border-white/20 text-[10px] lg:text-sm font-bold tracking-wide transition-all duration-200 flex items-center gap-2 whitespace-nowrap"
+                className="flex items-center gap-2 whitespace-nowrap rounded-full border border-white/20 bg-gradient-to-r from-primary-blue to-primary-cyan px-4 py-1.5 text-[10px] font-bold tracking-wide text-white shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-primary-cyan/50 lg:px-6 lg:py-2 lg:text-sm"
               >
                 Sign In
-                <LogIn size={14} className="lg:w-4 lg:h-4" />
+                <LogIn size={14} className="lg:h-4 lg:w-4" />
               </button>
             )}
-            
-            {/* Theme Toggle Button */}
-            <button 
+
+            <button
               onClick={toggleTheme}
-              className={`ml-2 p-1.5 lg:p-2 rounded-full transition-all hover:scale-110 flex-shrink-0 ${
-                isScrolled 
-                  ? 'bg-gray-200/50 dark:bg-white/10 text-ocean-deep dark:text-yellow-300' 
-                  : 'bg-white/20 text-ocean-deep dark:text-white backdrop-blur-md'
+              className={`ml-2 flex-shrink-0 rounded-full p-1.5 transition-all hover:scale-110 lg:p-2 ${
+                isScrolled ? 'bg-gray-200/50 text-ocean-deep dark:bg-white/10 dark:text-yellow-300' : 'bg-white/20 text-ocean-deep backdrop-blur-md dark:text-white'
               }`}
               aria-label="Toggle Dark Mode"
             >
-              {theme === 'dark' ? <Sun size={16} className="lg:w-5 lg:h-5" /> : <Moon size={16} className="lg:w-5 lg:h-5" />}
+              {theme === 'dark' ? <Sun size={16} className="lg:h-5 lg:w-5" /> : <Moon size={16} className="lg:h-5 lg:w-5" />}
             </button>
           </nav>
 
-          {/* Mobile Actions */}
           <div className="flex items-center gap-4 md:hidden">
-            <button 
-                onClick={toggleTheme}
-                className={`p-2 rounded-full transition-colors ${
-                  isScrolled 
-                    ? 'bg-gray-100 dark:bg-white/10 text-ocean-deep dark:text-yellow-400' 
-                    : 'bg-white/20 text-ocean-deep dark:text-white backdrop-blur-md'
-                }`}
-              >
-                {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+            <button
+              onClick={toggleTheme}
+              className={`rounded-full p-2 transition-colors ${isScrolled ? 'bg-gray-100 text-ocean-deep dark:bg-white/10 dark:text-yellow-400' : 'bg-white/20 text-ocean-deep backdrop-blur-md dark:text-white'}`}
+            >
+              {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
             </button>
             <button
-              className={`${isScrolled ? 'text-ocean-deep dark:text-white' : 'text-ocean-deep dark:text-white'} focus:outline-none hover:opacity-80 transition-colors`}
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className={`${isScrolled ? 'text-ocean-deep dark:text-white' : 'text-ocean-deep dark:text-white'} transition-colors hover:opacity-80 focus:outline-none`}
+              onClick={() => setIsMobileMenuOpen((value) => !value)}
             >
               {isMobileMenuOpen ? <X size={28} /> : <Menu size={28} />}
             </button>
@@ -243,44 +213,39 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Mobile Menu Dropdown */}
       <div
-        className={`md:hidden absolute top-full left-4 right-4 mt-2 rounded-2xl bg-white dark:bg-ocean-deep border border-ocean-deep/10 dark:border-white/10 shadow-2xl transition-all duration-300 ease-in-out overflow-hidden transform origin-top ${
-          isMobileMenuOpen ? 'max-h-[32rem] opacity-100 scale-100' : 'max-h-0 opacity-0 scale-95'
+        className={`absolute left-4 right-4 top-full mt-2 origin-top overflow-hidden rounded-2xl border border-ocean-deep/10 bg-white shadow-2xl transition-all duration-300 ease-in-out dark:border-white/10 dark:bg-ocean-deep md:hidden ${
+          isMobileMenuOpen ? 'max-h-[32rem] scale-100 opacity-100' : 'max-h-0 scale-95 opacity-0'
         }`}
       >
-        <div className="flex flex-col px-4 py-4 space-y-2">
-          {!user && navLinks.map((link) => (
+        <div className="flex flex-col space-y-2 px-4 py-4">
+          {!user ? navLinks.map((link) => (
             <a
               key={link.label}
               href={link.href}
               target={link.href.startsWith('http') ? '_blank' : undefined}
               rel={link.href.startsWith('http') ? 'noopener noreferrer' : undefined}
-              className="block text-center py-3 text-lg rounded-xl transition-colors text-ocean-deep dark:text-gray-200 font-semibold hover:bg-gray-100 dark:hover:bg-white/5 hover:text-primary-blue dark:hover:text-primary-cyan"
+              className="block rounded-xl py-3 text-center text-lg font-semibold text-ocean-deep transition-colors hover:bg-gray-100 hover:text-primary-blue dark:text-gray-200 dark:hover:bg-white/5 dark:hover:text-primary-cyan"
               onClick={(e) => handleNavigation(e, link)}
             >
               {link.label}
             </a>
-          ))}
-          
-          {/* REMOVED: Mobile Edit Logo Button */}
+          )) : null}
 
-          {/* ✅ MOBILE DASHBOARD / HOMEPAGE TOGGLE */}
-          {isAdmin && (
+          {isAdmin ? (
             <button
               onClick={handleDashboardToggle}
-              className="w-full bg-primary-cyan text-ocean-deep font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary-cyan py-3 font-bold text-ocean-deep shadow-lg"
             >
-              {isDashboardOpen ? "Homepage" : "Dashboard"}
+              {isDashboardOpen ? 'Homepage' : 'Dashboard'}
               {isDashboardOpen ? <Home size={18} /> : <LayoutDashboard size={18} />}
             </button>
-          )}
-          
-          {/* Mobile Sign In / Log Out */}
+          ) : null}
+
           {user ? (
             <button
               onClick={handleLogout}
-              className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 py-3 font-bold text-white shadow-lg hover:bg-red-600"
             >
               Log Out
               <LogOut size={18} />
@@ -291,7 +256,7 @@ export const Header: React.FC<HeaderProps> = ({
                 setIsMobileMenuOpen(false);
                 onSignInClick();
               }}
-              className="w-full bg-gradient-to-r from-primary-blue to-primary-cyan text-white font-bold py-3 rounded-xl shadow-lg mt-2 flex items-center justify-center gap-2"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary-blue to-primary-cyan py-3 font-bold text-white shadow-lg"
             >
               Sign In
               <LogIn size={18} />

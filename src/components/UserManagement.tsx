@@ -3,6 +3,7 @@ import { UserPlus, Trash2, Key, X, Save, User as UserIcon } from 'lucide-react';
 import { AuthService } from '../services/DriveService';
 import { useAuth } from '../contexts/AuthContext';
 import { User, SESSION_TOKEN_KEY, USER_ROLES, ROLE_LABELS, ROLE_COLORS, UserRole } from '../types';
+import { getSessionToken } from '../utils/session';
 
 interface NewUserState {
   username: string;
@@ -43,7 +44,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
 
   const loadUsers = async () => {
     setLoading(true);
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const sessionToken = getSessionToken();
     if (!sessionToken) {
       setLoading(false);
       return;
@@ -68,7 +69,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
       return;
     }
 
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const sessionToken = getSessionToken();
     if (!sessionToken) {
       alert('Session expired. Please login again.');
       return;
@@ -98,7 +99,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
       return;
     }
 
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const sessionToken = getSessionToken();
     if (!sessionToken) {
       alert('Session expired. Please login again.');
       return;
@@ -125,7 +126,7 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
       return;
     }
 
-    const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+    const sessionToken = getSessionToken();
     if (!sessionToken) {
       alert('Session expired. Please login again.');
       return;

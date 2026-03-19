@@ -8,6 +8,7 @@ import {
 import { DataService, AuthService } from '../services/DriveService';
 import { uploadImageToDrive } from '../utils/driveUpload';
 import { Chapter, User } from '../types';
+import { getSessionToken } from '../utils/session';
 
 // --- Types ---
 type ViewState = 'LIST' | 'CREATE_CHAPTER' | 'CHAPTER_DETAIL';
@@ -31,7 +32,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
   // --- Form States ---
   const [chapterFormData, setChapterFormData] = useState<Partial<Chapter>>({});
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'chapter_member' });
+  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'chapter_head' });
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -46,7 +47,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     setLoading(true);
     try {
       // ✅ FIX: Get the real token from Local Storage
-      const token = localStorage.getItem('dyesabel_session') || '';
+      const token = getSessionToken();
 
       const [chapRes, userRes] = await Promise.all([
         DataService.listChapters(),
@@ -59,11 +60,11 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
       if (userRes.success && userRes.users) {
         setUsers(userRes.users);
       } else {
-        console.warn("Could not load users:", userRes.message);
+        setUsers([]);
       }
 
     } catch (error) {
-      console.error("Failed to load data", error);
+      setUsers([]);
     } finally {
       setLoading(false);
     }
@@ -97,7 +98,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     }
     
     const payload = { ...chapterFormData, id: chapterId };
-    const token = localStorage.getItem('dyesabel_session') || 'dummy-token';
+    const token = getSessionToken();
+    if (!token) return alert('Session expired. Please log in again.');
 
     try {
       const res = await DataService.saveChapter(chapterId, payload, token);
@@ -119,7 +121,11 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
 
     setIsUploadingLogo(true);
     try {
-      const token = localStorage.getItem('dyesabel_session') || 'dummy-token';
+      const token = getSessionToken();
+      if (!token) {
+        alert('Session expired. Please log in again.');
+        return;
+      }
       const res = await uploadImageToDrive(file, 'chapters', token);
       
       if (res.success && res.url) {
@@ -128,7 +134,6 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
         alert('Failed to upload logo: ' + (res.error || 'Unknown error'));
       }
     } catch (error) {
-      console.error('Upload error', error);
       alert('Error uploading logo');
     } finally {
       setIsUploadingLogo(false);
@@ -145,7 +150,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
         chapterId: selectedChapter.id, 
       };
       
-      const token = localStorage.getItem('dyesabel_session') || 'dummy-token';
+      const token = getSessionToken();
+      if (!token) return alert('Session expired. Please log in again.');
       const res = await AuthService.createUser(token, payload);
       
       if (res.success) {
@@ -159,7 +165,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
         
         alert(`User added to ${selectedChapter.name}!`);
         setIsUserModalOpen(false);
-        setNewUser({ username: '', email: '', password: '', role: 'chapter_member' });
+        setNewUser({ username: '', email: '', password: '', role: 'chapter_head' });
       } else {
         alert("Failed to add user: " + res.message);
       }
@@ -172,7 +178,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     if (!confirm("Delete this chapter? This cannot be undone.")) return;
     setChapters(prev => prev.filter(c => c.id !== id)); 
     setView('LIST');
-    const token = localStorage.getItem('dyesabel_session') || 'dummy-token';
+    const token = getSessionToken();
+    if (!token) return alert('Session expired. Please log in again.');
     await DataService.deleteChapter(id, token);
   };
 
@@ -588,7 +595,6 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                       onChange={e => setNewUser({...newUser, role: e.target.value})}
                       className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-white focus:border-primary-cyan focus:outline-none appearance-none cursor-pointer"
                     >
-                      <option value="chapter_member" className="bg-[#1e293b]">Member</option>
                       <option value="chapter_head" className="bg-[#1e293b]">Chapter Head</option>
                       <option value="editor" className="bg-[#1e293b]">Editor</option>
                       <option value="admin" className="bg-[#1e293b]">Admin</option>

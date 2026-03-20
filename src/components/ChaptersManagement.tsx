@@ -11,6 +11,7 @@ import { useAppDialog } from '../contexts/AppDialogContext';
 import { Chapter, User } from '../types';
 import { getSessionToken } from '../utils/session';
 import { CustomSelect, CustomSelectOption } from './CustomSelect';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 
 // --- Types ---
 type ViewState = 'LIST' | 'CREATE_CHAPTER' | 'CHAPTER_DETAIL';
@@ -436,8 +437,25 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
         <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
           
           {loading ? (
-            <div className="flex items-center justify-center h-64 text-white/40">
-              <Loader className="animate-spin mr-2" /> Loading data...
+            <div className="space-y-6">
+              <div className="flex justify-end">
+                <SkeletonBlock className="h-12 w-44 rounded-xl" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="group relative bg-white/5 border border-white/10 rounded-2xl p-6 flex flex-col h-full">
+                    <div className="flex items-start justify-between mb-4 w-full">
+                      <SkeletonCircle className="w-14 h-14" />
+                      <SkeletonBlock className="h-6 w-20 rounded-full" />
+                    </div>
+                    <SkeletonBlock className="mb-3 h-7 w-40" />
+                    <SkeletonBlock className="mb-4 h-4 w-32" />
+                    <SkeletonBlock className="mb-4 h-3 w-48" />
+                    <SkeletonBlock className="mt-auto h-16 w-full rounded-xl" />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : (
             <>

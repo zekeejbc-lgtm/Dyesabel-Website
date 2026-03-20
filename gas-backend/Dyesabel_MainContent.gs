@@ -239,8 +239,12 @@ function deleteImage_(data) {
 function logUpload_(token, fileId, fileName, folderName) {
   try {
     var sheet = dyesabelGetOrCreateSheet_(getMainSpreadsheet_(), MAIN_LOG_SHEET);
-    if (sheet.getLastRow() === 0) sheet.appendRow(['Date', 'Token', 'FileID', 'Name', 'Folder']);
-    sheet.appendRow([new Date(), token, fileId, fileName, folderName]);
+    var user = null;
+    try {
+      user = getSessionUser_(token);
+    } catch (error) {}
+    if (sheet.getLastRow() === 0) sheet.appendRow(['Date', 'UserId', 'Username', 'FileID', 'Name', 'Folder']);
+    sheet.appendRow([new Date(), user && user.id ? user.id : '', user && user.username ? user.username : '', fileId, fileName, folderName]);
   } catch (error) {
     Logger.log('Log error: ' + error);
   }
@@ -824,7 +828,7 @@ function initializeMainContentSystem_() {
     orgSheet.appendRow(['organizationName', 'Dyesabel PH']);
   }
   var logSheet = dyesabelGetOrCreateSheet_(ss, MAIN_LOG_SHEET);
-  if (logSheet.getLastRow() === 0) logSheet.appendRow(['Timestamp', 'UserToken', 'FileId', 'FileName', 'Folder']);
+  if (logSheet.getLastRow() === 0) logSheet.appendRow(['Timestamp', 'UserId', 'Username', 'FileId', 'FileName', 'Folder']);
   Object.keys(MAIN_DATA_CONFIG).forEach(function(key) {
     var config = MAIN_DATA_CONFIG[key];
     var sheet = dyesabelGetOrCreateSheet_(ss, config.sheetName);

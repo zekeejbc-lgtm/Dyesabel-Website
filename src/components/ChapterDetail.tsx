@@ -38,11 +38,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
   // State for the selected activity (Modal)
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
 
-  // Scroll to top when component mounts
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
   // Fetch latest chapter data from Backend
   useEffect(() => {
     const fetchChapterData = async () => {
@@ -128,7 +123,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
         className="fixed top-24 left-4 md:left-8 z-40 flex items-center gap-2 bg-ocean-deep/90 text-white backdrop-blur-md hover:bg-ocean-deep transition-all duration-300 font-medium px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] border border-white/10 group"
       >
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-        <span>Back to Chapters</span>
+        <span>Back</span>
       </button>
 
       {/* Edit Button */}
@@ -148,6 +143,8 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
           <img 
             src={convertToCORSFreeLink(chapter.image || chapter.imageUrl) || 'https://picsum.photos/1200/600'} 
             alt={chapter.name} 
+            fetchPriority="high"
+            decoding="async"
             referrerPolicy="no-referrer"
             onError={(event) => {
               console.error('[ChapterDetail] Hero image failed to load', {
@@ -168,6 +165,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
             <img 
               src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}`} 
               alt={chapter.name} 
+              decoding="async"
               referrerPolicy="no-referrer"
               onError={(event) => {
                 console.error('[ChapterDetail] Logo image failed to load', {
@@ -230,6 +228,8 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                             <img
                               src={convertToCORSFreeLink(activity.imageUrl)}
                               alt="Activity"
+                              loading="lazy"
+                              decoding="async"
                               referrerPolicy="no-referrer"
                               onError={(event) => {
                                 console.error('[ChapterDetail] Activity image failed to load', {
@@ -351,6 +351,8 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                   <img
                     src={convertToCORSFreeLink(chapter.headImageUrl) || `https://ui-avatars.com/api/?name=${chapter.headName || 'Head'}`}
                     alt="Chapter Head"
+                    loading="lazy"
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     onError={(event) => {
                       console.error('[ChapterDetail] Head image failed to load', {
@@ -445,6 +447,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                 <img 
                   src={convertToCORSFreeLink(selectedActivity.imageUrl)} 
                   alt={selectedActivity.title} 
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   onError={(event) => {
                     console.error('[ChapterDetail] Modal activity image failed to load', {

@@ -23,6 +23,7 @@ import {
   DonationsService
 } from '../services/DonationsService';
 import { convertToCORSFreeLink } from '../services/DriveService';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 
 interface DonatePageProps {
   onBack: () => void;
@@ -189,10 +190,6 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
-  useEffect(() => {
     const loadDonationContent = async () => {
       setLoading(true);
       setError(null);
@@ -305,6 +302,36 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
   };
 
   const bankDetails = content?.bankDetails;
+  const renderDonateSkeleton = () => (
+    <div className="space-y-8">
+      <div className="text-center">
+        <SkeletonBlock className="mx-auto mb-3 h-8 w-48" />
+        <SkeletonBlock className="mx-auto h-4 w-80 max-w-full" />
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-4">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <SkeletonBlock key={index} className="h-12 w-32 rounded-xl" />
+        ))}
+      </div>
+
+      <div className="flex flex-col items-center gap-8 rounded-2xl border border-white/10 bg-white/50 p-6 backdrop-blur-sm dark:bg-black/20 md:flex-row md:p-8">
+        <div className="rounded-xl bg-white/60 p-4 shadow-xl">
+          <SkeletonBlock className="h-48 w-48 rounded-lg md:h-56 md:w-56" />
+          <SkeletonBlock className="mx-auto mt-4 h-3 w-24" />
+        </div>
+
+        <div className="w-full flex-1 space-y-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="rounded-xl bg-white/5 px-4 py-3 border border-white/10">
+              <SkeletonBlock className="h-3 w-24" />
+              <SkeletonBlock className="mt-3 h-6 w-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="relative min-h-screen pb-12 pt-24">
@@ -350,10 +377,7 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
 
             <div className="glass-card min-h-[500px] rounded-3xl border border-white/20 p-6 md:p-10">
               {loading ? (
-                <div className="flex min-h-[420px] flex-col items-center justify-center text-center">
-                  <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary-blue" />
-                  <p className="font-medium text-ocean-deep dark:text-white">Loading donation details...</p>
-                </div>
+                renderDonateSkeleton()
               ) : activeTab === 'national' ? (
                 <div className="animate-fadeIn space-y-8">
                   <div className="text-center">
@@ -400,6 +424,8 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
                                 <img
                                   src={selectedQrImageUrl}
                                   alt={`${selectedLocalMethod.name} QR code`}
+                                  loading="lazy"
+                                  decoding="async"
                                   referrerPolicy="no-referrer"
                                   onError={(event) => {
                                     console.error('[DonatePage] QR image failed to load', {
@@ -563,7 +589,21 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
                 <TrendingUp className="text-primary-cyan" />
                 Where your donation goes
               </h3>
-              <AllocationList allocations={content?.allocations || []} />
+              {loading ? (
+                <div className="space-y-5">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index}>
+                      <div className="mb-2 flex justify-between">
+                        <SkeletonBlock className="h-4 w-28" />
+                        <SkeletonBlock className="h-4 w-10" />
+                      </div>
+                      <SkeletonBlock className="h-3 w-full rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <AllocationList allocations={content?.allocations || []} />
+              )}
             </div>
 
             <div className="glass-card rounded-3xl border border-white/20 p-6">
@@ -571,7 +611,24 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
                 <Heart className="animate-pulse text-red-500 fill-red-500" />
                 Recent Donations
               </h3>
-              <RecentDonationsList recentDonations={content?.recentDonations || []} />
+              {loading ? (
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <div key={index} className="flex items-center justify-between rounded-xl bg-white/5 p-3">
+                      <div className="flex items-center gap-3">
+                        <SkeletonCircle className="h-10 w-10" />
+                        <div className="space-y-2">
+                          <SkeletonBlock className="h-4 w-28" />
+                          <SkeletonBlock className="h-3 w-40" />
+                        </div>
+                      </div>
+                      <SkeletonBlock className="h-5 w-20" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <RecentDonationsList recentDonations={content?.recentDonations || []} />
+              )}
               <div className="mt-4 border-t border-white/10 pt-4 text-center text-xs text-ocean-deep/40 dark:text-gray-500">
                 Thank you for supporting Dyesabel Philippines Inc.
               </div>
@@ -582,12 +639,21 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
                 <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-emerald-500" />
                 <div>
                   <h3 className="text-lg font-bold text-ocean-deep dark:text-white">Transparency & Trust</h3>
-                  <p className="mt-1 text-sm text-ocean-deep/60 dark:text-gray-400">
-                    Dyesabel Philippines Inc. operates as a registered organization in the Philippines.
-                  </p>
-                  <div className="mt-3 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-ocean-deep dark:text-white">
-                    {content?.secRegistrationNumber ? `SEC Reg. No. ${content.secRegistrationNumber}` : 'SEC registration number not published yet.'}
-                  </div>
+                  {loading ? (
+                    <>
+                      <SkeletonBlock className="mt-2 h-4 w-72 max-w-full" />
+                      <SkeletonBlock className="mt-3 h-11 w-60 max-w-full rounded-xl" />
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-1 text-sm text-ocean-deep/60 dark:text-gray-400">
+                        Dyesabel Philippines Inc. operates as a registered organization in the Philippines.
+                      </p>
+                      <div className="mt-3 rounded-xl bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-ocean-deep dark:text-white">
+                        {content?.secRegistrationNumber ? `SEC Reg. No. ${content.secRegistrationNumber}` : 'SEC registration number not published yet.'}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -630,6 +696,7 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
               <img
                 src={selectedQrImageUrl}
                 alt={`${selectedLocalMethod.name} QR code full size`}
+                decoding="async"
                 referrerPolicy="no-referrer"
                 onError={(event) => {
                   console.error('[DonatePage] Full-size QR image failed to load', {

@@ -1,5 +1,6 @@
 import { User } from '../types';
 import { ApiResponse, sendApiRequest } from './apiClient';
+import { invalidateLocalCache, withLocalCache } from '../utils/cache';
 
 export interface UploadProgress {
   loaded: number;
@@ -15,12 +16,33 @@ const sendUsersRequest = async <T>(payload: object): Promise<ApiResponse<T>> => 
   return sendApiRequest<T>('users', payload);
 };
 
+const DATA_CACHE_TTL_MS = 5 * 60 * 1000;
+const CHAPTER_CACHE_TTL_MS = 3 * 60 * 1000;
+
+const cacheMainRead = <T>(key: string, request: () => Promise<ApiResponse<T>>) => {
+  return withLocalCache<ApiResponse<T>>(key, DATA_CACHE_TTL_MS, request, (result) => result.success);
+};
+
+const cacheChapterRead = <T>(chapterId: string, request: () => Promise<ApiResponse<T>>) => {
+  return withLocalCache<ApiResponse<T>>(
+    `main:chapter:${chapterId}`,
+    CHAPTER_CACHE_TTL_MS,
+    request,
+    (result) => result.success
+  );
+};
+
+const invalidateMainContentCache = () => {
+  invalidateLocalCache(/^main:/);
+};
+
 export const AuthService = {
-  login: async (username: string, password: string) => {
+  login: async (username: string, password: string, clientFingerprint?: string) => {
     return sendUsersRequest<{ sessionToken: string; user: User }>({
       action: 'login',
       username,
-      password
+      password,
+      clientFingerprint
     });
   },
 
@@ -87,7 +109,7 @@ export const AuthService = {
     email: string;
     newPassword?: string;
   }) => {
-    return sendUsersRequest<{ user: User }>({
+    return sendUsersRequest<{ user: User; sessionToken?: string; sessionRotated?: boolean }>({
       action: 'updateOwnProfile',
       sessionToken,
       ...profileData
@@ -181,126 +203,145 @@ export const DriveService = {
 
 export const DataService = {
   getOrgSettings: async () => {
-    return sendRequest<{ settings: any }>({
+    return cacheMainRead('main:org-settings', () => sendRequest<{ settings: any }>({
       action: 'getOrgSettings'
-    });
+    }));
   },
 
   updateOrgSettings: async (settings: any, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'updateOrgSettings',
       sessionToken,
       settings
     });
+    if (result.success) invalidateMainContentCache();
+    return result;
   },
 
   deleteChapter: async (chapterId: string, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'deleteChapter',
       sessionToken,
       chapterId
     });
+    if (result.success) invalidateLocalCache(/^main:(chapter:|chapters|org-settings)/);
+    return result;
   },
 
   saveLandingPageData: async (landingPage: any, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'saveLandingPage',
       sessionToken,
       landingPage
     });
+    if (result.success) invalidateMainContentCache();
+    return result;
   },
 
   getLandingPageData: async () => {
-    return sendRequest<{ landingPage: any }>({
+    return cacheMainRead('main:landing-page', () => sendRequest<{ landingPage: any }>({
       action: 'loadLandingPage'
-    });
+    }));
   },
 
   savePillars: async (pillars: any[], sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'savePillars',
       sessionToken,
       pillars
     });
+    if (result.success) invalidateLocalCache(/^main:(pillars|stories)/);
+    return result;
   },
 
   loadPillars: async () => {
-    return sendRequest<{ pillars: any[] }>({
+    return cacheMainRead('main:pillars', () => sendRequest<{ pillars: any[] }>({
       action: 'loadPillars'
-    });
+    }));
   },
 
   listPillars: async () => {
-    return sendRequest<{ pillars: any[] }>({
+    return cacheMainRead('main:pillars-list', () => sendRequest<{ pillars: any[] }>({
       action: 'listPillars'
-    });
+    }));
   },
 
   getPillar: async (pillarId: string) => {
-    return sendRequest<{ pillar: any }>({
+    return cacheMainRead(`main:pillar:${pillarId}`, () => sendRequest<{ pillar: any }>({
       action: 'getPillar',
       pillarId
-    });
+    }));
   },
 
   createPillar: async (pillar: any, sessionToken: string) => {
-    return sendRequest<{ pillar: any }>({
+    const result = await sendRequest<{ pillar: any }>({
       action: 'createPillar',
       sessionToken,
       pillar
     });
+    if (result.success) invalidateLocalCache(/^main:pillar/);
+    return result;
   },
 
   updatePillar: async (pillar: any, sessionToken: string) => {
-    return sendRequest<{ pillar: any }>({
+    const result = await sendRequest<{ pillar: any }>({
       action: 'updatePillar',
       sessionToken,
       pillar
     });
+    if (result.success) invalidateLocalCache(/^main:pillar/);
+    return result;
   },
 
   deletePillar: async (pillarId: string, sessionToken: string) => {
-    return sendRequest<{ pillar: any }>({
+    const result = await sendRequest<{ pillar: any }>({
       action: 'deletePillar',
       sessionToken,
       pillarId
     });
+    if (result.success) invalidateLocalCache(/^main:pillar/);
+    return result;
   },
 
   saveChapter: async (chapterId: string, chapterData: any, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'saveChapter',
       sessionToken,
       chapterId,
       chapterData
     });
+    if (result.success) invalidateLocalCache(/^main:chapter/);
+    if (result.success) invalidateLocalCache('main:chapters');
+    return result;
   },
 
   loadChapter: async (chapterId: string) => {
-    return sendRequest<{ chapter: any }>({
+    return cacheChapterRead(chapterId, () => sendRequest<{ chapter: any }>({
       action: 'loadChapter',
       chapterId
-    });
+    }));
   },
 
   listChapters: async () => {
-    return sendRequest<{ chapters: any[] }>({
+    return cacheMainRead('main:chapters', () => sendRequest<{ chapters: any[] }>({
       action: 'listChapters'
-    });
+    }));
   },
 
   savePartners: async (partners: any, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'savePartners',
       sessionToken,
       partners
     });
+    if (result.success) invalidateLocalCache(/^main:partners/);
+    return result;
   },
 
   loadPartners: async () => {
-    return sendRequest<{ partners: any }>({
+    return cacheMainRead('main:partners', () => sendRequest<{ partners: any }>({
       action: 'loadPartners'
-    });
+    }));
   },
 
   listPartnerCategories: async () => {
@@ -376,17 +417,19 @@ export const DataService = {
   },
 
   saveFounders: async (founders: any, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'saveFounders',
       sessionToken,
       founders
     });
+    if (result.success) invalidateLocalCache(/^main:founders/);
+    return result;
   },
 
   loadFounders: async () => {
-    return sendRequest<{ founders: any }>({
+    return cacheMainRead('main:founders', () => sendRequest<{ founders: any }>({
       action: 'loadFounders'
-    });
+    }));
   },
 
   listFounders: async () => {
@@ -427,17 +470,19 @@ export const DataService = {
   },
 
   saveExecutiveOfficers: async (executiveOfficers: any, sessionToken: string) => {
-    return sendRequest({
+    const result = await sendRequest({
       action: 'saveExecutiveOfficers',
       sessionToken,
       executiveOfficers
     });
+    if (result.success) invalidateLocalCache(/^main:executive-officers/);
+    return result;
   },
 
   loadExecutiveOfficers: async () => {
-    return sendRequest<{ executiveOfficers: any }>({
+    return cacheMainRead('main:executive-officers', () => sendRequest<{ executiveOfficers: any }>({
       action: 'loadExecutiveOfficers'
-    });
+    }));
   },
 
   listExecutiveOfficers: async () => {

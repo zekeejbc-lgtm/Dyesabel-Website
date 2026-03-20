@@ -6,6 +6,19 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css'; // Ensure your global styles are imported
 
+const applyInitialTheme = () => {
+  const savedTheme = window.localStorage.getItem('theme');
+  const theme = savedTheme || 'dark';
+
+  if (theme === 'dark') {
+    document.documentElement.classList.add('dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+  }
+};
+
+applyInitialTheme();
+
 // Service Work er Registration and Update Handling
 let updateToastId: string | number | undefined;
 let updateToastActive = false;

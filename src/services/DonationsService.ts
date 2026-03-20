@@ -1,5 +1,6 @@
 import { convertToCORSFreeLink } from './DriveService';
 import { sendApiRequest } from './apiClient';
+import { invalidateLocalCache, withLocalCache } from '../utils/cache';
 
 export interface DonationMethod {
   id: string;
@@ -85,6 +86,9 @@ const emptyContent: DonationContent = {
   recentDonations: []
 };
 
+const DONATION_PUBLIC_CACHE_KEY = 'donations:public-content';
+const DONATION_CACHE_TTL_MS = 5 * 60 * 1000;
+
 const normalizeMethod = (method: Partial<DonationMethod>, index: number): DonationMethod => ({
   id: String(method.id || `method-${index + 1}`),
   name: String(method.name || `Method ${index + 1}`),
@@ -160,7 +164,12 @@ const fileToBase64 = (file: File): Promise<string> =>
 
 export const DonationsService = {
   async getPublicDonationData(): Promise<DonationsApiResponse<DonationContent>> {
-    const result = await sendApiRequest<DonationContent>('donations', { action: 'getPublicDonationData' });
+    const result = await withLocalCache<DonationsApiResponse<DonationContent>>(
+      DONATION_PUBLIC_CACHE_KEY,
+      DONATION_CACHE_TTL_MS,
+      () => sendApiRequest<DonationContent>('donations', { action: 'getPublicDonationData' }),
+      (response) => response.success
+    );
 
     if (!result.success) {
       return {
@@ -211,11 +220,13 @@ export const DonationsService = {
       };
     }
 
-    return {
+    const normalizedResult = {
       success: true,
       message: result.message,
       data: normalizeContent(result.donationContent)
     };
+    invalidateLocalCache(/^donations:/);
+    return normalizedResult;
   },
 
   async uploadDonationQr(

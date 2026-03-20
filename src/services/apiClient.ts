@@ -1,4 +1,5 @@
 import { APP_CONFIG, requireConfig } from '../config';
+import { dispatchAuthInvalidEvent } from '../utils/session';
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -8,6 +9,14 @@ export interface ApiResponse<T = unknown> {
 }
 
 type ApiTarget = 'main' | 'users' | 'donations';
+
+const isAuthInvalidError = (error?: string): boolean => {
+  const normalized = String(error || '').toLowerCase();
+  return normalized.includes('unauthorized') ||
+    normalized.includes('session expired') ||
+    normalized.includes('session invalid') ||
+    normalized.includes('session revoked');
+};
 
 const resolveApiUrl = (target: ApiTarget): string => {
   if (target === 'main') {
@@ -90,6 +99,9 @@ export const sendApiRequest = async <T>(
           payload,
           response: data
         });
+        if (isAuthInvalidError(data?.error)) {
+          dispatchAuthInvalidEvent(data.error);
+        }
       }
       return data;
     } catch (error) {

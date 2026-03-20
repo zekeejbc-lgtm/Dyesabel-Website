@@ -3,7 +3,6 @@ import { ArrowLeft, Save, LogOut, Layout, Type, Image } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { DataService } from '../services/DriveService';
-import { SESSION_TOKEN_KEY } from '../types';
 import { getSessionToken } from '../utils/session';
 
 interface LandingPageEditorProps {

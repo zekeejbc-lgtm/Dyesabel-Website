@@ -4,7 +4,7 @@ import { Check, ChevronDown, Plus, Save, Search, Trash2, Upload, X } from 'lucid
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
-import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
+import { ExecutiveOfficer, Founder } from '../types';
 import { DataService, DriveService, convertToCORSFreeLink } from '../services/DriveService';
 import { getSessionToken } from '../utils/session';
 

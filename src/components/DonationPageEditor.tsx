@@ -22,6 +22,7 @@ import {
 import { convertToCORSFreeLink } from '../services/DriveService';
 import { getSessionToken } from '../utils/session';
 import { CustomSelect, CustomSelectOption } from './CustomSelect';
+import { SkeletonBlock } from './Skeleton';
 
 interface DonationPageEditorProps {
   onBack: () => void;
@@ -407,9 +408,64 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
           <div className="bg-gray-50 p-6 dark:bg-gray-950/40">
             <div className="space-y-6">
               {loading ? (
-                <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm dark:border-white/10 dark:bg-gray-900">
-                  <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-primary-blue" />
-                  <p className="font-medium text-ocean-deep dark:text-white">Loading donation content...</p>
+                <div className="space-y-6">
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
+                    <SkeletonBlock className="mb-6 h-7 w-56" />
+                    <div className="space-y-5">
+                      {Array.from({ length: 2 }).map((_, index) => (
+                        <div key={index} className="rounded-2xl border border-white/10 bg-gray-50 dark:bg-white/5 p-5">
+                          <div className="mb-4 flex items-center justify-between gap-4">
+                            <SkeletonBlock className="h-6 w-28" />
+                            <SkeletonBlock className="h-5 w-5 rounded-md" />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {Array.from({ length: 4 }).map((__, fieldIndex) => (
+                              <SkeletonBlock key={fieldIndex} className="h-11 w-full rounded-lg" />
+                            ))}
+                          </div>
+                          <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4 items-start">
+                            <div className="space-y-3">
+                              <SkeletonBlock className="h-11 w-full rounded-lg" />
+                              <SkeletonBlock className="h-5 w-40" />
+                            </div>
+                            <div className="rounded-xl border border-dashed border-white/10 bg-white/50 dark:bg-black/20 p-4 min-w-[220px]">
+                              <SkeletonBlock className="mb-3 h-4 w-24" />
+                              <SkeletonBlock className="mx-auto mb-3 h-28 w-28 rounded-lg" />
+                              <SkeletonBlock className="h-10 w-full rounded-lg" />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    {Array.from({ length: 2 }).map((_, index) => (
+                      <div key={index} className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
+                        <SkeletonBlock className="mb-6 h-7 w-52" />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {Array.from({ length: 6 }).map((__, fieldIndex) => (
+                            <SkeletonBlock key={fieldIndex} className="h-11 w-full rounded-lg" />
+                          ))}
+                        </div>
+                        <SkeletonBlock className="mt-4 h-24 w-full rounded-lg" />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
+                    <SkeletonBlock className="mb-6 h-7 w-44" />
+                    <div className="space-y-4">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <div key={index} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center rounded-2xl border border-white/10 bg-gray-50 dark:bg-white/5 p-4">
+                          {Array.from({ length: 5 }).map((__, fieldIndex) => (
+                            <SkeletonBlock key={fieldIndex} className="h-11 w-full rounded-lg" />
+                          ))}
+                          <SkeletonBlock className="h-5 w-5 rounded-md" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <>

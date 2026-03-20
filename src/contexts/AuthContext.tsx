@@ -1,6 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, UserRole, SESSION_TOKEN_KEY, USER_STORAGE_KEY } from '../types';
+import { User, UserRole } from '../types';
 import { AuthService } from '../services/DriveService';
+import { clearPersistedAppState } from '../utils/appState';
+import {
+  AUTH_INVALID_EVENT,
+  clearSession,
+  getClientFingerprint,
+  getLastSessionActivity,
+  getSessionToken,
+  getSessionUser,
+  markSessionActivity,
+  saveSession,
+  updateSessionUser
+} from '../utils/session';
 
 interface AuthContextType {
   user: User | null;
@@ -14,40 +26,54 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const CLIENT_IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => getSessionUser());
+  const [isLoading, setIsLoading] = useState<boolean>(() => !!getSessionToken());
+
+  const logout = () => {
+    const token = getSessionToken();
+    setUser(null);
+    clearPersistedAppState();
+    clearSession();
+
+    if (token) {
+      void AuthService.logout(token);
+    }
+  };
 
   // Check for existing session on mount
   useEffect(() => {
     const checkSession = async () => {
-      const token = localStorage.getItem(SESSION_TOKEN_KEY);
+      const token = getSessionToken();
       if (token) {
         try {
           const result = await AuthService.validateSession(token);
           if (result.success && result.user) {
             setUser(result.user);
+            saveSession(token, result.user);
+            markSessionActivity();
           } else {
-            logout(); // Token expired or invalid
+            logout();
           }
-        } catch (error) {
-          logout(); // Clear session on error
+        } catch {
+          logout();
         }
       }
       setIsLoading(false);
     };
-    checkSession();
+    void checkSession();
   }, []);
 
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
     try {
-      const result = await AuthService.login(username, password);
+      const result = await AuthService.login(username, password, getClientFingerprint());
 
       if (result.success && result.user && result.sessionToken) {
         setUser(result.user);
-        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(result.user));
-        localStorage.setItem(SESSION_TOKEN_KEY, result.sessionToken);
+        saveSession(result.sessionToken, result.user);
         setIsLoading(false);
         return { success: true };
       } else {
@@ -64,15 +90,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem(USER_STORAGE_KEY);
-    localStorage.removeItem(SESSION_TOKEN_KEY);
-  };
-
   const updateCurrentUser = (nextUser: User) => {
     setUser(nextUser);
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
+    updateSessionUser(nextUser);
   };
 
   const checkPermission = (requiredRole: UserRole | null, chapterId?: string): boolean => {
@@ -96,6 +116,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return false;
   };
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handleAuthInvalid = () => logout();
+    const activityEvents: Array<keyof WindowEventMap> = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    let idleIntervalId: number | null = null;
+
+    const handleActivity = () => {
+      if (!getSessionToken()) {
+        return;
+      }
+      markSessionActivity();
+    };
+
+    const checkIdleTimeout = () => {
+      const token = getSessionToken();
+      if (!token) {
+        return;
+      }
+
+      const lastActivity = getLastSessionActivity();
+      if (lastActivity && Date.now() - lastActivity > CLIENT_IDLE_TIMEOUT_MS) {
+        logout();
+      }
+    };
+
+    window.addEventListener(AUTH_INVALID_EVENT, handleAuthInvalid as EventListener);
+    activityEvents.forEach((eventName) => window.addEventListener(eventName, handleActivity, { passive: true }));
+    idleIntervalId = window.setInterval(checkIdleTimeout, 30 * 1000);
+
+    return () => {
+      window.removeEventListener(AUTH_INVALID_EVENT, handleAuthInvalid as EventListener);
+      activityEvents.forEach((eventName) => window.removeEventListener(eventName, handleActivity));
+      if (idleIntervalId !== null) {
+        window.clearInterval(idleIntervalId);
+      }
+    };
+  }, [user]);
 
   const value = {
     user,

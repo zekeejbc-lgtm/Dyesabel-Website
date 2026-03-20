@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowUpRight, MapPin } from 'lucide-react';
 import { Chapter } from '../types';
 import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 
 interface ChaptersProps {
   chapters: Chapter[];
@@ -28,13 +29,13 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
           {/* ✅ SKELETON LOADING STATE */}
           {isLoading ? (
              [1, 2, 3].map((_, i) => (
-                <div key={i} className="glass-card p-5 rounded-2xl flex items-center gap-5 border border-white/10 animate-pulse">
-                   <div className="w-20 h-20 rounded-full bg-white/20 flex-shrink-0"></div>
+                <div key={i} className="glass-card p-5 rounded-2xl flex items-center gap-5 border border-white/10">
+                   <SkeletonCircle className="w-20 h-20 flex-shrink-0" />
                    <div className="flex-grow flex flex-col gap-2">
-                      <div className="h-6 w-3/4 bg-white/20 rounded"></div>
-                      <div className="h-4 w-1/2 bg-white/10 rounded"></div>
+                      <SkeletonBlock className="h-6 w-3/4" />
+                      <SkeletonBlock className="h-4 w-1/2" />
                    </div>
-                   <div className="w-10 h-10 rounded-full bg-white/10"></div>
+                   <SkeletonCircle className="w-10 h-10" />
                 </div>
              ))
           ) : (
@@ -50,6 +51,8 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
                   <img 
                       src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}&background=random`} 
                       alt={`${chapter.name} Logo`} 
+                      loading="lazy"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       onError={(event) => {
                         console.error('[Chapters] Card logo failed to load', {

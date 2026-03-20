@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pillar } from '../types';
 import { Leaf, BookOpen, Scale, Heart, Palette } from 'lucide-react';
+import { SkeletonBlock } from './Skeleton';
 
 // Helper to map index to icon since icons can't be saved in JSON
 const getIconForIndex = (index: number) => {
@@ -28,23 +29,21 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, 
       <section id="pillars" className="py-24 relative overflow-hidden">
         <div className="container mx-auto px-4 relative z-10">
           <div className="text-center mb-20">
-             {/* Title Skeletons */}
-             <div className="h-4 w-32 bg-gray-300 dark:bg-white/10 rounded mx-auto mb-4 animate-pulse"></div>
-             <div className="h-12 w-64 md:w-96 bg-gray-300 dark:bg-white/10 rounded mx-auto animate-pulse"></div>
+             <SkeletonBlock className="mx-auto mb-4 h-4 w-32 rounded-full" />
+             <SkeletonBlock className="mx-auto h-12 w-64 rounded-2xl md:w-96" />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="glass-card rounded-2xl overflow-hidden h-full animate-pulse border border-white/20">
-                {/* Image Area Skeleton */}
-                <div className="h-48 md:h-36 lg:h-48 bg-gray-300 dark:bg-white/10 w-full relative">
-                    <div className="absolute bottom-4 left-4 w-10 h-10 bg-gray-400 dark:bg-white/20 rounded-xl"></div>
+              <div key={i} className="glass-card rounded-2xl overflow-hidden h-full border border-white/20">
+                <div className="h-48 md:h-36 lg:h-48 w-full relative">
+                    <SkeletonBlock className="absolute inset-0 rounded-none" />
+                    <SkeletonBlock className="absolute bottom-4 left-4 w-10 h-10 rounded-xl" />
                 </div>
-                {/* Text Content Skeleton */}
                 <div className="p-6">
-                  <div className="h-6 w-3/4 bg-gray-300 dark:bg-white/10 rounded mb-3"></div>
-                  <div className="h-4 w-full bg-gray-300 dark:bg-white/10 rounded mb-2"></div>
-                  <div className="h-4 w-2/3 bg-gray-300 dark:bg-white/10 rounded"></div>
+                  <SkeletonBlock className="mb-3 h-6 w-3/4" />
+                  <SkeletonBlock className="mb-2 h-4 w-full" />
+                  <SkeletonBlock className="h-4 w-2/3" />
                 </div>
               </div>
             ))}
@@ -79,6 +78,8 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, 
                 <img 
                   src={pillar.imageUrl} 
                   alt={pillar.title} 
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-1000"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep/90 via-transparent to-transparent opacity-90"></div>

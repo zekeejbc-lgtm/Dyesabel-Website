@@ -56,6 +56,8 @@ export const Footer: React.FC<FooterProps> = ({ onDonateClick, onNavigate }) => 
                 <img
                   src={APP_CONFIG.logoUrl}
                   alt="Dyesabel Philippines Logo"
+                  loading="lazy"
+                  decoding="async"
                   className="relative h-14 w-14 rounded-full object-contain ring-2 ring-white/10 transition-transform duration-500 hover:rotate-12"
                 />
               </div>

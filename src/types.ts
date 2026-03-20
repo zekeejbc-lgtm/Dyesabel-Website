@@ -42,6 +42,7 @@ export interface Chapter {
   location: string;
   logo: string;
   image?: string; // Cover image for the chapter
+  imageUrl?: string; // Backward-compatible alias used by backend responses/components
   description?: string;
   email?: string;
   phone?: string;

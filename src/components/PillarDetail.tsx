@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { ArrowLeft, Target, Calendar, CheckCircle2, Edit } from 'lucide-react';
 // ✅ FIXED IMPORTS: Changed '../../' to '../'
 import { Pillar } from '../types';
@@ -12,9 +12,6 @@ interface PillarDetailProps {
 
 export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEdit }) => {
   const { user } = useAuth();
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
 
   return (
     <div className="min-h-screen pt-20 pb-10">
@@ -24,7 +21,7 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
         className="fixed top-24 left-4 md:left-8 z-40 flex items-center gap-2 bg-ocean-deep/90 text-white backdrop-blur-md hover:bg-ocean-deep transition-all duration-300 font-medium px-5 py-2.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.3)] border border-white/10 group"
       >
         <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
-        <span>Back to Pillars</span>
+        <span>Back</span>
       </button>
 
       {/* Edit Button - Admin only */}
@@ -44,6 +41,8 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
           <img 
             src={pillar.imageUrl} 
             alt={pillar.title} 
+            fetchPriority="high"
+            decoding="async"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep via-ocean-deep/70 to-transparent"></div>
@@ -93,6 +92,8 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
                          <img 
                             src={activity.imageUrl} 
                             alt={activity.title}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                           />
                           <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">

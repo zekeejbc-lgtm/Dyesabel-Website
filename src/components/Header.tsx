@@ -113,6 +113,8 @@ export const Header: React.FC<HeaderProps> = ({
               <img
                 src={APP_CONFIG.logoUrl}
                 alt="Dyesabel Philippines Logo"
+                fetchPriority="high"
+                decoding="async"
                 className="relative z-10 h-10 w-10 rounded-full object-contain drop-shadow-md transition-transform duration-300 md:h-12 md:w-12 lg:h-14 lg:w-14"
               />
             </div>

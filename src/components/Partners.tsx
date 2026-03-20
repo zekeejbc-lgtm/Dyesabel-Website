@@ -1,6 +1,7 @@
 import React from 'react';
 import { Users, Building2, Globe2, Flag, Edit, Mail, Handshake } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 
 // Interfaces matching your backend structure
 export interface Partner {
@@ -42,7 +43,7 @@ export const Partners: React.FC<PartnersProps> = ({ partners = [], isLoading = f
     const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
     if (isDesktop) {
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(recipient)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyContent)}`;
-      window.open(gmailUrl, '_blank');
+      window.open(gmailUrl, '_blank', 'noopener,noreferrer');
     } else {
       const mailtoUrl = `mailto:${recipient}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(bodyContent)}`;
       window.location.href = mailtoUrl;
@@ -85,20 +86,17 @@ export const Partners: React.FC<PartnersProps> = ({ partners = [], isLoading = f
           
           {/* ✅ SKELETON LOADING STATE */}
           {isLoading ? (
-            // Render 2 fake category cards
             [1, 2].map((_, i) => (
-              <div key={i} className="glass-card rounded-2xl p-6 md:p-8 border border-white/10 animate-pulse">
-                {/* Skeleton Header */}
+              <div key={i} className="glass-card rounded-2xl p-6 md:p-8 border border-white/10">
                 <div className="flex items-center gap-4 mb-6 pb-4 border-b border-white/10">
-                  <div className="w-12 h-12 rounded-full bg-white/20"></div>
-                  <div className="h-6 w-48 bg-white/20 rounded"></div>
+                  <SkeletonCircle className="w-12 h-12" />
+                  <SkeletonBlock className="h-6 w-48" />
                 </div>
-                {/* Skeleton Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   {[1, 2, 3, 4].map((_, j) => (
                     <div key={j} className="flex flex-col items-center p-4 rounded-xl bg-white/5 border border-transparent">
-                      <div className="w-16 h-16 rounded-full bg-white/20 mb-3"></div>
-                      <div className="h-4 w-24 bg-white/20 rounded"></div>
+                      <SkeletonCircle className="w-16 h-16 mb-3" />
+                      <SkeletonBlock className="h-4 w-24" />
                     </div>
                   ))}
                 </div>

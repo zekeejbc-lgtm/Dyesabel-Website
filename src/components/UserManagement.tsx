@@ -6,6 +6,7 @@ import { useAppDialog } from '../contexts/AppDialogContext';
 import { User, USER_ROLES, ROLE_LABELS, ROLE_COLORS, UserRole } from '../types';
 import { getSessionToken } from '../utils/session';
 import { CustomSelect, CustomSelectOption } from './CustomSelect';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 
 interface NewUserState {
   username: string;
@@ -248,8 +249,43 @@ export const UserManagement: React.FC<UserManagementProps> = ({ onBack }) => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="text-xl text-ocean-deep dark:text-white">Loading users...</div>
+      <div className="space-y-6">
+        <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+          <div className="flex justify-between items-center">
+            <div className="space-y-3 w-full max-w-xl">
+              <SkeletonBlock className="h-7 w-52" />
+              <SkeletonBlock className="h-4 w-full" />
+            </div>
+            <SkeletonBlock className="hidden sm:block h-11 w-32 rounded-lg" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 overflow-hidden">
+          <div className="p-6 space-y-5">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="flex items-center justify-between gap-4 border-b border-gray-200/70 dark:border-white/10 pb-5 last:border-b-0 last:pb-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <SkeletonCircle className="w-8 h-8" />
+                  <div className="space-y-2">
+                    <SkeletonBlock className="h-4 w-32" />
+                    <SkeletonBlock className="h-3 w-48 max-w-[40vw]" />
+                  </div>
+                </div>
+                <div className="hidden md:block">
+                  <SkeletonBlock className="h-6 w-20 rounded-full" />
+                </div>
+                <div className="hidden lg:block">
+                  <SkeletonBlock className="h-4 w-28" />
+                </div>
+                <div className="flex gap-2">
+                  <SkeletonBlock className="h-8 w-8 rounded-lg" />
+                  <SkeletonBlock className="h-8 w-8 rounded-lg" />
+                  <SkeletonBlock className="h-8 w-8 rounded-lg" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }

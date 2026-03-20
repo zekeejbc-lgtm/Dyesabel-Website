@@ -3,7 +3,7 @@ import { KeyRound, Mail, Save, User as UserIcon, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { AuthService, DataService } from '../services/DriveService';
-import { getSessionToken } from '../utils/session';
+import { getSessionToken, saveSession } from '../utils/session';
 
 interface MyProfileModalProps {
   isOpen: boolean;
@@ -73,8 +73,8 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({ isOpen, onClose 
         await showAlert('Passwords do not match.');
         return;
       }
-      if (newPassword.length < 6) {
-        await showAlert('Password must be at least 6 characters long.');
+      if (newPassword.length < 8) {
+        await showAlert('Password must be at least 8 characters long.');
         return;
       }
     }
@@ -99,6 +99,9 @@ export const MyProfileModal: React.FC<MyProfileModalProps> = ({ isOpen, onClose 
       }
 
       updateCurrentUser(result.user);
+      if (result.sessionToken) {
+        saveSession(result.sessionToken, result.user);
+      }
       await showAlert('Your profile has been updated.', { title: 'Profile Updated' });
       onClose();
     } finally {

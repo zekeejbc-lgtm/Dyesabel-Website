@@ -1,7 +1,15 @@
 import React from 'react';
 import { APP_CONFIG } from '../config';
 
-export const LoadingScreen: React.FC = () => {
+interface LoadingScreenProps {
+  title?: string;
+  subtitle?: string;
+}
+
+export const LoadingScreen: React.FC<LoadingScreenProps> = ({
+  title = 'Dyesabel',
+  subtitle = 'Philippines',
+}) => {
   return (
     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center overflow-hidden bg-ocean-dark font-sans text-white">
       <div className="absolute inset-0 bg-gradient-to-b from-ocean-deep via-[#021017] to-ocean-dark opacity-95" />
@@ -22,13 +30,13 @@ export const LoadingScreen: React.FC = () => {
           </div>
         </div>
 
-        <h2 className="bg-gradient-to-r from-primary-cyan via-white to-primary-cyan bg-clip-text pb-2 font-lobster text-5xl tracking-wide text-transparent drop-shadow-lg animate-pulse">
-          Dyesabel
+        <h2 className="bg-gradient-to-r from-primary-cyan via-white to-primary-cyan bg-clip-text pb-2 text-center font-lobster text-5xl tracking-wide text-transparent drop-shadow-lg animate-pulse">
+          {title}
         </h2>
         <div className="mt-4 flex items-center gap-3">
           <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-primary-cyan/50" />
           <p className="text-[10px] font-bold uppercase tracking-[0.4em] text-primary-cyan/80 antialiased">
-            Philippines
+            {subtitle}
           </p>
           <div className="h-[1px] w-8 bg-gradient-to-l from-transparent to-primary-cyan/50" />
         </div>

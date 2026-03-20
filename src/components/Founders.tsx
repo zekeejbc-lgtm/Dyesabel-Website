@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Edit } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { ExecutiveOfficer, Founder } from '../types';
 import { convertToCORSFreeLink } from '../services/DriveService';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 
 interface FoundersProps {
   founders?: Founder[];
@@ -49,12 +50,12 @@ export const Founders: React.FC<FoundersProps> = ({
         <div className="flex flex-wrap justify-center gap-8 md:gap-10 max-w-7xl mx-auto">
           {isLoading ? (
             [1, 2].map((_, i) => (
-              <div key={i} className="glass-card flex flex-col md:flex-row items-center md:items-start gap-6 p-8 rounded-3xl w-full md:max-w-xl flex-1 animate-pulse border border-white/10">
-                <div className="w-32 h-32 md:w-40 md:h-40 rounded-full bg-white/20 flex-shrink-0" />
+              <div key={i} className="glass-card flex flex-col md:flex-row items-center md:items-start gap-6 p-8 rounded-3xl w-full md:max-w-xl flex-1 border border-white/10">
+                <SkeletonCircle className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0" />
                 <div className="flex-1 w-full flex flex-col items-center md:items-start gap-3">
-                  <div className="h-8 w-3/4 bg-white/20 rounded" />
-                  <div className="h-4 w-1/2 bg-white/10 rounded" />
-                  <div className="h-20 w-full bg-white/10 rounded mt-2" />
+                  <SkeletonBlock className="h-8 w-3/4" />
+                  <SkeletonBlock className="h-4 w-1/2" />
+                  <SkeletonBlock className="mt-2 h-20 w-full" />
                 </div>
               </div>
             ))
@@ -125,7 +126,7 @@ export const Founders: React.FC<FoundersProps> = ({
                     {visibleExecutiveOfficers.map((executive, index) => (
                       <article
                         key={executive.id}
-                        className={`rounded-2xl border border-white/15 bg-white/10 dark:bg-white/5 p-4 md:p-5 flex items-center gap-4 hover:bg-white/15 transition-all duration-300 reveal reveal-delay-${((index % 6) + 1) * 100}`}
+                        className={`rounded-2xl border border-white/15 bg-white/10 dark:bg-white/5 p-4 md:p-5 flex items-center gap-4 hover:bg-white/15 transition-all duration-300 reveal active reveal-delay-${((index % 6) + 1) * 100}`}
                       >
                         <img
                           src={convertToCORSFreeLink(executive.imageUrl) || getAvatarUrl(executive.name)}

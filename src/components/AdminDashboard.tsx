@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, BookOpen, Users as UsersIcon, FileText, Building2, Loader2, Globe, Heart, UserCircle2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users as UsersIcon, FileText, Building2, Globe, Heart, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
@@ -8,6 +8,7 @@ import { DonationPageEditor } from './DonationPageEditor';
 import { ChaptersManagement } from './ChaptersManagement';
 import { ChapterEditor } from './ChapterEditor';
 import { MyProfileModal } from './MyProfileModal';
+import { SkeletonBlock, SkeletonCircle } from './Skeleton';
 import { DataService } from '../services/DriveService';
 import { DonationsService } from '../services/DonationsService';
 import { useAppDialog } from '../contexts/AppDialogContext';
@@ -158,10 +159,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-ocean-light to-ocean-mint dark:from-ocean-deep dark:to-ocean-dark flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 text-primary-blue animate-spin mx-auto mb-4" />
-          <p className="text-ocean-deep dark:text-white font-medium">Loading Dashboard Data...</p>
+      <div className="min-h-screen bg-gradient-to-b from-ocean-light via-[#b2dfdb] to-ocean-mint dark:from-ocean-deep dark:via-[#021017] dark:to-ocean-dark pt-24 pb-16 px-4">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+            <div className="flex items-center gap-4">
+              <SkeletonCircle className="h-10 w-10 shrink-0" />
+              <div className="flex-1 space-y-3">
+                <SkeletonBlock className="h-10 w-80 max-w-[80vw]" />
+                <SkeletonBlock className="h-4 w-64 max-w-[55vw]" />
+              </div>
+            </div>
+          </div>
+
+          {!isScopedDashboard && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
+                  <div className="flex items-center gap-3">
+                    <SkeletonBlock className="h-12 w-12 rounded-lg shrink-0" />
+                    <div className="w-full space-y-3">
+                      <SkeletonBlock className="h-7 w-16" />
+                      <SkeletonBlock className="h-4 w-24" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-6">
+            <SkeletonBlock className="h-8 w-52" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: isScopedDashboard ? 2 : 6 }).map((_, index) => (
+                <div key={index} className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
+                  <div className="flex items-start justify-between mb-4">
+                    <SkeletonBlock className="h-14 w-14 rounded-lg" />
+                    <SkeletonBlock className="h-4 w-12 rounded-full" />
+                  </div>
+                  <SkeletonBlock className="mb-3 h-7 w-40" />
+                  <SkeletonBlock className="mb-2 h-4 w-full" />
+                  <SkeletonBlock className="mb-3 h-4 w-3/4" />
+                  <SkeletonBlock className="h-3 w-28" />
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     );

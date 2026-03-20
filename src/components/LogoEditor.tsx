@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Upload, Image as ImageIcon, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { uploadLogo, getOrganizationSettings, updateOrganizationSettings } from '../utils/driveUpload';
 import { getSessionToken } from '../utils/session';
 
@@ -11,6 +12,7 @@ interface LogoEditorProps {
 
 export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate }) => {
   const { user } = useAuth();
+  const { showAlert } = useAppDialog();
   const [logoUrl, setLogoUrl] = useState<string>('');
   const [organizationName, setOrganizationName] = useState<string>('Dyesabel PH');
   const [previewUrl, setPreviewUrl] = useState<string>('');
@@ -20,7 +22,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   // Check permission
-  const canEdit = user?.role === 'admin';
+  const canEdit = user?.role === 'admin' || (user?.role === 'editor' && !user?.chapterId);
 
   useEffect(() => {
     loadCurrentSettings();
@@ -33,7 +35,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please log in again.');
+        await showAlert('Session expired. Please log in again.');
         return;
       }
 
@@ -66,7 +68,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please log in again.');
+        await showAlert('Session expired. Please log in again.');
         return;
       }
 
@@ -76,12 +78,12 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
         setLogoUrl(result.url);
         setPreviewUrl(result.url);
         setSelectedFile(null);
-        alert('Logo uploaded successfully! Click "Save Changes" to apply.');
+        await showAlert('Logo uploaded successfully! Click "Save Changes" to apply.', { title: 'Upload Complete' });
       } else {
-        alert('Upload failed: ' + (result.error || 'Unknown error'));
+        await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error uploading logo. Please try again.');
+      await showAlert('Error uploading logo. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -94,7 +96,7 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please log in again.');
+        await showAlert('Session expired. Please log in again.');
         return;
       }
 
@@ -104,16 +106,16 @@ export const LogoEditor: React.FC<LogoEditorProps> = ({ onClose, onLogoUpdate })
       });
 
       if (result.success) {
-        alert('Organization settings saved successfully!');
+        await showAlert('Organization settings saved successfully!', { title: 'Branding Updated' });
         if (onLogoUpdate) {
           onLogoUpdate(logoUrl);
         }
         onClose();
       } else {
-        alert('Save failed: ' + (result.error || 'Unknown error'));
+        await showAlert('Save failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error saving settings. Please try again.');
+      await showAlert('Error saving settings. Please try again.');
     } finally {
       setSaving(false);
     }

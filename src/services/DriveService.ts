@@ -68,6 +68,20 @@ export const AuthService = {
     });
   },
 
+  updateUser: async (sessionToken: string, userData: {
+    userId: string;
+    username: string;
+    email: string;
+    role: string;
+    chapterId?: string;
+  }) => {
+    return sendUsersRequest<{ user: User }>({
+      action: 'updateUser',
+      sessionToken,
+      ...userData
+    });
+  },
+
   deleteUser: async (sessionToken: string, userId: string) => {
     return sendUsersRequest({
       action: 'deleteUser',

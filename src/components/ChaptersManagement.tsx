@@ -7,18 +7,44 @@ import {
 } from 'lucide-react';
 import { DataService, AuthService } from '../services/DriveService';
 import { uploadImageToDrive } from '../utils/driveUpload';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { Chapter, User } from '../types';
 import { getSessionToken } from '../utils/session';
+import { CustomSelect, CustomSelectOption } from './CustomSelect';
 
 // --- Types ---
 type ViewState = 'LIST' | 'CREATE_CHAPTER' | 'CHAPTER_DETAIL';
-type TabState = 'DETAILS' | 'MEMBERS';
+type TabState = 'DETAILS' | 'MEMBERS' | 'GENERAL';
+type UserEditorMode = 'CREATE_CHAPTER' | 'CREATE_GENERAL' | 'EDIT';
+
+interface UserEditorFormState {
+  userId?: string;
+  username: string;
+  email: string;
+  password: string;
+  role: string;
+  chapterId: string;
+}
 
 interface ChaptersManagementProps {
   onBack: () => void;
 }
 
+const chapterRoleOptions: CustomSelectOption[] = [
+  { value: 'member', label: 'Member', description: 'Basic chapter account' },
+  { value: 'editor', label: 'Chapter Editor', description: 'Can edit chapter content' },
+  { value: 'chapter_head', label: 'Chapter Head', description: 'Leads the local chapter' }
+];
+
+const allRoleOptions: CustomSelectOption[] = [
+  { value: 'member', label: 'Member', description: 'Basic chapter account' },
+  { value: 'editor', label: 'Editor', description: 'Can edit content globally or by chapter' },
+  { value: 'chapter_head', label: 'Chapter Head', description: 'Leads a local chapter' },
+  { value: 'admin', label: 'Admin', description: 'Full system access' }
+];
+
 export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }) => {
+  const { showAlert, showConfirm } = useAppDialog();
   // --- Global State ---
   const [view, setView] = useState<ViewState>('LIST');
   const [activeTab, setActiveTab] = useState<TabState>('DETAILS');
@@ -32,7 +58,15 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
   // --- Form States ---
   const [chapterFormData, setChapterFormData] = useState<Partial<Chapter>>({});
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ username: '', email: '', password: '', role: 'member' });
+  const [userModalMode, setUserModalMode] = useState<UserEditorMode>('CREATE_CHAPTER');
+  const [userEditorForm, setUserEditorForm] = useState<UserEditorFormState>({
+    username: '',
+    email: '',
+    password: '',
+    role: 'member',
+    chapterId: ''
+  });
+  const [isSavingUser, setIsSavingUser] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -88,7 +122,10 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
   };
 
   const handleSaveChapter = async () => {
-    if (!chapterFormData.name) return alert("Chapter Name is required");
+    if (!chapterFormData.name) {
+      await showAlert('Chapter Name is required');
+      return;
+    }
     
     const isNew = view === 'CREATE_CHAPTER';
     let chapterId = selectedChapter?.id || '';
@@ -99,19 +136,24 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     
     const payload = { ...chapterFormData, id: chapterId };
     const token = getSessionToken();
-    if (!token) return alert('Session expired. Please log in again.');
+    if (!token) {
+      await showAlert('Session expired. Please log in again.');
+      return;
+    }
 
     try {
       const res = await DataService.saveChapter(chapterId, payload, token);
       if (res.success) {
-        alert(isNew ? "Chapter Created!" : "Chapter Updated!");
+        await showAlert(isNew ? 'Chapter Created!' : 'Chapter Updated!', {
+          title: isNew ? 'Chapter Created' : 'Chapter Updated'
+        });
         loadData();
         setView('LIST');
       } else {
-        alert("Failed to save: " + res.message);
+        await showAlert('Failed to save: ' + res.message);
       }
     } catch (e) {
-      alert("Error saving chapter");
+      await showAlert('Error saving chapter');
     }
   };
 
@@ -123,7 +165,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     try {
       const token = getSessionToken();
       if (!token) {
-        alert('Session expired. Please log in again.');
+        await showAlert('Session expired. Please log in again.');
         return;
       }
       const res = await uploadImageToDrive(file, 'chapters', token);
@@ -131,59 +173,222 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
       if (res.success && res.url) {
         setChapterFormData(prev => ({ ...prev, logo: res.url }));
       } else {
-        alert('Failed to upload logo: ' + (res.error || 'Unknown error'));
+        await showAlert('Failed to upload logo: ' + (res.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error uploading logo');
+      await showAlert('Error uploading logo');
     } finally {
       setIsUploadingLogo(false);
     }
   };
 
   const handleAddUser = async () => {
-    if (!selectedChapter) return alert("No chapter selected!");
-    if (!newUser.username || !newUser.password) return alert("Username and Password required");
+    if (!userEditorForm.username || !userEditorForm.password) {
+      await showAlert('Username and Password required');
+      return;
+    }
 
+    const isAdminRole = userEditorForm.role === 'admin';
+    const assignedChapterId = isAdminRole ? '' : String(userEditorForm.chapterId || '');
+    const requiresChapter = userEditorForm.role === 'chapter_head' || userEditorForm.role === 'member';
+
+    if (requiresChapter && !assignedChapterId) {
+      await showAlert('Chapter assignment is required for chapter heads and members.');
+      return;
+    }
+
+    setIsSavingUser(true);
     try {
-      const payload = {
-        ...newUser,
-        chapterId: selectedChapter.id, 
-      };
-      
       const token = getSessionToken();
-      if (!token) return alert('Session expired. Please log in again.');
-      const res = await AuthService.createUser(token, payload);
-      
-      if (res.success) {
-        // ✅ FIX 1: Optimistic Update - Add user to state immediately
-        if (res.user) {
-             setUsers(prev => [...prev, res.user]);
-        } else {
-             // Fallback if backend doesn't return the user object
-             loadData();
-        }
-        
-        alert(`User added to ${selectedChapter.name}!`);
-        setIsUserModalOpen(false);
-        setNewUser({ username: '', email: '', password: '', role: 'member' });
-      } else {
-        alert("Failed to add user: " + res.message);
+      if (!token) {
+        await showAlert('Session expired. Please log in again.');
+        return;
       }
+      const payload = {
+        username: userEditorForm.username,
+        email: userEditorForm.email,
+        password: userEditorForm.password,
+        role: userEditorForm.role,
+        chapterId: assignedChapterId
+      };
+      const res = await AuthService.createUser(token, payload);
+
+      if (!res.success) {
+        await showAlert('Failed to add user: ' + res.message);
+        return;
+      }
+
+      if (res.user) {
+        setUsers(prev => [...prev, res.user]);
+      } else {
+        await loadData();
+      }
+
+      await showAlert('User created successfully.', { title: 'User Created' });
+      closeUserModal();
     } catch (e) {
-      alert("Error adding user");
+      await showAlert('Error adding user');
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
+
+  const handleUpdateUser = async () => {
+    if (!userEditorForm.userId) {
+      await showAlert('User ID is required for updates.');
+      return;
+    }
+    if (!userEditorForm.username) {
+      await showAlert('Username is required.');
+      return;
+    }
+
+    const isAdminRole = userEditorForm.role === 'admin';
+    const assignedChapterId = isAdminRole ? '' : String(userEditorForm.chapterId || '');
+    if (!isAdminRole && (userEditorForm.role === 'chapter_head' || userEditorForm.role === 'member') && !assignedChapterId) {
+      await showAlert('Chapter assignment is required for chapter heads and members.');
+      return;
+    }
+
+    setIsSavingUser(true);
+    try {
+      const token = getSessionToken();
+      if (!token) {
+        await showAlert('Session expired. Please log in again.');
+        return;
+      }
+
+      const updateRes = await AuthService.updateUser(token, {
+        userId: userEditorForm.userId,
+        username: userEditorForm.username,
+        email: userEditorForm.email,
+        role: userEditorForm.role,
+        chapterId: assignedChapterId
+      });
+
+      if (!updateRes.success) {
+        await showAlert('Failed to update user: ' + updateRes.message);
+        return;
+      }
+
+      if (userEditorForm.password) {
+        const passRes = await AuthService.updatePassword(token, userEditorForm.password, userEditorForm.username);
+        if (!passRes.success) {
+          await showAlert('User info updated, but password update failed: ' + passRes.message);
+        }
+      }
+
+      await loadData();
+      await showAlert('User updated successfully.', { title: 'User Updated' });
+      closeUserModal();
+    } catch (error) {
+      await showAlert('Error updating user');
+    } finally {
+      setIsSavingUser(false);
+    }
+  };
+
+  const closeUserModal = () => {
+    setIsUserModalOpen(false);
+    setShowPassword(false);
+    setUserEditorForm({
+      username: '',
+      email: '',
+      password: '',
+      role: 'member',
+      chapterId: ''
+    });
+  };
+
+  const openCreateChapterUserModal = () => {
+    if (!selectedChapter) return;
+    setUserModalMode('CREATE_CHAPTER');
+    setShowPassword(false);
+    setUserEditorForm({
+      username: '',
+      email: '',
+      password: '',
+      role: 'member',
+      chapterId: selectedChapter.id
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const openCreateGeneralUserModal = () => {
+    setUserModalMode('CREATE_GENERAL');
+    setShowPassword(false);
+    setUserEditorForm({
+      username: '',
+      email: '',
+      password: '',
+      role: 'member',
+      chapterId: selectedChapter?.id || ''
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const openEditUserModal = (user: User) => {
+    setUserModalMode('EDIT');
+    setShowPassword(false);
+    setUserEditorForm({
+      userId: user.id,
+      username: user.username,
+      email: user.email,
+      password: '',
+      role: user.role,
+      chapterId: user.chapterId || ''
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const handleAssignGeneralUserToSelectedChapter = async (user: User) => {
+    if (!selectedChapter) return;
+    if (user.role === 'admin') {
+      await showAlert('Admin accounts cannot be assigned to a chapter.');
+      return;
+    }
+    const token = getSessionToken();
+    if (!token) {
+      await showAlert('Session expired. Please log in again.');
+      return;
+    }
+    try {
+      const res = await AuthService.updateUser(token, {
+        userId: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        chapterId: selectedChapter.id
+      });
+      if (!res.success) {
+        await showAlert('Failed to assign user: ' + res.message);
+        return;
+      }
+      await loadData();
+      await showAlert(`Assigned ${user.username} to ${selectedChapter.name}.`, { title: 'User Assigned' });
+    } catch (error) {
+      await showAlert('Error assigning user to chapter.');
     }
   };
 
   const handleDeleteChapter = async (id: string) => {
-    if (!confirm("Delete this chapter? This cannot be undone.")) return;
+    const shouldDelete = await showConfirm('Delete this chapter? This cannot be undone.', {
+      title: 'Delete Chapter',
+      confirmLabel: 'Delete'
+    });
+    if (!shouldDelete) return;
     setChapters(prev => prev.filter(c => c.id !== id)); 
     setView('LIST');
     const token = getSessionToken();
-    if (!token) return alert('Session expired. Please log in again.');
+    if (!token) {
+      await showAlert('Session expired. Please log in again.');
+      return;
+    }
     await DataService.deleteChapter(id, token);
   };
 
   const chapterUsers = users.filter(u => u.chapterId === selectedChapter?.id);
+  const generalUsers = users.filter(u => !u.chapterId);
 
 
   // --- RENDER ---
@@ -299,6 +504,12 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                         className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'DETAILS' ? 'border-primary-cyan text-primary-cyan' : 'border-transparent text-white/50 hover:text-white'}`}
                       >
                         Chapter Details
+                      </button>
+                      <button 
+                        onClick={() => setActiveTab('GENERAL')}
+                        className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'GENERAL' ? 'border-primary-cyan text-primary-cyan' : 'border-transparent text-white/50 hover:text-white'}`}
+                      >
+                        General Members ({generalUsers.length})
                       </button>
                       <button 
                         onClick={() => setActiveTab('MEMBERS')}
@@ -454,10 +665,10 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                       <div className="flex justify-between items-center bg-white/5 p-6 rounded-2xl border border-white/10">
                         <div>
                           <h3 className="text-lg font-bold text-white">Chapter Members</h3>
-                          <p className="text-white/50 text-sm">Users who can manage this specific chapter</p>
+                          <p className="text-white/50 text-sm">Users who can manage this specific chapter, including chapter heads and chapter editors</p>
                         </div>
                         <button 
-                          onClick={() => setIsUserModalOpen(true)}
+                          onClick={openCreateChapterUserModal}
                           className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors border border-white/10"
                         >
                           <UserPlus size={18} /> Add Member
@@ -468,7 +679,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                         {chapterUsers.length === 0 ? (
                           <div className="p-12 text-center text-white/40">
                              <Users size={48} className="mx-auto mb-4 opacity-30" />
-                             <p>No chapter head or members assigned to this chapter yet.</p>
+                             <p>No chapter head, chapter editor, or members assigned to this chapter yet.</p>
                           </div>
                         ) : (
                           <table className="w-full text-left">
@@ -498,6 +709,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                                     <span className={`px-2 py-1 rounded text-xs border ${
                                       user.role === 'admin' 
                                         ? 'bg-purple-500/20 text-purple-300 border-purple-500/20' 
+                                        : user.role === 'editor'
+                                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/20'
                                         : user.role === 'chapter_head'
                                         ? 'bg-primary-cyan/20 text-cyan-300 border-primary-cyan/20'
                                         : 'bg-white/10 text-white/70 border-white/10'
@@ -507,9 +720,98 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                                   </td>
                                   <td className="px-6 py-4 text-white/60 text-sm">{user.email}</td>
                                   <td className="px-6 py-4 text-right">
-                                    <button className="text-white/30 hover:text-white transition-colors">
+                                    <button
+                                      onClick={() => openEditUserModal(user)}
+                                      className="text-white/30 hover:text-white transition-colors"
+                                    >
                                       <Edit2 size={16} />
                                     </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'GENERAL' && view === 'CHAPTER_DETAIL' && (
+                    <div className="space-y-6">
+                      <div className="bg-white/5 p-6 rounded-2xl border border-white/10 flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="text-lg font-bold text-white">General Members</h3>
+                          <p className="text-white/50 text-sm">
+                            Accounts without a chapter assignment, including admins and global editors.
+                          </p>
+                        </div>
+                        <button
+                          onClick={openCreateGeneralUserModal}
+                          className="bg-primary-cyan hover:bg-cyan-400 text-ocean-deep font-bold px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <UserPlus size={16} /> Add New User
+                        </button>
+                      </div>
+
+                      <div className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
+                        {generalUsers.length === 0 ? (
+                          <div className="p-12 text-center text-white/40">
+                            <Users size={48} className="mx-auto mb-4 opacity-30" />
+                            <p>No general members or unassigned accounts found.</p>
+                          </div>
+                        ) : (
+                          <table className="w-full text-left">
+                            <thead className="bg-black/20 text-xs uppercase text-white/40">
+                              <tr>
+                                <th className="px-6 py-4">User</th>
+                                <th className="px-6 py-4">Role</th>
+                                <th className="px-6 py-4">Email</th>
+                                <th className="px-6 py-4">Assignment</th>
+                                <th className="px-6 py-4 text-right">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                              {generalUsers.map(user => (
+                                <tr key={user.id} className="hover:bg-white/5 transition-colors">
+                                  <td className="px-6 py-4">
+                                    <div className="flex items-center gap-3">
+                                      <img
+                                        src={`https://ui-avatars.com/api/?name=${user.username}&background=random&color=fff`}
+                                        alt={user.username}
+                                        className="w-8 h-8 rounded-full border border-white/20"
+                                      />
+                                      <span className="text-white font-medium">{user.username}</span>
+                                    </div>
+                                  </td>
+                                  <td className="px-6 py-4">
+                                    <span className={`px-2 py-1 rounded text-xs border ${
+                                      user.role === 'admin'
+                                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/20'
+                                        : user.role === 'editor'
+                                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/20'
+                                        : 'bg-white/10 text-white/70 border-white/10'
+                                    }`}>
+                                      {user.role}
+                                    </span>
+                                  </td>
+                                  <td className="px-6 py-4 text-white/60 text-sm">{user.email}</td>
+                                  <td className="px-6 py-4 text-white/40 text-sm">No chapter assigned</td>
+                                  <td className="px-6 py-4">
+                                    <div className="flex items-center justify-end gap-3">
+                                      <button
+                                        onClick={() => handleAssignGeneralUserToSelectedChapter(user)}
+                                        disabled={user.role === 'admin'}
+                                        className="text-xs px-3 py-1.5 rounded-md border border-primary-cyan/40 text-primary-cyan hover:bg-primary-cyan/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                      >
+                                        {user.role === 'admin' ? 'Admins stay global' : `Assign to ${selectedChapter?.name}`}
+                                      </button>
+                                      <button
+                                        onClick={() => openEditUserModal(user)}
+                                        className="text-white/30 hover:text-white transition-colors"
+                                      >
+                                        <Edit2 size={16} />
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}
@@ -532,7 +834,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
           <div className="bg-[#1e293b] border border-white/20 rounded-2xl p-8 max-w-md w-full shadow-2xl animate-scaleIn">
             <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
               <UserPlus className="text-primary-cyan" size={24} />
-              Add Member
+              {userModalMode === 'EDIT' ? 'Edit User' : 'Add User'}
             </h3>
             
             <div className="space-y-4">
@@ -541,8 +843,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                  <div className="relative">
                    <Users size={16} className="absolute left-3 top-3 text-white/40" />
                    <input 
-                      value={newUser.username}
-                      onChange={e => setNewUser({...newUser, username: e.target.value})}
+                      value={userEditorForm.username}
+                      onChange={e => setUserEditorForm({ ...userEditorForm, username: e.target.value })}
                       className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-white focus:border-primary-cyan focus:outline-none"
                       placeholder="jdoe"
                    />
@@ -555,8 +857,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                    <Mail size={16} className="absolute left-3 top-3 text-white/40" />
                    <input 
                       type="email"
-                      value={newUser.email}
-                      onChange={e => setNewUser({...newUser, email: e.target.value})}
+                      value={userEditorForm.email}
+                      onChange={e => setUserEditorForm({ ...userEditorForm, email: e.target.value })}
                       className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2 text-white focus:border-primary-cyan focus:outline-none"
                       placeholder="user@dyesabel.org"
                    />
@@ -565,15 +867,17 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                
                {/* Password Field with Toggle */}
                <div>
-                 <label className="block text-xs font-bold text-white/60 mb-1 uppercase">Password</label>
+                 <label className="block text-xs font-bold text-white/60 mb-1 uppercase">
+                   {userModalMode === 'EDIT' ? 'New Password (Optional)' : 'Password'}
+                 </label>
                  <div className="relative">
                    <Key size={16} className="absolute left-3 top-3 text-white/40" />
                    <input 
                       type={showPassword ? "text" : "password"}
-                      value={newUser.password}
-                      onChange={e => setNewUser({...newUser, password: e.target.value})}
+                      value={userEditorForm.password}
+                      onChange={e => setUserEditorForm({ ...userEditorForm, password: e.target.value })}
                       className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-10 py-2 text-white focus:border-primary-cyan focus:outline-none"
-                      placeholder="••••••••"
+                      placeholder={userModalMode === 'EDIT' ? 'Leave blank to keep current password' : '••••••••'}
                    />
                    <button 
                       type="button"
@@ -590,30 +894,48 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                   <label className="block text-xs font-bold text-white/60 mb-1 uppercase">Role</label>
                   <div className="relative">
                     <Shield size={16} className="absolute left-3 top-3 text-primary-cyan pointer-events-none" />
-                    <select
-                      value={newUser.role}
-                      onChange={e => setNewUser({...newUser, role: e.target.value})}
-                      className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-2.5 text-white focus:border-primary-cyan focus:outline-none appearance-none cursor-pointer"
-                    >
-                      <option value="member" className="bg-[#1e293b]">Member</option>
-                      <option value="chapter_head" className="bg-[#1e293b]">Chapter Head</option>
-                    </select>
+                    <CustomSelect
+                      value={userEditorForm.role}
+                      onChange={(nextValue) => setUserEditorForm({ ...userEditorForm, role: nextValue })}
+                      options={allRoleOptions}
+                      ariaLabel="Chapter member role"
+                      variant="dark"
+                      triggerClassName="pl-10"
+                    />
                   </div>
                </div>
+
+               {userEditorForm.role !== 'admin' && (
+                 <div className="pt-2">
+                   <label className="block text-xs font-bold text-white/60 mb-1 uppercase">Chapter Assignment</label>
+                   <CustomSelect
+                     value={userEditorForm.chapterId}
+                     onChange={(nextValue) => setUserEditorForm({ ...userEditorForm, chapterId: nextValue })}
+                     options={chapters.map(chapter => ({
+                       value: chapter.id,
+                       label: chapter.name,
+                       description: chapter.location || 'No location'
+                     }))}
+                     ariaLabel="Chapter assignment"
+                     variant="dark"
+                   />
+                 </div>
+               )}
             </div>
 
             <div className="flex gap-3 mt-8">
               <button 
-                onClick={() => setIsUserModalOpen(false)}
+                onClick={closeUserModal}
                 className="flex-1 bg-white/5 hover:bg-white/10 text-white font-medium py-2 rounded-lg transition-colors"
               >
                 Cancel
               </button>
               <button 
-                onClick={handleAddUser}
-                className="flex-1 bg-primary-cyan hover:bg-cyan-400 text-ocean-deep font-bold py-2 rounded-lg transition-colors"
+                onClick={userModalMode === 'EDIT' ? handleUpdateUser : handleAddUser}
+                disabled={isSavingUser}
+                className="flex-1 bg-primary-cyan hover:bg-cyan-400 disabled:opacity-60 disabled:cursor-not-allowed text-ocean-deep font-bold py-2 rounded-lg transition-colors"
               >
-                Create Account
+                {isSavingUser ? 'Saving...' : (userModalMode === 'EDIT' ? 'Save Changes' : 'Create Account')}
               </button>
             </div>
           </div>

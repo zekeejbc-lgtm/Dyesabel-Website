@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Save, Plus, Trash2, Upload, Users, Building2, Globe2, Flag, FolderPlus } from 'lucide-react';
-import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 
 interface Partner {
   id: string;
@@ -31,11 +31,13 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 
 export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSave, onClose }) => {
   const { user } = useAuth();
+  const { showAlert, showConfirm } = useAppDialog();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   // ✅ FIX: Ensure we default to an empty array if undefined passed
   const [editedCategories, setEditedCategories] = useState<PartnerCategory[]>(categories || []);
   const [selectedCategoryIndex, setSelectedCategoryIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
+  const [pendingDeleteCategoryIndex, setPendingDeleteCategoryIndex] = useState<number | null>(null);
 
   // Check permission
   if (!canEdit) {
@@ -56,23 +58,18 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
   };
 
   const removeCategory = (index: number) => {
-    toast.warning('Delete this entire category and all its partners?', {
-      description: 'This action removes the category and every partner inside it.',
-      action: {
-        label: 'Delete',
-        onClick: () => {
-          const updated = editedCategories.filter((_, i) => i !== index);
-          setEditedCategories(updated);
-          if (selectedCategoryIndex >= updated.length) {
-            setSelectedCategoryIndex(Math.max(0, updated.length - 1));
-          }
-        }
-      },
-      cancel: {
-        label: 'Cancel',
-        onClick: () => {}
-      }
-    });
+    setPendingDeleteCategoryIndex(index);
+  };
+
+  const confirmRemoveCategory = () => {
+    if (pendingDeleteCategoryIndex === null) return;
+
+    const updated = editedCategories.filter((_, i) => i !== pendingDeleteCategoryIndex);
+    setEditedCategories(updated);
+    if (selectedCategoryIndex >= updated.length) {
+      setSelectedCategoryIndex(Math.max(0, updated.length - 1));
+    }
+    setPendingDeleteCategoryIndex(null);
   };
 
   const updateCategory = (index: number, field: keyof PartnerCategory, value: any) => {
@@ -100,8 +97,12 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
     setEditedCategories(updated);
   };
 
-  const removePartner = (categoryIndex: number, partnerIndex: number) => {
-    if (!confirm('Are you sure you want to remove this partner?')) return;
+  const removePartner = async (categoryIndex: number, partnerIndex: number) => {
+    const shouldRemove = await showConfirm('Are you sure you want to remove this partner?', {
+      title: 'Remove Partner',
+      confirmLabel: 'Remove'
+    });
+    if (!shouldRemove) return;
     const updated = [...editedCategories];
     updated[categoryIndex].partners = updated[categoryIndex].partners.filter((_, i) => i !== partnerIndex);
     setEditedCategories(updated);
@@ -120,10 +121,10 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
     setSaving(true);
     try {
       await onSave(editedCategories);
-      alert('Partners saved successfully!');
+      await showAlert('Partners saved successfully!', { title: 'Partners Updated' });
       onClose();
     } catch (error) {
-      alert('Error saving partners. Please try again.');
+      await showAlert('Error saving partners. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -131,6 +132,7 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
 
   // ✅ SAFE ACCESS: Check if category exists
   const currentCategory = editedCategories[selectedCategoryIndex];
+  const pendingDeleteCategory = pendingDeleteCategoryIndex === null ? null : editedCategories[pendingDeleteCategoryIndex];
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto">
@@ -322,6 +324,44 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
           </div>
         </div>
       </div>
+
+      {pendingDeleteCategory ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-white/10 dark:bg-[#111827]">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600 dark:bg-red-500/15 dark:text-red-400">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+                  Delete Category?
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+                  Delete <span className="font-semibold text-gray-900 dark:text-white">{pendingDeleteCategory.title}</span> and all partners inside it?
+                </p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setPendingDeleteCategoryIndex(null)}
+                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRemoveCategory}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700"
+              >
+                Delete Category
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

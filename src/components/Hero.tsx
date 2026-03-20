@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAppDialog } from '../contexts/AppDialogContext';
 
 const VOLUNTEER_URL = "https://forms.gle/W6WVpftGDwM7fUm19";
 
@@ -7,10 +8,12 @@ interface HeroProps {
 }
 
 export const Hero: React.FC<HeroProps> = ({ onDonateClick }) => {
-  const handleJoinClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+  const { showAlert } = useAppDialog();
+
+  const handleJoinClick = async (e: React.MouseEvent<HTMLAnchorElement>) => {
     if (!VOLUNTEER_URL) {
       e.preventDefault();
-      alert("No membership application open yet");
+      await showAlert('No membership application open yet');
     }
   };
 

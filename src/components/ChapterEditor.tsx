@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, Pencil, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { DriveService, DataService } from '../services/DriveService';
 import { Chapter } from '../types';
 import { getSessionToken } from '../utils/session';
@@ -12,7 +13,12 @@ interface ChapterEditorProps {
 
 export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }: ChapterEditorProps) => {
   const { user } = useAuth();
+  const { showAlert, showConfirm } = useAppDialog();
   const [isSaving, setIsSaving] = useState(false);
+  const chapterId = user?.chapterId || chapter?.id;
+  const isScopedEditor = !!user && user.role === 'editor' && !!user.chapterId && user.chapterId === chapterId;
+  const canEditLeadershipAndCta = !isScopedEditor;
+  const canEditChapterInfo = true;
   
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
@@ -57,7 +63,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   // Fetch fresh data on mount to ensure we are editing the latest version
   useEffect(() => {
     const fetchFreshData = async () => {
-      const chapterId = user?.chapterId || chapter?.id;
       if (!chapterId) return;
 
       try {
@@ -84,8 +89,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     fetchFreshData();
   }, [user, chapter]);
 
-  const handleCancel = () => {
-    if (window.confirm("Are you sure you want to discard your changes?")) {
+  const handleCancel = async () => {
+    const shouldDiscard = await showConfirm('Are you sure you want to discard your changes?', {
+      title: 'Discard Changes',
+      confirmLabel: 'Discard'
+    });
+    if (shouldDiscard) {
       setChapterData(originalData); // Revert changes
       setIsEditing(false); // Exit edit mode
     }
@@ -96,14 +105,13 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please login again.');
+        await showAlert('Session expired. Please login again.');
         setIsSaving(false);
         return;
       }
 
-      const chapterId = user?.chapterId || chapter?.id;
       if (!chapterId) {
-        alert('Chapter ID not set. Unable to save.');
+        await showAlert('Chapter ID not set. Unable to save.');
         setIsSaving(false);
         return;
       }
@@ -133,14 +141,14 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       const result = await DataService.saveChapter(chapterId, payload, sessionToken);
 
       if (result.success) {
-        alert('Chapter changes saved successfully!');
+        await showAlert('Chapter changes saved successfully!', { title: 'Chapter Updated' });
         setOriginalData(chapterData); // Update backup to new saved state
         setIsEditing(false); // Exit edit mode
       } else {
-        alert('Error saving changes: ' + (result.error || 'Unknown error'));
+        await showAlert('Error saving changes: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error saving chapter: ' + (error instanceof Error ? error.message : String(error)));
+      await showAlert('Error saving chapter: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsSaving(false);
     }
@@ -151,7 +159,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please login again.');
+        await showAlert('Session expired. Please login again.');
         return;
       }
       const result = await DriveService.uploadImage(file, sessionToken);
@@ -159,10 +167,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       if (result.success && result.fileUrl) {
         setChapterData(prev => ({ ...prev, [field]: result.fileUrl }));
       } else {
-        alert('Upload failed: ' + (result.error || 'Unknown error'));
+        await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error uploading image.');
+      await showAlert('Error uploading image.');
     }
   };
 
@@ -176,7 +184,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please login again.');
+        await showAlert('Session expired. Please login again.');
         return;
       }
       const result = await DriveService.uploadImage(file, sessionToken);
@@ -184,7 +192,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         handleActivityChange(index, 'imageUrl', result.fileUrl);
       }
     } catch (error) {
-      alert('Error uploading activity image.');
+      await showAlert('Error uploading activity image.');
     }
   };
 
@@ -202,6 +210,11 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
                 {chapterData.title || "Edit Chapter Details"}
               </h1>
+              {isScopedEditor && (
+                <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary-cyan">
+                  Chapter Editor
+                </span>
+              )}
             </div>
             
             {/* Edit/Save/Cancel Buttons */}
@@ -212,7 +225,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                   className="flex items-center gap-2 px-6 py-2 bg-primary-blue hover:bg-primary-cyan text-white rounded-lg transition-colors font-bold shadow-lg"
                 >
                   <Pencil size={18} />
-                  Edit Details
+                  {isScopedEditor ? 'Edit Chapter Info' : 'Edit Details'}
                 </button>
               ) : (
                 <>
@@ -251,7 +264,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
             
             {/* 1. Basic Info & Cover */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              {(!isEditing || !canEditChapterInfo) && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <FileText size={20} className="text-primary-blue" /> Basic Information
@@ -266,7 +279,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                     <div className="absolute inset-0 flex items-center justify-center text-gray-400">No Cover Image</div>
                   )}
                   
-                  {isEditing && (
+                  {isEditing && canEditChapterInfo && (
                     <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-white">
                       <Upload size={32} className="mb-2" />
                       <span className="font-medium">Change Cover Photo</span>
@@ -275,7 +288,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                         accept="image/*" 
                         className="hidden" 
                         onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'imageUrl')}
-                        disabled={!isEditing} 
+                        disabled={!isEditing || !canEditChapterInfo} 
                       />
                     </label>
                   )}
@@ -288,7 +301,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                       type="text" 
                       value={chapterData.title}
                       onChange={(e) => setChapterData({...chapterData, title: e.target.value})}
-                      disabled={!isEditing}
+                      disabled={!isEditing || !canEditChapterInfo}
                       className="w-full p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                     />
                   </div>
@@ -300,7 +313,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                         type="text" 
                         value={chapterData.location}
                         onChange={(e) => setChapterData({...chapterData, location: e.target.value})}
-                        disabled={!isEditing}
+                        disabled={!isEditing || !canEditChapterInfo}
                         className="w-full p-3 pl-10 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                         placeholder="City, Province"
                       />
@@ -314,7 +327,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                     rows={4}
                     value={chapterData.description}
                     onChange={(e) => setChapterData({...chapterData, description: e.target.value})}
-                    disabled={!isEditing}
+                    disabled={!isEditing || !canEditChapterInfo}
                     className="w-full p-3 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                     placeholder="Describe your chapter's mission and history..."
                   />
@@ -324,13 +337,13 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
 
             {/* 2. Recent Activities */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              {(!isEditing || !canEditChapterInfo) && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
                   <ImageIcon size={20} className="text-primary-cyan" /> Recent Activities
                 </h2>
-                {isEditing && (
+                {isEditing && canEditChapterInfo && (
                   <button 
                     onClick={() => setChapterData({...chapterData, activities: [...chapterData.activities, { id: Date.now(), title: '', description: '', date: '', imageUrl: '' }]})}
                     className="text-xs bg-primary-blue text-white px-3 py-1.5 rounded-lg hover:bg-primary-cyan transition-colors"
@@ -345,7 +358,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                   <div key={activity.id} className="p-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-200 dark:border-white/10">
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-xs font-bold text-gray-400 uppercase">Activity #{index + 1}</span>
-                      {isEditing && (
+                      {isEditing && canEditChapterInfo && (
                         <button onClick={() => {
                           const newActs = chapterData.activities.filter((_, i) => i !== index);
                           setChapterData({...chapterData, activities: newActs});
@@ -376,7 +389,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                             placeholder="Activity Title"
                             value={activity.title}
                             onChange={(e) => handleActivityChange(index, 'title', e.target.value)}
-                            disabled={!isEditing}
+                            disabled={!isEditing || !canEditChapterInfo}
                             className="p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                           />
                           <input 
@@ -384,7 +397,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                             placeholder="Date (e.g. March 2024)"
                             value={activity.date}
                             onChange={(e) => handleActivityChange(index, 'date', e.target.value)}
-                            disabled={!isEditing}
+                            disabled={!isEditing || !canEditChapterInfo}
                             className="p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                           />
                         </div>
@@ -393,7 +406,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                           rows={2}
                           value={activity.description}
                           onChange={(e) => handleActivityChange(index, 'description', e.target.value)}
-                          disabled={!isEditing}
+                          disabled={!isEditing || !canEditChapterInfo}
                           className="w-full p-2 bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-lg text-sm text-gray-900 dark:text-white disabled:opacity-70 disabled:cursor-not-allowed"
                         />
                       </div>
@@ -409,62 +422,62 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
             
             {/* 3. Logo & Branding */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              {(!isEditing || !canEditChapterInfo) && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Logo</h2>
               <div className="flex flex-col items-center">
                 <div className="w-32 h-32 rounded-full border-4 border-gray-100 dark:border-white/10 overflow-hidden relative group mb-4">
                   <img src={chapterData.logoUrl || `https://ui-avatars.com/api/?name=${chapterData.title}&background=random`} alt="Logo" className="w-full h-full object-cover" />
-                  {isEditing && (
+                  {isEditing && canEditChapterInfo && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
                       <Upload size={24} />
                       <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'logoUrl')} />
                     </label>
                   )}
                 </div>
-                {isEditing && <p className="text-xs text-gray-500 text-center">Click to upload new logo</p>}
+                {isEditing && canEditChapterInfo && <p className="text-xs text-gray-500 text-center">Click to upload new logo</p>}
               </div>
             </div>
 
             {/* 4. Contact Info */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              {(!isEditing || !canEditChapterInfo) && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Phone size={20} className="text-green-500" /> Contact Info
               </h2>
               <div className="space-y-3">
                 <div className="relative">
                   <Mail size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="email" placeholder="Email Address" value={chapterData.email} onChange={(e) => setChapterData({...chapterData, email: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="email" placeholder="Email Address" value={chapterData.email} onChange={(e) => setChapterData({...chapterData, email: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Phone size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Phone Number" value={chapterData.phone} onChange={(e) => setChapterData({...chapterData, phone: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Phone Number" value={chapterData.phone} onChange={(e) => setChapterData({...chapterData, phone: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Facebook size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Facebook URL (Optional)" value={chapterData.facebook} onChange={(e) => setChapterData({...chapterData, facebook: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Facebook URL (Optional)" value={chapterData.facebook} onChange={(e) => setChapterData({...chapterData, facebook: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Twitter size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Twitter URL (Optional)" value={chapterData.twitter} onChange={(e) => setChapterData({...chapterData, twitter: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Twitter URL (Optional)" value={chapterData.twitter} onChange={(e) => setChapterData({...chapterData, twitter: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div className="relative">
                   <Instagram size={16} className="absolute left-3 top-3 text-gray-400" />
-                  <input type="text" placeholder="Instagram URL (Optional)" value={chapterData.instagram} onChange={(e) => setChapterData({...chapterData, instagram: e.target.value})} disabled={!isEditing} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Instagram URL (Optional)" value={chapterData.instagram} onChange={(e) => setChapterData({...chapterData, instagram: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
               </div>
             </div>
 
             {/* 5. Leadership */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              {(!isEditing || !canEditLeadershipAndCta) && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Users size={20} className="text-purple-500" /> Leadership
               </h2>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden relative group flex-shrink-0">
                   <img src={chapterData.headImageUrl || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" alt="Leader" />
-                  {isEditing && (
+                  {isEditing && canEditLeadershipAndCta && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
                       <Upload size={16} className="text-white" />
                       <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0], 'headImageUrl')} />
@@ -472,27 +485,27 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                   )}
                 </div>
                 <div className="flex-grow">
-                  <input type="text" placeholder="Leader Name" value={chapterData.headName} onChange={(e) => setChapterData({...chapterData, headName: e.target.value})} disabled={!isEditing} className="w-full p-2 mb-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
-                  <input type="text" placeholder="Role (e.g. President)" value={chapterData.headRole} onChange={(e) => setChapterData({...chapterData, headRole: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-xs dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Leader Name" value={chapterData.headName} onChange={(e) => setChapterData({...chapterData, headName: e.target.value})} disabled={!isEditing || !canEditLeadershipAndCta} className="w-full p-2 mb-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="Role (e.g. President)" value={chapterData.headRole} onChange={(e) => setChapterData({...chapterData, headRole: e.target.value})} disabled={!isEditing || !canEditLeadershipAndCta} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-xs dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
               </div>
-              <textarea placeholder="Leader's Quote..." rows={2} value={chapterData.headQuote} onChange={(e) => setChapterData({...chapterData, headQuote: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+              <textarea placeholder="Leader's Quote..." rows={2} value={chapterData.headQuote} onChange={(e) => setChapterData({...chapterData, headQuote: e.target.value})} disabled={!isEditing || !canEditLeadershipAndCta} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
             </div>
 
             {/* 6. Call to Action */}
             <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 relative">
-              {!isEditing && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
+              {(!isEditing || !canEditLeadershipAndCta) && <div className="absolute inset-0 bg-gray-50/10 dark:bg-black/10 z-10 rounded-2xl pointer-events-none"></div>}
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 <Megaphone size={20} className="text-orange-500" /> Join CTA
               </h2>
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
-                  <textarea rows={3} value={chapterData.joinCtaDescription} onChange={(e) => setChapterData({...chapterData, joinCtaDescription: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <textarea rows={3} value={chapterData.joinCtaDescription} onChange={(e) => setChapterData({...chapterData, joinCtaDescription: e.target.value})} disabled={!isEditing || !canEditLeadershipAndCta} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Google Form Link</label>
-                  <input type="text" placeholder="https://forms.google.com/..." value={chapterData.joinUrl} onChange={(e) => setChapterData({...chapterData, joinUrl: e.target.value})} disabled={!isEditing} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                  <input type="text" placeholder="https://forms.google.com/..." value={chapterData.joinUrl} onChange={(e) => setChapterData({...chapterData, joinUrl: e.target.value})} disabled={!isEditing || !canEditLeadershipAndCta} className="w-full p-2 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                   <p className="text-[10px] text-gray-400 mt-1">Leave blank to hide the Join button.</p>
                 </div>
               </div>

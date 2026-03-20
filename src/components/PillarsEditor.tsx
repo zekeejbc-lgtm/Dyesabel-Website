@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Pillar, PillarActivity } from '../types';
 import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, Loader } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { uploadImageToDrive } from '../utils/driveUpload';
 import { getSessionToken } from '../utils/session';
 
@@ -9,6 +10,7 @@ interface PillarsEditorProps {
   pillars: Pillar[];
   onSave: (pillars: Pillar[]) => void;
   onClose: () => void;
+  activitiesOnly?: boolean;
 }
 
 const PILLAR_ICONS = {
@@ -19,8 +21,9 @@ const PILLAR_ICONS = {
   'Culture and Arts': <Palette className="w-6 h-6" />
 };
 
-export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, onClose }) => {
+export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, onClose, activitiesOnly = false }) => {
   const { user } = useAuth();
+  const { showAlert, showConfirm } = useAppDialog();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const [editedPillars, setEditedPillars] = useState<Pillar[]>(pillars);
   const [selectedPillarIndex, setSelectedPillarIndex] = useState<number>(0);
@@ -59,8 +62,12 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     setEditedPillars(updated);
   };
 
-  const removeActivity = (pillarIndex: number, activityIndex: number) => {
-    if (!confirm('Are you sure you want to remove this activity?')) return;
+  const removeActivity = async (pillarIndex: number, activityIndex: number) => {
+    const shouldRemove = await showConfirm('Are you sure you want to remove this activity?', {
+      title: 'Remove Activity',
+      confirmLabel: 'Remove'
+    });
+    if (!shouldRemove) return;
     const updated = [...editedPillars];
     updated[pillarIndex].activities = updated[pillarIndex].activities.filter((_, i) => i !== activityIndex);
     setEditedPillars(updated);
@@ -71,7 +78,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please log in again.');
+        await showAlert('Session expired. Please log in again.');
         setUploadingImage(false);
         return;
       }
@@ -86,12 +93,12 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
         } else {
           updatePillar(pillarIndex, 'imageUrl', result.url);
         }
-        alert('Image uploaded successfully!');
+        await showAlert('Image uploaded successfully!', { title: 'Upload Complete' });
       } else {
-        alert('Upload failed: ' + (result.error || 'Unknown error'));
+        await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error uploading image. Please try again.');
+      await showAlert('Error uploading image. Please try again.');
     } finally {
       setUploadingImage(false);
     }
@@ -101,10 +108,10 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     setSaving(true);
     try {
       await onSave(editedPillars);
-      alert('Pillars saved successfully!');
+      await showAlert('Pillars saved successfully!', { title: 'Pillars Updated' });
       onClose();
     } catch (error) {
-      alert('Error saving pillars. Please try again.');
+      await showAlert('Error saving pillars. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -121,7 +128,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Pillars</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Manage your organization's core pillars and activities
+                {activitiesOnly ? 'Manage activities for each core pillar' : "Manage your organization's core pillars and activities"}
               </p>
             </div>
             <button
@@ -163,7 +170,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
             {/* Main Content */}
             <div className="flex-1 p-6">
               <div className="space-y-6">
-                {/* Pillar Main Image */}
+                {!activitiesOnly && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Pillar Cover Image
@@ -198,8 +205,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                     </label>
                   </div>
                 </div>
+                )}
 
-                {/* Title */}
+                {!activitiesOnly && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Title
@@ -211,8 +219,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
+                )}
 
-                {/* Excerpt */}
+                {!activitiesOnly && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Excerpt (Short Description)
@@ -224,8 +233,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
+                )}
 
-                {/* Description */}
+                {!activitiesOnly && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Full Description
@@ -237,8 +247,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
+                )}
 
-                {/* Aim */}
+                {!activitiesOnly && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Aim/Goal
@@ -250,6 +261,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                     className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-blue focus:border-transparent"
                   />
                 </div>
+                )}
 
                 {/* Activities */}
                 <div>

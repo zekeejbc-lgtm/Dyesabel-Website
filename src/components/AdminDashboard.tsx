@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, BookOpen, Users as UsersIcon, Image as ImageIcon, FileText, Building2, Loader2, Edit, Globe } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
 import { FoundersEditor } from './FoundersEditor';
-import { LandingPageEditor } from './LandingPageEditor';
+import { DonationPageEditor } from './DonationPageEditor';
 import { LogoEditor } from './LogoEditor';
 import { ChaptersManagement } from './ChaptersManagement';
 import { DataService } from '../services/DriveService';
-import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
+import { useAppDialog } from '../contexts/AppDialogContext';
+import { ExecutiveOfficer, Founder } from '../types';
 import { getSessionToken } from '../utils/session';
 
-// Initial Data Constants (Fallbacks - You can keep or remove these as needed)
 const initialPartnerCategories = [
   {
     id: 'coalitions',
@@ -24,7 +24,7 @@ const initialPartnerCategories = [
     title: 'Government Partners',
     icon: <Building2 className="w-6 h-6" />,
     partners: []
-  },
+  }
 ];
 
 interface AdminDashboardProps {
@@ -32,23 +32,25 @@ interface AdminDashboardProps {
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
-  // ✅ FIXED: Use email if name/username isn't on the type
   const { user } = useAuth();
+  const { showAlert } = useAppDialog();
   const isAdmin = user?.role === 'admin';
   const isGlobalEditor = user?.role === 'editor' && !user?.chapterId;
   const canEdit = isAdmin || isGlobalEditor;
+  const canEditPillars = canEdit;
+  const canEditPartners = canEdit;
+  const canEditBranding = canEdit;
+  const canEditFounders = isAdmin;
+  const canEditDonations = isAdmin;
+  const canManageChapters = isAdmin;
+
   const [activeEditor, setActiveEditor] = useState<string | null>(null);
-  
-  // ✅ FIXED: Initialize as empty arrays, do NOT import pillarsData
   const [pillars, setPillars] = useState<any[]>([]);
   const [partners, setPartners] = useState(initialPartnerCategories);
   const [founders, setFounders] = useState<Founder[]>([]);
   const [executiveOfficers, setExecutiveOfficers] = useState<ExecutiveOfficer[]>([]);
-  
-  // Loading State
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch Data on Mount
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -60,23 +62,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           DataService.loadExecutiveOfficers()
         ]);
 
-        if (pillarsRes.success && pillarsRes.pillars && pillarsRes.pillars.length > 0) {
+        if (pillarsRes.success && pillarsRes.pillars?.length > 0) {
           setPillars(pillarsRes.pillars);
         }
-        
+
         if (partnersRes.success && partnersRes.partners) {
           setPartners(partnersRes.partners);
         }
 
-        if (foundersRes.success && foundersRes.founders && foundersRes.founders.length > 0) {
+        if (foundersRes.success && foundersRes.founders?.length > 0) {
           setFounders(foundersRes.founders);
         }
 
         if (executiveOfficersRes.success && executiveOfficersRes.executiveOfficers) {
           setExecutiveOfficers(executiveOfficersRes.executiveOfficers);
         }
-
-      } catch (error) {
       } finally {
         setIsLoading(false);
       }
@@ -91,16 +91,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please login again.');
+        await showAlert('Session expired. Please login again.');
         return;
       }
       setPillars(updatedPillars);
       const result = await DataService.savePillars(updatedPillars, sessionToken);
       if (!result.success) {
-        alert('Error saving pillars: ' + (result.error || 'Unknown error'));
+        await showAlert('Error saving pillars: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error saving pillars: ' + (error instanceof Error ? error.message : String(error)));
+      await showAlert('Error saving pillars: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -108,16 +108,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please login again.');
+        await showAlert('Session expired. Please login again.');
         return;
       }
       setPartners(updatedPartners);
       const result = await DataService.savePartners(updatedPartners, sessionToken);
       if (!result.success) {
-        alert('Error saving partners: ' + (result.error || 'Unknown error'));
+        await showAlert('Error saving partners: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error saving partners: ' + (error instanceof Error ? error.message : String(error)));
+      await showAlert('Error saving partners: ' + (error instanceof Error ? error.message : String(error)));
     }
   };
 
@@ -153,7 +153,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     <>
       <div className="min-h-screen bg-gradient-to-b from-ocean-light via-[#b2dfdb] to-ocean-mint dark:from-ocean-deep dark:via-[#021017] dark:to-ocean-dark pt-24 pb-16 px-4">
         <div className="max-w-7xl mx-auto">
-          {/* Header */}
           <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6 mb-8">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div className="flex items-center gap-4">
@@ -172,8 +171,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   </p>
                 </div>
               </div>
-              
-              {isAdmin && (
+
+              {canEditBranding && (
                 <button
                   onClick={() => setActiveEditor('logo')}
                   className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-amber-500/30"
@@ -185,168 +184,174 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Quick Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-            <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-primary-blue/10 rounded-lg">
-                  <BookOpen className="text-primary-blue" size={24} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-ocean-deep dark:text-white">{pillars.length}</p>
-                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Pillars</p>
+            {canEditPillars && (
+              <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-primary-blue/10 rounded-lg">
+                    <BookOpen className="text-primary-blue" size={24} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-ocean-deep dark:text-white">{pillars.length}</p>
+                    <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Pillars</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-primary-cyan/10 rounded-lg">
-                  <Building2 className="text-primary-cyan" size={24} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-ocean-deep dark:text-white">
-                    {partners.reduce((sum, cat) => sum + cat.partners.length, 0)}
-                  </p>
-                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Partners</p>
+            {canEditPartners && (
+              <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-primary-cyan/10 rounded-lg">
+                    <Building2 className="text-primary-cyan" size={24} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-ocean-deep dark:text-white">
+                      {partners.reduce((sum, cat) => sum + cat.partners.length, 0)}
+                    </p>
+                    <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Partners</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
-            <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-purple-500/10 rounded-lg">
-                  <UsersIcon className="text-purple-500" size={24} />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-ocean-deep dark:text-white">{founders.length}</p>
-                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Founders</p>
+            {canEditFounders && (
+              <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-purple-500/10 rounded-lg">
+                    <UsersIcon className="text-purple-500" size={24} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-ocean-deep dark:text-white">{founders.length}</p>
+                    <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Founders</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Content Sections */}
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-ocean-deep dark:text-white mb-4">
               Edit Content Sections
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {/* Pillars Card */}
-              <button
-                onClick={() => setActiveEditor('pillars')}
-                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-primary-blue dark:hover:border-primary-cyan transition-all hover:shadow-xl text-left group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-primary-blue/10 rounded-lg group-hover:bg-primary-blue/20 transition-colors">
-                    <BookOpen className="text-primary-blue" size={28} />
+              {canEditPillars && (
+                <button
+                  onClick={() => setActiveEditor('pillars')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-primary-blue dark:hover:border-primary-cyan transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-primary-blue/10 rounded-lg group-hover:bg-primary-blue/20 transition-colors">
+                      <BookOpen className="text-primary-blue" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-primary-blue">Edit</span>
                   </div>
-                  <span className="text-sm font-medium text-primary-blue">Edit →</span>
-                </div>
-                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                  Core Pillars
-                </h3>
-                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                  Edit the 5 core pillars and their activities
-                </p>
-                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  {pillars.length} pillars • {pillars.reduce((sum: number, p: any) => sum + (p.activities?.length || 0), 0)} activities
-                </div>
-              </button>
-
-              {/* Partners Card */}
-              <button
-                onClick={() => setActiveEditor('partners')}
-                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-primary-cyan dark:hover:border-primary-cyan transition-all hover:shadow-xl text-left group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-primary-cyan/10 rounded-lg group-hover:bg-primary-cyan/20 transition-colors">
-                    <Building2 className="text-primary-cyan" size={28} />
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Core Pillars
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    {isGlobalEditor ? 'Manage only the activity entries for each pillar' : 'Edit the 5 core pillars and their activities'}
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    {pillars.length} pillars | {pillars.reduce((sum: number, p: any) => sum + (p.activities?.length || 0), 0)} activities
                   </div>
-                  <span className="text-sm font-medium text-primary-cyan">Edit →</span>
-                </div>
-                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                  Partner Organizations
-                </h3>
-                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                  Manage partners across all categories
-                </p>
-                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  {partners.reduce((sum, cat) => sum + cat.partners.length, 0)} partners • {partners.length} categories
-                </div>
-              </button>
-
-              {/* Founders Card */}
-              <button
-                onClick={() => setActiveEditor('founders')}
-                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-purple-500 dark:hover:border-purple-400 transition-all hover:shadow-xl text-left group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-purple-500/10 rounded-lg group-hover:bg-purple-500/20 transition-colors">
-                    <UsersIcon className="text-purple-500" size={28} />
-                  </div>
-                  <span className="text-sm font-medium text-purple-500">Edit →</span>
-                </div>
-                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                  Founders & Leadership
-                </h3>
-                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                  Edit founder profiles and bios
-                </p>
-                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  {founders.length} founders listed
-                </div>
-              </button>
-
-              {/* Landing Page Card */}
-              <button
-                onClick={() => setActiveEditor('landing')}
-                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-orange-500 dark:hover:border-orange-400 transition-all hover:shadow-xl text-left group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors">
-                    <FileText className="text-orange-500" size={28} />
-                  </div>
-                  <span className="text-sm font-medium text-orange-500">Edit →</span>
-                </div>
-                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                  Landing Page
-                </h3>
-                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                  Edit hero section, slogan, and visuals
-                </p>
-                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  Main page content
-                </div>
-              </button>
-
-              {/* Logo & Branding Card */}
-              {isAdmin && (
-              <button
-                onClick={() => setActiveEditor('logo')}
-                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-pink-500 dark:hover:border-pink-400 transition-all hover:shadow-xl text-left group"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="p-3 bg-pink-500/10 rounded-lg group-hover:bg-pink-500/20 transition-colors">
-                    <ImageIcon className="text-pink-500" size={28} />
-                  </div>
-                  <span className="text-sm font-medium text-pink-500">Edit →</span>
-                </div>
-                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                  Logo & Branding
-                </h3>
-                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                  Upload logo and update organization name
-                </p>
-                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                  Stored in Google Drive
-                </div>
-              </button>
+                </button>
               )}
 
-              {/* Chapters & Members Management Card (Admin Only) */}
-              {isAdmin && (
+              {canEditPartners && (
+                <button
+                  onClick={() => setActiveEditor('partners')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-primary-cyan dark:hover:border-primary-cyan transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-primary-cyan/10 rounded-lg group-hover:bg-primary-cyan/20 transition-colors">
+                      <Building2 className="text-primary-cyan" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-primary-cyan">Edit</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Partner Organizations
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    Manage partners across all categories
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    {partners.reduce((sum, cat) => sum + cat.partners.length, 0)} partners | {partners.length} categories
+                  </div>
+                </button>
+              )}
+
+              {canEditFounders && (
+                <button
+                  onClick={() => setActiveEditor('founders')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-purple-500 dark:hover:border-purple-400 transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-purple-500/10 rounded-lg group-hover:bg-purple-500/20 transition-colors">
+                      <UsersIcon className="text-purple-500" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-purple-500">Edit</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Founders & Leadership
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    Edit founder profiles and bios
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    {founders.length} founders listed
+                  </div>
+                </button>
+              )}
+
+              {canEditDonations && (
+                <button
+                  onClick={() => setActiveEditor('donations')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-orange-500 dark:hover:border-orange-400 transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-orange-500/10 rounded-lg group-hover:bg-orange-500/20 transition-colors">
+                      <FileText className="text-orange-500" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-orange-500">Edit</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Donation Page
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    Manage payment methods, bank details, allocations, and recent donations
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    Public donation page content
+                  </div>
+                </button>
+              )}
+
+              {canEditBranding && (
+                <button
+                  onClick={() => setActiveEditor('logo')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-pink-500 dark:hover:border-pink-400 transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-pink-500/10 rounded-lg group-hover:bg-pink-500/20 transition-colors">
+                      <ImageIcon className="text-pink-500" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-pink-500">Edit</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Logo & Branding
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    Upload logo and update organization name
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    Stored in Google Drive
+                  </div>
+                </button>
+              )}
+
+              {canManageChapters && (
                 <button
                   onClick={() => setActiveEditor('chapters')}
                   className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-teal-500 dark:hover:border-teal-400 transition-all hover:shadow-xl text-left group"
@@ -355,7 +360,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                     <div className="p-3 bg-teal-500/10 rounded-lg group-hover:bg-teal-500/20 transition-colors">
                       <Globe className="text-teal-500" size={28} />
                     </div>
-                    <span className="text-sm font-medium text-teal-500">Manage →</span>
+                    <span className="text-sm font-medium text-teal-500">Manage</span>
                   </div>
                   <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
                     Chapters & Members
@@ -373,12 +378,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Editors */}
       {activeEditor === 'pillars' && (
         <PillarsEditor
           pillars={pillars}
           onSave={handleSavePillars}
           onClose={() => setActiveEditor(null)}
+          activitiesOnly={isGlobalEditor}
         />
       )}
 
@@ -389,8 +394,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
           onClose={() => setActiveEditor(null)}
         />
       )}
- 
-      {activeEditor === 'founders' && (
+
+      {activeEditor === 'founders' && canEditFounders && (
         <FoundersEditor
           founders={founders}
           executiveOfficers={executiveOfficers}
@@ -402,23 +407,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         />
       )}
 
-      {activeEditor === 'landing' && (
-        <LandingPageEditor
-          onBack={() => setActiveEditor(null)}
-        />
+      {activeEditor === 'donations' && canEditDonations && (
+        <DonationPageEditor onBack={() => setActiveEditor(null)} />
       )}
 
-      {activeEditor === 'logo' && isAdmin && (
+      {activeEditor === 'logo' && canEditBranding && (
         <LogoEditor
           onClose={() => setActiveEditor(null)}
           onLogoUpdate={() => {}}
         />
       )}
 
-      {activeEditor === 'chapters' && isAdmin && (
-        <ChaptersManagement
-          onBack={() => setActiveEditor(null)}
-        />
+      {activeEditor === 'chapters' && canManageChapters && (
+        <ChaptersManagement onBack={() => setActiveEditor(null)} />
       )}
     </>
   );

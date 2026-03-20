@@ -5,6 +5,8 @@ import {
   CheckCircle,
   Copy,
   CreditCard,
+  Download,
+  Expand,
   Globe,
   Heart,
   Loader2,
@@ -15,14 +17,18 @@ import {
 } from 'lucide-react';
 import {
   DonationAllocation,
+  DonationContent,
   DonationMethod,
   DonationRecord,
   DonationsService
 } from '../services/DonationsService';
+import { convertToCORSFreeLink } from '../services/DriveService';
 
 interface DonatePageProps {
   onBack: () => void;
 }
+
+const MANILA_TIME_ZONE = 'Asia/Manila';
 
 const formatCurrency = (amount: number, currency: string) => {
   try {
@@ -36,29 +42,41 @@ const formatCurrency = (amount: number, currency: string) => {
   }
 };
 
-const formatRelativeTime = (dateString: string) => {
+const formatManilaDateTime = (dateString: string) => {
   if (!dateString) return 'Recently';
 
   const timestamp = new Date(dateString).getTime();
   if (Number.isNaN(timestamp)) return 'Recently';
 
-  const seconds = Math.round((timestamp - Date.now()) / 1000);
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-
-  const intervals = [
-    { unit: 'day', seconds: 60 * 60 * 24 },
-    { unit: 'hour', seconds: 60 * 60 },
-    { unit: 'minute', seconds: 60 }
-  ] as const;
-
-  for (const interval of intervals) {
-    if (Math.abs(seconds) >= interval.seconds) {
-      return rtf.format(Math.round(seconds / interval.seconds), interval.unit);
-    }
-  }
-
-  return rtf.format(seconds, 'second');
+  return new Intl.DateTimeFormat('en-PH', {
+    timeZone: MANILA_TIME_ZONE,
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  }).format(new Date(timestamp));
 };
+
+const loadImageElement = (src: string): Promise<HTMLImageElement> =>
+  new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('Image failed to load.'));
+    image.src = src;
+  });
+
+const canvasToPngBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
+  new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Canvas export failed.'));
+        return;
+      }
+      resolve(blob);
+    }, 'image/png');
+  });
 
 const CopyRow: React.FC<{
   label: string;
@@ -148,7 +166,7 @@ const RecentDonationsList: React.FC<{ recentDonations: DonationRecord[] }> = ({ 
             <div>
               <div className="text-sm font-bold text-ocean-deep dark:text-white">{donation.name}</div>
               <div className="text-xs text-ocean-deep/50 dark:text-gray-400">
-                {donation.method} • {formatRelativeTime(donation.donatedAt)}
+                {donation.method} • {formatManilaDateTime(donation.donatedAt)} Manila
               </div>
             </div>
           </div>
@@ -167,7 +185,8 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [content, setContent] = useState<Awaited<ReturnType<typeof DonationsService.getPublicDonationData>>['data']>(null);
+  const [content, setContent] = useState<DonationContent | null>(null);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -208,6 +227,10 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
     return content.localMethods.find((method) => method.id === selectedLocalMethodId) || content.localMethods[0];
   }, [content, selectedLocalMethodId]);
 
+  const selectedQrImageUrl = selectedLocalMethod?.qrImageUrl
+    ? convertToCORSFreeLink(selectedLocalMethod.qrImageUrl)
+    : '';
+
   const handleCopy = async (text: string, field: string) => {
     if (!text) return;
 
@@ -218,6 +241,67 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
     } catch {
       setCopiedField(null);
     }
+  };
+
+  const handleDownloadQr = () => {
+    if (!selectedLocalMethod?.qrImageFileId || !selectedLocalMethod) return;
+    const qrImageFileId = selectedLocalMethod.qrImageFileId;
+
+    void (async () => {
+      let sourceObjectUrl = '';
+      let downloadObjectUrl = '';
+      try {
+        const result = await DonationsService.downloadDonationQr(qrImageFileId);
+        if (!result.success || !result.data?.fileData) {
+          throw new Error(result.error || 'QR download payload is empty.');
+        }
+
+        const binary = window.atob(result.data.fileData);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) {
+          bytes[index] = binary.charCodeAt(index);
+        }
+
+        const sourceBlob = new Blob([bytes], { type: result.data.fileType || 'image/png' });
+        sourceObjectUrl = URL.createObjectURL(sourceBlob);
+
+        const image = await loadImageElement(sourceObjectUrl);
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+          throw new Error('Canvas context is unavailable.');
+        }
+
+        context.drawImage(image, 0, 0);
+
+        const pngBlob = await canvasToPngBlob(canvas);
+        downloadObjectUrl = URL.createObjectURL(pngBlob);
+        const link = document.createElement('a');
+        link.href = downloadObjectUrl;
+        link.download = (result.data.fileName || 'donation-qr.png').replace(/\.[^.]+$/, '') + '.png';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch (error) {
+        console.error('[DonatePage] QR download failed', {
+          selectedLocalMethod,
+          selectedQrImageUrl,
+          qrImageFileId: selectedLocalMethod.qrImageFileId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        window.open(selectedQrImageUrl, '_blank', 'noopener,noreferrer');
+      } finally {
+        if (sourceObjectUrl) {
+          URL.revokeObjectURL(sourceObjectUrl);
+        }
+        if (downloadObjectUrl) {
+          URL.revokeObjectURL(downloadObjectUrl);
+        }
+      }
+    })();
   };
 
   const bankDetails = content?.bankDetails;
@@ -308,11 +392,26 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
                         <div className="flex flex-col items-center gap-8 rounded-2xl border border-white/10 bg-white/50 p-6 backdrop-blur-sm dark:bg-black/20 md:flex-row md:p-8">
                           <div className="rounded-xl bg-white p-4 shadow-xl transition-transform duration-300 hover:scale-105">
                             {selectedLocalMethod.qrImageUrl ? (
-                              <img
-                                src={selectedLocalMethod.qrImageUrl}
-                                alt={`${selectedLocalMethod.name} QR code`}
-                                className="h-48 w-48 object-contain md:h-56 md:w-56"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => setIsQrModalOpen(true)}
+                                className="block transition-transform duration-300 hover:scale-[1.02]"
+                              >
+                                <img
+                                  src={selectedQrImageUrl}
+                                  alt={`${selectedLocalMethod.name} QR code`}
+                                  referrerPolicy="no-referrer"
+                                  onError={(event) => {
+                                    console.error('[DonatePage] QR image failed to load', {
+                                      selectedLocalMethod,
+                                      attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                                      rawQrImageUrl: selectedLocalMethod.qrImageUrl,
+                                      normalizedQrImageUrl: selectedQrImageUrl
+                                    });
+                                  }}
+                                  className="h-48 w-48 object-contain md:h-56 md:w-56"
+                                />
+                              </button>
                             ) : (
                               <div className="flex h-48 w-48 flex-col items-center justify-center gap-3 text-center text-gray-500 md:h-56 md:w-56">
                                 <QrCode size={56} />
@@ -324,6 +423,26 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
                             <div className="mt-2 text-center text-xs font-bold uppercase tracking-widest text-gray-500">
                               Scan to Pay
                             </div>
+                            {selectedLocalMethod.qrImageUrl && (
+                              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsQrModalOpen(true)}
+                                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-blue px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-cyan"
+                                >
+                                  <Expand size={16} />
+                                  View Full QR
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleDownloadQr}
+                                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-ocean-deep transition-colors hover:bg-white/20 dark:text-white"
+                                >
+                                  <Download size={16} />
+                                  Download QR
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           <div className="w-full flex-1 space-y-4">
@@ -475,6 +594,57 @@ export const DonatePage: React.FC<DonatePageProps> = ({ onBack }) => {
           </div>
         </div>
       </div>
+      {isQrModalOpen && selectedLocalMethod && selectedQrImageUrl && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+          onClick={() => setIsQrModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-3xl rounded-3xl border border-white/10 bg-[#07141c] p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.3em] text-primary-cyan/80">QR Code</div>
+                <h3 className="mt-1 text-2xl font-black text-white">{selectedLocalMethod.name}</h3>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadQr}
+                  className="inline-flex items-center gap-2 rounded-lg bg-primary-blue px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-cyan"
+                >
+                  <Download size={16} />
+                  Download
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsQrModalOpen(false)}
+                  className="rounded-lg bg-white/10 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-center rounded-2xl bg-white p-4">
+              <img
+                src={selectedQrImageUrl}
+                alt={`${selectedLocalMethod.name} QR code full size`}
+                referrerPolicy="no-referrer"
+                onError={(event) => {
+                  console.error('[DonatePage] Full-size QR image failed to load', {
+                    selectedLocalMethod,
+                    attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                    rawQrImageUrl: selectedLocalMethod.qrImageUrl,
+                    normalizedQrImageUrl: selectedQrImageUrl
+                  });
+                }}
+                className="max-h-[75vh] w-full object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

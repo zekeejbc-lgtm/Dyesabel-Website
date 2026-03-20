@@ -22,6 +22,7 @@ import { BackgroundBubbles } from './components/BackgroundBubbles';
 import { LoadingScreen } from './components/LoadingScreen';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AppDialogProvider } from './contexts/AppDialogContext';
 import { Chapter, ExecutiveOfficer, Pillar, USER_STORAGE_KEY, User } from './types';
 import { DataService } from './services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
@@ -48,10 +49,12 @@ function AppContent() {
   // Navigation & Editor States
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [selectedPillar, setSelectedPillar] = useState<Pillar | null>(null);
+  const isScopedEditorForSelectedChapter = !!user && !!selectedChapter && user.role === 'editor' && user.chapterId === selectedChapter.id;
+  const isChapterHeadForSelectedChapter = !!user && !!selectedChapter && user.role === 'chapter_head' && user.chapterId === selectedChapter.id;
   const canEditSelectedChapter = !!user && !!selectedChapter && (
     user.role === 'admin' ||
-    (user.role === 'editor' && (!user.chapterId || user.chapterId === selectedChapter.id)) ||
-    (user.role === 'chapter_head' && user.chapterId === selectedChapter.id)
+    isScopedEditorForSelectedChapter ||
+    isChapterHeadForSelectedChapter
   );
   
   const [isChapterEditorOpen, setIsChapterEditorOpen] = useState(false);
@@ -386,7 +389,9 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <AppDialogProvider>
+        <AppContent />
+      </AppDialogProvider>
     </AuthProvider>
   );
 }

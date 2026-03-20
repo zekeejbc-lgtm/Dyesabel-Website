@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Layout, Type, Image } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { DataService } from '../services/DriveService';
 import { SESSION_TOKEN_KEY } from '../types';
 import { getSessionToken } from '../utils/session';
@@ -12,6 +13,7 @@ interface LandingPageEditorProps {
 
 export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) => {
   const { user, logout } = useAuth();
+  const { showAlert } = useAppDialog();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const [isSaving, setIsSaving] = useState(false);
 
@@ -34,7 +36,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
     try {
       const sessionToken = getSessionToken();
       if (!sessionToken) {
-        alert('Session expired. Please login again.');
+        await showAlert('Session expired. Please login again.');
         setIsSaving(false);
         return;
       }
@@ -42,12 +44,12 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
       const result = await DataService.saveLandingPageData(pageData, sessionToken);
 
       if (result.success) {
-        alert('Landing page changes saved successfully!');
+        await showAlert('Landing page changes saved successfully!', { title: 'Landing Page Updated' });
       } else {
-        alert('Error saving changes: ' + (result.error || 'Unknown error'));
+        await showAlert('Error saving changes: ' + (result.error || 'Unknown error'));
       }
     } catch (error) {
-      alert('Error saving landing page: ' + (error instanceof Error ? error.message : String(error)));
+      await showAlert('Error saving landing page: ' + (error instanceof Error ? error.message : String(error)));
     } finally {
       setIsSaving(false);
     }

@@ -5,9 +5,17 @@
 
 var SHEET_SETTINGS = 'DonationSettings';
 var SHEET_RECENT_DONATIONS = 'RecentDonations';
+var SHEET_NATIONAL_METHODS = 'NationalDonationMethods';
+var SHEET_INTERNATIONAL_METHODS = 'InternationalDonationMethods';
+var SHEET_ALLOCATIONS = 'DonationAllocations';
 var MAX_QR_UPLOAD_BYTES = 5 * 1024 * 1024;
 var MAX_RECENT_DONATIONS = 100;
 var DEFAULT_QR_UPLOAD_FOLDER_ID = '1jd8IjdCDku-TKmgrCVBBNpI_yDeIWDuJ';
+var SETTINGS_HEADERS = ['key', 'value'];
+var RECENT_DONATION_HEADERS = ['id', 'name', 'amount', 'currency', 'method', 'donatedAt'];
+var NATIONAL_METHOD_HEADERS = ['id', 'name', 'accountName', 'accountNumber', 'qrImageUrl', 'qrImageFileId', 'color', 'isEnabled', 'sortOrder'];
+var INTERNATIONAL_METHOD_HEADERS = ['id', 'bankName', 'accountName', 'accountNumber', 'swiftCode', 'bankAddress', 'currency', 'isEnabled', 'sortOrder'];
+var ALLOCATION_HEADERS = ['id', 'label', 'percentage', 'color', 'sortOrder'];
 
 function doGet(e) {
   return jsonOutput_(handleRequest_(buildRequest_(e)));
@@ -36,6 +44,11 @@ function handleRequest_(request) {
           message: 'Donation sheets initialized successfully.'
         };
 
+      case 'migrateDonationStorageToMappedSheets':
+        requireAdminKey_(request);
+        initializeDonationSheets_();
+        return migrateDonationStorageToMappedSheets_();
+
       case 'getPublicDonationData':
         initializeDonationSheets_();
         return {
@@ -62,6 +75,10 @@ function handleRequest_(request) {
           fileUrl: uploadResult.fileUrl,
           thumbnailUrl: uploadResult.thumbnailUrl
         };
+
+      case 'downloadDonationQr':
+        initializeDonationSheets_();
+        return getDonationQrDownloadData_(request);
 
       default:
         return {
@@ -113,15 +130,19 @@ function copyObject_(target, source) {
 }
 
 function requireAdminKey_(request) {
-  var adminKey = getRequiredProperty_('ADMIN_API_KEY');
+  var adminKey = getConfiguredAdminKey_();
 
   if (!isConfiguredSecret_(adminKey)) {
-    throw new Error('ADMIN_API_KEY is not configured correctly.');
+    throw new Error('ADMIN_API_KEY or DONATIONS_ADMIN_API_KEY is not configured correctly.');
   }
 
   if (!request || request.adminKey !== adminKey) {
     throw new Error('Unauthorized request.');
   }
+}
+
+function getConfiguredAdminKey_() {
+  return getScriptProperty_('ADMIN_API_KEY', '') || getScriptProperty_('DONATIONS_ADMIN_API_KEY', '');
 }
 
 function getSpreadsheet_() {
@@ -132,53 +153,74 @@ function initializeDonationSheets_() {
   var spreadsheet = getSpreadsheet_();
   var settingsSheet = getOrCreateSheet_(spreadsheet, SHEET_SETTINGS);
   var recentDonationsSheet = getOrCreateSheet_(spreadsheet, SHEET_RECENT_DONATIONS);
+  var nationalMethodsSheet = getOrCreateSheet_(spreadsheet, SHEET_NATIONAL_METHODS);
+  var internationalMethodsSheet = getOrCreateSheet_(spreadsheet, SHEET_INTERNATIONAL_METHODS);
+  var allocationsSheet = getOrCreateSheet_(spreadsheet, SHEET_ALLOCATIONS);
 
-  if (settingsSheet.getLastRow() === 0) {
-    settingsSheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
-    writeSettingsMap_(getDefaultSettings_());
-  } else if (settingsSheet.getLastRow() === 1) {
+  ensureHeaders_(settingsSheet, SETTINGS_HEADERS);
+  if (settingsSheet.getLastRow() === 1) {
     writeSettingsMap_(getDefaultSettings_());
   }
 
-  if (recentDonationsSheet.getLastRow() === 0) {
-    recentDonationsSheet.getRange(1, 1, 1, 6).setValues([
-      ['id', 'name', 'amount', 'currency', 'method', 'donatedAt']
-    ]);
+  ensureHeaders_(recentDonationsSheet, RECENT_DONATION_HEADERS);
+  ensureHeaders_(nationalMethodsSheet, NATIONAL_METHOD_HEADERS);
+  ensureHeaders_(internationalMethodsSheet, INTERNATIONAL_METHOD_HEADERS);
+  ensureHeaders_(allocationsSheet, ALLOCATION_HEADERS);
+}
+
+function ensureHeaders_(sheet, headers) {
+  if (sheet.getLastRow() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+
+  var current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+  var matches = true;
+  for (var i = 0; i < headers.length; i++) {
+    if (String(current[i] || '') !== headers[i]) {
+      matches = false;
+      break;
+    }
+  }
+
+  if (!matches) {
+    sheet.insertRows(1, 1);
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   }
 }
 
 function getDefaultSettings_() {
   return {
-    bankName: '',
-    bankAccountName: '',
-    bankAccountNumber: '',
-    bankSwiftCode: '',
-    bankAddress: '',
-    bankCurrency: '',
     referenceNote: '',
-    secRegistrationNumber: '',
-    localMethodsJson: JSON.stringify([]),
-    allocationsJson: JSON.stringify([])
+    secRegistrationNumber: ''
   };
 }
 
 function getPublicDonationData_() {
   var settings = readSettingsMap_();
   var recentDonations = readRecentDonations_();
+  var nationalMethods = readNationalDonationMethods_();
+  var internationalMethods = readInternationalDonationMethods_();
+  var allocations = readDonationAllocations_();
+
+  if (!nationalMethods.length) {
+    nationalMethods = normalizeLocalMethods_(parseJsonArray_(settings.localMethodsJson));
+  }
+
+  if (!internationalMethods.length && hasLegacyInternationalSettings_(settings)) {
+    internationalMethods = normalizeInternationalMethods_([buildLegacyInternationalMethod_(settings)]);
+  }
+
+  if (!allocations.length) {
+    allocations = normalizeAllocations_(parseJsonArray_(settings.allocationsJson));
+  }
 
   return {
-    localMethods: parseJsonArray_(settings.localMethodsJson),
-    bankDetails: {
-      bankName: sanitizePublicValue_(settings.bankName),
-      accountName: sanitizePublicValue_(settings.bankAccountName),
-      accountNumber: sanitizePublicValue_(settings.bankAccountNumber),
-      swiftCode: sanitizePublicValue_(settings.bankSwiftCode),
-      bankAddress: sanitizePublicValue_(settings.bankAddress),
-      currency: sanitizePublicValue_(settings.bankCurrency)
-    },
+    localMethods: nationalMethods,
+    bankDetails: buildBankDetailsFromInternationalMethods_(internationalMethods),
     referenceNote: sanitizePublicValue_(settings.referenceNote),
     secRegistrationNumber: sanitizePublicValue_(settings.secRegistrationNumber),
-    allocations: parseJsonArray_(settings.allocationsJson),
+    allocations: allocations,
     recentDonations: recentDonations
   };
 }
@@ -187,20 +229,30 @@ function saveDonationContent_(content) {
   validateDonationContent_(content);
 
   var currentSettings = readSettingsMap_();
-  var nextSettings = {
-    bankName: normalizeTextValue_(getSafeValue_(content.bankDetails && content.bankDetails.bankName, currentSettings.bankName)),
-    bankAccountName: normalizeTextValue_(getSafeValue_(content.bankDetails && content.bankDetails.accountName, currentSettings.bankAccountName)),
-    bankAccountNumber: normalizeTextValue_(getSafeValue_(content.bankDetails && content.bankDetails.accountNumber, currentSettings.bankAccountNumber)),
-    bankSwiftCode: normalizeTextValue_(getSafeValue_(content.bankDetails && content.bankDetails.swiftCode, currentSettings.bankSwiftCode)),
-    bankAddress: normalizeTextValue_(getSafeValue_(content.bankDetails && content.bankDetails.bankAddress, currentSettings.bankAddress)),
-    bankCurrency: normalizeTextValue_(getSafeValue_(content.bankDetails && content.bankDetails.currency, currentSettings.bankCurrency)),
-    referenceNote: normalizeTextValue_(getSafeValue_(content.referenceNote, currentSettings.referenceNote)),
-    secRegistrationNumber: normalizeTextValue_(getSafeValue_(content.secRegistrationNumber, currentSettings.secRegistrationNumber)),
-    localMethodsJson: JSON.stringify(normalizeLocalMethods_(Array.isArray(content.localMethods) ? content.localMethods : parseJsonArray_(currentSettings.localMethodsJson))),
-    allocationsJson: JSON.stringify(normalizeAllocations_(Array.isArray(content.allocations) ? content.allocations : parseJsonArray_(currentSettings.allocationsJson)))
-  };
+  var currentNationalMethods = readNationalDonationMethods_();
+  var currentInternationalMethods = readInternationalDonationMethods_();
+  var currentAllocations = readDonationAllocations_();
 
-  writeSettingsMap_(nextSettings);
+  if (!currentNationalMethods.length) {
+    currentNationalMethods = normalizeLocalMethods_(parseJsonArray_(currentSettings.localMethodsJson));
+  }
+
+  if (!currentInternationalMethods.length && hasLegacyInternationalSettings_(currentSettings)) {
+    currentInternationalMethods = normalizeInternationalMethods_([buildLegacyInternationalMethod_(currentSettings)]);
+  }
+
+  if (!currentAllocations.length) {
+    currentAllocations = normalizeAllocations_(parseJsonArray_(currentSettings.allocationsJson));
+  }
+
+  writeSettingsMap_({
+    referenceNote: normalizeTextValue_(getSafeValue_(content.referenceNote, currentSettings.referenceNote)),
+    secRegistrationNumber: normalizeTextValue_(getSafeValue_(content.secRegistrationNumber, currentSettings.secRegistrationNumber))
+  });
+
+  writeNationalDonationMethods_(Array.isArray(content.localMethods) ? content.localMethods : currentNationalMethods);
+  writeInternationalDonationMethods_(content.bankDetails !== undefined ? [content.bankDetails] : currentInternationalMethods);
+  writeDonationAllocations_(Array.isArray(content.allocations) ? content.allocations : currentAllocations);
 
   if (Array.isArray(content.recentDonations)) {
     writeRecentDonations_(normalizeRecentDonations_(content.recentDonations));
@@ -225,7 +277,7 @@ function readSettingsMap_() {
 
 function writeSettingsMap_(settingsMap) {
   var sheet = getSpreadsheet_().getSheetByName(SHEET_SETTINGS);
-  var rows = [['key', 'value']];
+  var rows = [SETTINGS_HEADERS];
 
   for (var key in settingsMap) {
     if (Object.prototype.hasOwnProperty.call(settingsMap, key)) {
@@ -234,7 +286,7 @@ function writeSettingsMap_(settingsMap) {
   }
 
   sheet.clearContents();
-  sheet.getRange(1, 1, rows.length, 2).setValues(rows);
+  sheet.getRange(1, 1, rows.length, SETTINGS_HEADERS.length).setValues(rows);
 }
 
 function readRecentDonations_() {
@@ -244,9 +296,7 @@ function readRecentDonations_() {
 
   for (var i = 1; i < values.length; i++) {
     var row = values[i];
-    if (!row[0] && !row[1]) {
-      continue;
-    }
+    if (!row[0] && !row[1]) continue;
 
     rows.push({
       id: String(row[0] || 'donation-' + i),
@@ -267,7 +317,7 @@ function readRecentDonations_() {
 
 function writeRecentDonations_(donations) {
   var sheet = getSpreadsheet_().getSheetByName(SHEET_RECENT_DONATIONS);
-  var rows = [['id', 'name', 'amount', 'currency', 'method', 'donatedAt']];
+  var rows = [RECENT_DONATION_HEADERS];
 
   for (var i = 0; i < donations.length; i++) {
     var donation = donations[i] || {};
@@ -282,7 +332,166 @@ function writeRecentDonations_(donations) {
   }
 
   sheet.clearContents();
-  sheet.getRange(1, 1, rows.length, 6).setValues(rows);
+  sheet.getRange(1, 1, rows.length, RECENT_DONATION_HEADERS.length).setValues(rows);
+}
+
+function readNationalDonationMethods_() {
+  var sheet = getSpreadsheet_().getSheetByName(SHEET_NATIONAL_METHODS);
+  var values = sheet.getDataRange().getValues();
+  var headers = values.length ? values[0] : [];
+  var headerIndex = createHeaderIndexMap_(headers);
+  var methods = [];
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (!row[0] && !row[1] && !row[2] && !row[3] && !row[4]) continue;
+
+    methods.push({
+      id: String(getRowValueByHeader_(row, headerIndex, 'id', 0) || ('method-' + i)),
+      name: String(getRowValueByHeader_(row, headerIndex, 'name', 1) || ('Method ' + i)),
+      accountName: String(getRowValueByHeader_(row, headerIndex, 'accountName', 2) || ''),
+      accountNumber: String(getRowValueByHeader_(row, headerIndex, 'accountNumber', 3) || ''),
+      qrImageUrl: String(getRowValueByHeader_(row, headerIndex, 'qrImageUrl', 4) || ''),
+      qrImageFileId: String(getRowValueByHeader_(row, headerIndex, 'qrImageFileId', -1) || ''),
+      color: String(getRowValueByHeader_(row, headerIndex, 'color', 5) || 'bg-primary-blue'),
+      isEnabled: getRowValueByHeader_(row, headerIndex, 'isEnabled', 6) !== false && String(getRowValueByHeader_(row, headerIndex, 'isEnabled', 6)).toLowerCase() !== 'false',
+      sortOrder: Number(getRowValueByHeader_(row, headerIndex, 'sortOrder', 7) || (i - 1))
+    });
+  }
+
+  return normalizeLocalMethods_(methods);
+}
+
+function writeNationalDonationMethods_(methods) {
+  var sheet = getSpreadsheet_().getSheetByName(SHEET_NATIONAL_METHODS);
+  var normalized = normalizeLocalMethods_(methods);
+  var rows = [NATIONAL_METHOD_HEADERS];
+
+  for (var i = 0; i < normalized.length; i++) {
+    var method = normalized[i];
+    rows.push([
+      method.id,
+      method.name,
+      method.accountName,
+      method.accountNumber,
+      method.qrImageUrl,
+      method.qrImageFileId,
+      method.color,
+      method.isEnabled,
+      method.sortOrder
+    ]);
+  }
+
+  sheet.clearContents();
+  sheet.getRange(1, 1, rows.length, NATIONAL_METHOD_HEADERS.length).setValues(rows);
+}
+
+function createHeaderIndexMap_(headers) {
+  var map = {};
+  for (var i = 0; i < headers.length; i++) {
+    map[String(headers[i] || '')] = i;
+  }
+  return map;
+}
+
+function getRowValueByHeader_(row, headerIndex, headerName, fallbackIndex) {
+  if (Object.prototype.hasOwnProperty.call(headerIndex, headerName)) {
+    return row[headerIndex[headerName]];
+  }
+  if (fallbackIndex >= 0) {
+    return row[fallbackIndex];
+  }
+  return '';
+}
+
+function readInternationalDonationMethods_() {
+  var sheet = getSpreadsheet_().getSheetByName(SHEET_INTERNATIONAL_METHODS);
+  var values = sheet.getDataRange().getValues();
+  var methods = [];
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (!row[0] && !row[1] && !row[2] && !row[3] && !row[4] && !row[5] && !row[6]) continue;
+
+    methods.push({
+      id: String(row[0] || ('international-method-' + i)),
+      bankName: String(row[1] || ''),
+      accountName: String(row[2] || ''),
+      accountNumber: String(row[3] || ''),
+      swiftCode: String(row[4] || ''),
+      bankAddress: String(row[5] || ''),
+      currency: String(row[6] || ''),
+      isEnabled: row[7] !== false && String(row[7]).toLowerCase() !== 'false',
+      sortOrder: Number(row[8] || (i - 1))
+    });
+  }
+
+  return normalizeInternationalMethods_(methods);
+}
+
+function writeInternationalDonationMethods_(methods) {
+  var sheet = getSpreadsheet_().getSheetByName(SHEET_INTERNATIONAL_METHODS);
+  var normalized = normalizeInternationalMethods_(methods);
+  var rows = [INTERNATIONAL_METHOD_HEADERS];
+
+  for (var i = 0; i < normalized.length; i++) {
+    var method = normalized[i];
+    rows.push([
+      method.id,
+      method.bankName,
+      method.accountName,
+      method.accountNumber,
+      method.swiftCode,
+      method.bankAddress,
+      method.currency,
+      method.isEnabled,
+      method.sortOrder
+    ]);
+  }
+
+  sheet.clearContents();
+  sheet.getRange(1, 1, rows.length, INTERNATIONAL_METHOD_HEADERS.length).setValues(rows);
+}
+
+function readDonationAllocations_() {
+  var sheet = getSpreadsheet_().getSheetByName(SHEET_ALLOCATIONS);
+  var values = sheet.getDataRange().getValues();
+  var allocations = [];
+
+  for (var i = 1; i < values.length; i++) {
+    var row = values[i];
+    if (!row[0] && !row[1]) continue;
+
+    allocations.push({
+      id: String(row[0] || ('allocation-' + i)),
+      label: String(row[1] || ('Allocation ' + i)),
+      percentage: Number(row[2] || 0),
+      color: String(row[3] || 'bg-primary-blue'),
+      sortOrder: Number(row[4] || (i - 1))
+    });
+  }
+
+  return normalizeAllocations_(allocations);
+}
+
+function writeDonationAllocations_(allocations) {
+  var sheet = getSpreadsheet_().getSheetByName(SHEET_ALLOCATIONS);
+  var normalized = normalizeAllocations_(allocations);
+  var rows = [ALLOCATION_HEADERS];
+
+  for (var i = 0; i < normalized.length; i++) {
+    var allocation = normalized[i];
+    rows.push([
+      allocation.id,
+      allocation.label,
+      allocation.percentage,
+      allocation.color,
+      allocation.sortOrder
+    ]);
+  }
+
+  sheet.clearContents();
+  sheet.getRange(1, 1, rows.length, ALLOCATION_HEADERS.length).setValues(rows);
 }
 
 function parseJsonArray_(value) {
@@ -297,6 +506,56 @@ function parseJsonArray_(value) {
 
 function getSafeValue_(nextValue, fallbackValue) {
   return nextValue === undefined || nextValue === null ? fallbackValue : nextValue;
+}
+
+function hasLegacyInternationalSettings_(settings) {
+  return !!(
+    settings.bankName ||
+    settings.bankAccountName ||
+    settings.bankAccountNumber ||
+    settings.bankSwiftCode ||
+    settings.bankAddress ||
+    settings.bankCurrency
+  );
+}
+
+function buildLegacyInternationalMethod_(settings) {
+  return {
+    id: 'international-method-1',
+    bankName: settings.bankName || '',
+    accountName: settings.bankAccountName || '',
+    accountNumber: settings.bankAccountNumber || '',
+    swiftCode: settings.bankSwiftCode || '',
+    bankAddress: settings.bankAddress || '',
+    currency: settings.bankCurrency || '',
+    isEnabled: true,
+    sortOrder: 0
+  };
+}
+
+function buildBankDetailsFromInternationalMethods_(methods) {
+  var normalized = normalizeInternationalMethods_(methods);
+  for (var i = 0; i < normalized.length; i++) {
+    if (normalized[i].isEnabled !== false) {
+      return {
+        bankName: normalized[i].bankName,
+        accountName: normalized[i].accountName,
+        accountNumber: normalized[i].accountNumber,
+        swiftCode: normalized[i].swiftCode,
+        bankAddress: normalized[i].bankAddress,
+        currency: normalized[i].currency
+      };
+    }
+  }
+
+  return {
+    bankName: '',
+    accountName: '',
+    accountNumber: '',
+    swiftCode: '',
+    bankAddress: '',
+    currency: ''
+  };
 }
 
 function getOrCreateSheet_(spreadsheet, sheetName) {
@@ -330,6 +589,27 @@ function uploadDonationQr_(request) {
     fileId: file.getId(),
     fileUrl: 'https://drive.google.com/file/d/' + file.getId() + '/view?usp=sharing',
     thumbnailUrl: 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w1600'
+  };
+}
+
+function getDonationQrDownloadData_(request) {
+  var fileId = String(request && request.fileId || '').trim();
+  if (!fileId) {
+    throw new Error('Missing fileId.');
+  }
+
+  var file = DriveApp.getFileById(fileId);
+  var blob = file.getBlob();
+  var fileType = String(blob.getContentType() || file.getMimeType() || 'image/png');
+  var extension = getFileExtensionForMimeType_(fileType);
+  var baseName = sanitizeDownloadFileName_(file.getName() || 'donation-qr');
+
+  return {
+    success: true,
+    fileId: fileId,
+    fileName: baseName + '.' + extension,
+    fileType: fileType,
+    fileData: Utilities.base64Encode(blob.getBytes())
   };
 }
 
@@ -400,17 +680,41 @@ function normalizeLocalMethods_(methods) {
   var normalized = [];
   for (var i = 0; i < methods.length; i++) {
     var method = methods[i] || {};
+    var qrImageUrl = normalizeTextValue_(method.qrImageUrl);
+    var qrImageFileId = normalizeTextValue_(method.qrImageFileId || extractDriveFileId_(qrImageUrl));
     normalized.push({
       id: normalizeTextValue_(method.id || ('method-' + (i + 1))),
       name: normalizeTextValue_(method.name || ('Method ' + (i + 1))),
       accountName: normalizeTextValue_(method.accountName),
       accountNumber: normalizeTextValue_(method.accountNumber),
-      qrImageUrl: normalizeTextValue_(method.qrImageUrl),
-      color: normalizeTextValue_(method.color),
+      qrImageUrl: qrImageUrl,
+      qrImageFileId: qrImageFileId,
+      color: normalizeTextValue_(method.color || 'bg-primary-blue'),
       isEnabled: method.isEnabled !== false,
       sortOrder: Number(method.sortOrder || i)
     });
   }
+  normalized.sort(function(a, b) { return a.sortOrder - b.sortOrder; });
+  return normalized;
+}
+
+function normalizeInternationalMethods_(methods) {
+  var normalized = [];
+  for (var i = 0; i < methods.length; i++) {
+    var method = methods[i] || {};
+    normalized.push({
+      id: normalizeTextValue_(method.id || ('international-method-' + (i + 1))),
+      bankName: normalizeTextValue_(method.bankName),
+      accountName: normalizeTextValue_(method.accountName),
+      accountNumber: normalizeTextValue_(method.accountNumber),
+      swiftCode: normalizeTextValue_(method.swiftCode),
+      bankAddress: normalizeTextValue_(method.bankAddress),
+      currency: normalizeTextValue_(method.currency),
+      isEnabled: method.isEnabled !== false,
+      sortOrder: Number(method.sortOrder || i)
+    });
+  }
+  normalized.sort(function(a, b) { return a.sortOrder - b.sortOrder; });
   return normalized;
 }
 
@@ -419,11 +723,14 @@ function normalizeAllocations_(allocations) {
   for (var i = 0; i < allocations.length; i++) {
     var allocation = allocations[i] || {};
     normalized.push({
+      id: normalizeTextValue_(allocation.id || ('allocation-' + (i + 1))),
       label: normalizeTextValue_(allocation.label || ('Allocation ' + (i + 1))),
       percentage: Number(allocation.percentage || 0),
-      color: normalizeTextValue_(allocation.color)
+      color: normalizeTextValue_(allocation.color || 'bg-primary-blue'),
+      sortOrder: Number(allocation.sortOrder || i)
     });
   }
+  normalized.sort(function(a, b) { return a.sortOrder - b.sortOrder; });
   return normalized;
 }
 
@@ -475,6 +782,66 @@ function validateQrUploadRequest_(request) {
   }
 }
 
+function migrateDonationStorageToMappedSheets_() {
+  var settings = readSettingsMap_();
+  var legacyNationalMethods = normalizeLocalMethods_(parseJsonArray_(settings.localMethodsJson));
+  var legacyAllocations = normalizeAllocations_(parseJsonArray_(settings.allocationsJson));
+  var internationalMethods = hasLegacyInternationalSettings_(settings)
+    ? normalizeInternationalMethods_([buildLegacyInternationalMethod_(settings)])
+    : readInternationalDonationMethods_();
+
+  if (legacyNationalMethods.length) {
+    writeNationalDonationMethods_(legacyNationalMethods);
+  }
+
+  if (internationalMethods.length) {
+    writeInternationalDonationMethods_(internationalMethods);
+  }
+
+  if (legacyAllocations.length) {
+    writeDonationAllocations_(legacyAllocations);
+  }
+
+  writeSettingsMap_({
+    referenceNote: normalizeTextValue_(settings.referenceNote),
+    secRegistrationNumber: normalizeTextValue_(settings.secRegistrationNumber)
+  });
+
+  return {
+    success: true,
+    message: 'Donation storage migrated to mapped sheets successfully.',
+    migrated: {
+      nationalMethods: legacyNationalMethods.length,
+      internationalMethods: internationalMethods.length,
+      allocations: legacyAllocations.length
+    }
+  };
+}
+
+function extractDriveFileId_(value) {
+  var normalized = String(value || '').trim();
+  var match = normalized.match(/[-\w]{25,}/);
+  return match ? match[0] : '';
+}
+
+function sanitizeDownloadFileName_(value) {
+  var normalized = String(value || 'donation-qr')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || 'donation-qr';
+}
+
+function getFileExtensionForMimeType_(mimeType) {
+  var lookup = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/webp': 'webp'
+  };
+  return lookup[String(mimeType || '').toLowerCase()] || 'png';
+}
+
 // Manual runners so these appear in the Apps Script Run menu during setup.
 function runInitializeDonationSheets() {
   initializeDonationSheets_();
@@ -487,7 +854,12 @@ function runGetPublicDonationData() {
 function runValidateDonationConfiguration() {
   return {
     spreadsheetIdConfigured: !!getScriptProperty_('SPREADSHEET_ID', ''),
-    adminApiKeyConfigured: isConfiguredSecret_(getScriptProperty_('ADMIN_API_KEY', '')),
+    adminApiKeyConfigured: isConfiguredSecret_(getConfiguredAdminKey_()),
+    adminApiKeySource: getScriptProperty_('ADMIN_API_KEY', '') ? 'ADMIN_API_KEY' : (getScriptProperty_('DONATIONS_ADMIN_API_KEY', '') ? 'DONATIONS_ADMIN_API_KEY' : ''),
     qrUploadFolderId: getQrUploadFolderId_()
   };
+}
+
+function runMigrateDonationStorageToMappedSheets() {
+  return migrateDonationStorageToMappedSheets_();
 }

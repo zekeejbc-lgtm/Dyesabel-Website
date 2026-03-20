@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { ExecutiveOfficer, Founder, SESSION_TOKEN_KEY } from '../types';
 import { DataService, DriveService, convertToCORSFreeLink } from '../services/DriveService';
 import { getSessionToken } from '../utils/session';
@@ -74,6 +75,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   onClose
 }) => {
   const { user } = useAuth();
+  const { showAlert, showConfirm } = useAppDialog();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const getAvatarUrl = (name: string) =>
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=256&bold=true`;
@@ -236,13 +238,21 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
     setCustomRoleMode((current) => ({ ...current, [nextId]: false }));
   };
 
-  const removeFounder = (index: number) => {
-    if (!confirm('Are you sure you want to remove this founder?')) return;
+  const removeFounder = async (index: number) => {
+    const shouldRemove = await showConfirm('Are you sure you want to remove this founder?', {
+      title: 'Remove Founder',
+      confirmLabel: 'Remove'
+    });
+    if (!shouldRemove) return;
     setEditedFounders((current) => current.filter((_, i) => i !== index));
   };
 
-  const removeExecutiveOfficer = (index: number) => {
-    if (!confirm('Are you sure you want to remove this executive officer?')) return;
+  const removeExecutiveOfficer = async (index: number) => {
+    const shouldRemove = await showConfirm('Are you sure you want to remove this executive officer?', {
+      title: 'Remove Executive Officer',
+      confirmLabel: 'Remove'
+    });
+    if (!shouldRemove) return;
     const targetId = editedExecutiveOfficers[index]?.id;
     setEditedExecutiveOfficers((current) => current.filter((_, i) => i !== index));
     if (targetId) {
@@ -266,7 +276,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   ) => {
     const sessionToken = getSessionToken();
     if (!sessionToken) {
-      alert('Session expired. Please log in again.');
+      await showAlert('Session expired. Please log in again.');
       return;
     }
 
@@ -280,7 +290,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
 
       onUploaded(result.fileUrl);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Error uploading image.');
+      await showAlert(error instanceof Error ? error.message : 'Error uploading image.');
     } finally {
       setUploadingImageKey((current) => (current === uploadKey ? null : current));
     }
@@ -313,7 +323,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
       toast.success('Founders and executive officers saved successfully.');
       onClose();
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Error saving content. Please try again.');
+      await showAlert(error instanceof Error ? error.message : 'Error saving content. Please try again.');
     } finally {
       setSaving(false);
     }

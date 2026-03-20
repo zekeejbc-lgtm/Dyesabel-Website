@@ -27,9 +27,7 @@ function doGet() {
 }
 
 function doPost(e) {
-  var lock = LockService.getScriptLock();
   try {
-    lock.waitLock(10000);
     var data = dyesabelParseJsonBody_(e);
     var action = String(data.action || '');
     if (USER_PROXY_ACTIONS[action]) return proxyResponse_(proxyUsers_(data));
@@ -37,6 +35,14 @@ function doPost(e) {
     return dispatchMainAction_(action, data);
   } catch (error) {
     return dyesabelCreateResponse_(false, error.message || String(error));
+  }
+}
+
+function withMainScriptLock_(callback) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    return callback();
   } finally {
     lock.releaseLock();
   }
@@ -52,6 +58,10 @@ function proxyUsers_(data) {
 
 function proxyNewsletter_(data) {
   return dyesabelPostJson_(dyesabelRequireScriptProperty_('NEWSLETTER_API_URL'), data, true);
+}
+
+function proxyDonations_(data) {
+  return dyesabelPostJson_(dyesabelRequireScriptProperty_('DONATIONS_API_URL'), data, false);
 }
 
 function getSessionUser_(sessionToken) {
@@ -79,10 +89,9 @@ function requireAdminOnly_(sessionToken) {
 function requireChapterManager_(sessionToken, chapterId) {
   var user = getSessionUser_(sessionToken);
   var sameChapter = String(user.chapterId || '') === String(chapterId || '');
-  var isGlobalEditor = user.role === 'editor' && !user.chapterId;
   var isScopedEditor = user.role === 'editor' && sameChapter;
   var isScopedChapterHead = user.role === 'chapter_head' && sameChapter;
-  if (user.role !== 'admin' && !isGlobalEditor && !isScopedEditor && !isScopedChapterHead) {
+  if (user.role !== 'admin' && !isScopedEditor && !isScopedChapterHead) {
     throw new Error('Insufficient permissions for this chapter');
   }
   return user;
@@ -91,60 +100,64 @@ function requireChapterManager_(sessionToken, chapterId) {
 function dispatchMainAction_(action, data) {
   var result;
   switch (action) {
-    case 'uploadImage': requireSession_(data.sessionToken); result = uploadImage_(data); break;
-    case 'uploadImageFromUrl': requireSession_(data.sessionToken); result = uploadFromUrl_(data); break;
-    case 'createFolder': requireSession_(data.sessionToken); result = createFolder_(data); break;
-    case 'deleteImage': requireSession_(data.sessionToken); result = deleteImage_(data); break;
+    case 'uploadImage': requireSession_(data.sessionToken); result = withMainScriptLock_(function() { return uploadImage_(data); }); break;
+    case 'uploadImageFromUrl': requireSession_(data.sessionToken); result = withMainScriptLock_(function() { return uploadFromUrl_(data); }); break;
+    case 'createFolder': requireSession_(data.sessionToken); result = withMainScriptLock_(function() { return createFolder_(data); }); break;
+    case 'deleteImage': requireSession_(data.sessionToken); result = withMainScriptLock_(function() { return deleteImage_(data); }); break;
     case 'listImages': result = listImages_(data); break;
     case 'getOrgSettings': result = getOrgSettings_(); break;
-    case 'updateOrgSettings': requireAdminOrEditor_(data.sessionToken); result = updateOrgSettings_(data); break;
-    case 'saveLandingPage': requireAdminOrEditor_(data.sessionToken); result = saveData_('LandingPage', data.landingPage); break;
+    case 'updateOrgSettings': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updateOrgSettings_(data); }); break;
+    case 'getDonationContent': requireAdminOrEditor_(data.sessionToken); result = getDonationContent_(); break;
+    case 'saveDonationContent': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return saveDonationContentProxy_(data); }); break;
+    case 'uploadDonationQr': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return uploadDonationQrProxy_(data); }); break;
+    case 'migrateDonationStorageToMappedSheets': requireAdminOnly_(data.sessionToken); result = withMainScriptLock_(function() { return migrateDonationStorageToMappedSheetsProxy_(); }); break;
+    case 'saveLandingPage': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return saveData_('LandingPage', data.landingPage); }); break;
     case 'loadLandingPage': result = loadData_('LandingPage'); break;
-    case 'saveStories': requireAdminOrEditor_(data.sessionToken); result = saveData_('Stories', data.stories); break;
+    case 'saveStories': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return saveData_('Stories', data.stories); }); break;
     case 'loadStories': result = loadData_('Stories'); break;
     case 'listStories': result = loadData_('Stories'); break;
     case 'getStory': result = getMappedItem_('Stories', data.storyId, 'story'); break;
-    case 'createStory': requireAdminOrEditor_(data.sessionToken); result = createMappedItem_('Stories', data.story, 'story'); break;
-    case 'updateStory': requireAdminOrEditor_(data.sessionToken); result = updateMappedItem_('Stories', data.story, 'story'); break;
-    case 'deleteStory': requireAdminOrEditor_(data.sessionToken); result = deleteMappedItem_('Stories', data.storyId, 'story'); break;
-    case 'saveFounders': requireAdminOrEditor_(data.sessionToken); result = saveData_('Founders', data.founders); break;
+    case 'createStory': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return createMappedItem_('Stories', data.story, 'story'); }); break;
+    case 'updateStory': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updateMappedItem_('Stories', data.story, 'story'); }); break;
+    case 'deleteStory': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deleteMappedItem_('Stories', data.storyId, 'story'); }); break;
+    case 'saveFounders': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return saveData_('Founders', data.founders); }); break;
     case 'loadFounders': result = loadData_('Founders'); break;
     case 'listFounders': result = loadData_('Founders'); break;
     case 'getFounder': result = getMappedItem_('Founders', data.founderId, 'founder'); break;
-    case 'createFounder': requireAdminOrEditor_(data.sessionToken); result = createMappedItem_('Founders', data.founder, 'founder'); break;
-    case 'updateFounder': requireAdminOrEditor_(data.sessionToken); result = updateMappedItem_('Founders', data.founder, 'founder'); break;
-    case 'deleteFounder': requireAdminOrEditor_(data.sessionToken); result = deleteMappedItem_('Founders', data.founderId, 'founder'); break;
-    case 'saveExecutiveOfficers': requireAdminOrEditor_(data.sessionToken); result = saveData_('ExecutiveOfficers', data.executiveOfficers); break;
+    case 'createFounder': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return createMappedItem_('Founders', data.founder, 'founder'); }); break;
+    case 'updateFounder': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updateMappedItem_('Founders', data.founder, 'founder'); }); break;
+    case 'deleteFounder': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deleteMappedItem_('Founders', data.founderId, 'founder'); }); break;
+    case 'saveExecutiveOfficers': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return saveData_('ExecutiveOfficers', data.executiveOfficers); }); break;
     case 'loadExecutiveOfficers': result = loadData_('ExecutiveOfficers'); break;
     case 'listExecutiveOfficers': result = loadData_('ExecutiveOfficers'); break;
     case 'getExecutiveOfficer': result = getMappedItem_('ExecutiveOfficers', data.executiveOfficerId, 'executiveOfficer'); break;
-    case 'createExecutiveOfficer': requireAdminOrEditor_(data.sessionToken); result = createMappedItem_('ExecutiveOfficers', data.executiveOfficer, 'executiveOfficer'); break;
-    case 'updateExecutiveOfficer': requireAdminOrEditor_(data.sessionToken); result = updateMappedItem_('ExecutiveOfficers', data.executiveOfficer, 'executiveOfficer'); break;
-    case 'deleteExecutiveOfficer': requireAdminOrEditor_(data.sessionToken); result = deleteMappedItem_('ExecutiveOfficers', data.executiveOfficerId, 'executiveOfficer'); break;
-    case 'savePillars': requireAdminOrEditor_(data.sessionToken); result = saveData_('Pillars', data.pillars); break;
+    case 'createExecutiveOfficer': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return createMappedItem_('ExecutiveOfficers', data.executiveOfficer, 'executiveOfficer'); }); break;
+    case 'updateExecutiveOfficer': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updateMappedItem_('ExecutiveOfficers', data.executiveOfficer, 'executiveOfficer'); }); break;
+    case 'deleteExecutiveOfficer': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deleteMappedItem_('ExecutiveOfficers', data.executiveOfficerId, 'executiveOfficer'); }); break;
+    case 'savePillars': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return saveData_('Pillars', data.pillars); }); break;
     case 'loadPillars': result = loadData_('Pillars'); break;
     case 'listPillars': result = loadData_('Pillars'); break;
     case 'getPillar': result = getMappedItem_('Pillars', data.pillarId, 'pillar'); break;
-    case 'createPillar': requireAdminOrEditor_(data.sessionToken); result = createMappedItem_('Pillars', data.pillar, 'pillar'); break;
-    case 'updatePillar': requireAdminOrEditor_(data.sessionToken); result = updateMappedItem_('Pillars', data.pillar, 'pillar'); break;
-    case 'deletePillar': requireAdminOrEditor_(data.sessionToken); result = deleteMappedItem_('Pillars', data.pillarId, 'pillar'); break;
-    case 'savePartners': requireAdminOrEditor_(data.sessionToken); result = savePartners_(data.partners); break;
+    case 'createPillar': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return createMappedItem_('Pillars', data.pillar, 'pillar'); }); break;
+    case 'updatePillar': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updateMappedItem_('Pillars', data.pillar, 'pillar'); }); break;
+    case 'deletePillar': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deleteMappedItem_('Pillars', data.pillarId, 'pillar'); }); break;
+    case 'savePartners': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return savePartners_(data.partners); }); break;
     case 'loadPartners': result = loadPartners_(); break;
     case 'listPartnerCategories': result = loadPartners_(); break;
     case 'getPartnerCategory': result = getPartnerCategory_(data.categoryId); break;
-    case 'createPartnerCategory': requireAdminOrEditor_(data.sessionToken); result = createPartnerCategory_(data.category); break;
-    case 'updatePartnerCategory': requireAdminOrEditor_(data.sessionToken); result = updatePartnerCategory_(data.category); break;
-    case 'deletePartnerCategory': requireAdminOrEditor_(data.sessionToken); result = deletePartnerCategory_(data.categoryId); break;
+    case 'createPartnerCategory': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return createPartnerCategory_(data.category); }); break;
+    case 'updatePartnerCategory': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updatePartnerCategory_(data.category); }); break;
+    case 'deletePartnerCategory': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deletePartnerCategory_(data.categoryId); }); break;
     case 'getPartner': result = getPartner_(data.partnerId, data.categoryId); break;
-    case 'createPartner': requireAdminOrEditor_(data.sessionToken); result = createPartner_(data.categoryId, data.partner); break;
-    case 'updatePartner': requireAdminOrEditor_(data.sessionToken); result = updatePartner_(data.categoryId, data.partner); break;
-    case 'deletePartner': requireAdminOrEditor_(data.sessionToken); result = deletePartner_(data.categoryId, data.partnerId); break;
-    case 'saveChapter': result = saveChapter_(data); break;
+    case 'createPartner': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return createPartner_(data.categoryId, data.partner); }); break;
+    case 'updatePartner': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return updatePartner_(data.categoryId, data.partner); }); break;
+    case 'deletePartner': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deletePartner_(data.categoryId, data.partnerId); }); break;
+    case 'saveChapter': result = withMainScriptLock_(function() { return saveChapter_(data); }); break;
     case 'loadChapter': result = loadChapter_(data.chapterId); break;
     case 'listChapters': result = listChapters_(); break;
-    case 'deleteChapter': requireAdminOrEditor_(data.sessionToken); result = deleteChapter_(data.chapterId); break;
-    case 'migrateLegacyContent': requireAdminOnly_(data.sessionToken); result = migrateLegacyContentToColumnMappings_(); break;
-    case 'initializeMainContentSystem': result = initializeMainContentSystem_(); break;
+    case 'deleteChapter': requireAdminOrEditor_(data.sessionToken); result = withMainScriptLock_(function() { return deleteChapter_(data.chapterId); }); break;
+    case 'migrateLegacyContent': requireAdminOnly_(data.sessionToken); result = withMainScriptLock_(function() { return migrateLegacyContentToColumnMappings_(); }); break;
+    case 'initializeMainContentSystem': result = withMainScriptLock_(function() { return initializeMainContentSystem_(); }); break;
     default: throw new Error('Unknown action: ' + action);
   }
   return dyesabelCreateResponse_(true, null, result);
@@ -253,6 +266,52 @@ function processAndUploadImages_(item) {
     }
   }
   return item;
+}
+
+function getDonationContent_() {
+  var result = proxyDonations_({ action: 'getPublicDonationData' });
+  if (!result.success) throw new Error(result.error || 'Unable to load donation content.');
+  return { donationContent: result.data || {} };
+}
+
+function saveDonationContentProxy_(data) {
+  var payload = {
+    action: 'saveDonationContent',
+    adminKey: dyesabelRequireScriptProperty_('DONATIONS_ADMIN_API_KEY'),
+    content: data.content || {}
+  };
+  var result = proxyDonations_(payload);
+  if (!result.success) throw new Error(result.error || 'Unable to save donation content.');
+  return { message: result.message || 'Donation content saved successfully.', donationContent: result.data || {} };
+}
+
+function uploadDonationQrProxy_(data) {
+  if (!data.fileData || !data.fileName || !data.fileType) {
+    throw new Error('Missing fileData, fileName, or fileType.');
+  }
+  var payload = {
+    action: 'uploadDonationQr',
+    adminKey: dyesabelRequireScriptProperty_('DONATIONS_ADMIN_API_KEY'),
+    fileData: data.fileData,
+    fileName: data.fileName,
+    fileType: data.fileType
+  };
+  var result = proxyDonations_(payload);
+  if (!result.success) throw new Error(result.error || 'Unable to upload donation QR.');
+  return {
+    fileId: result.fileId || '',
+    fileUrl: result.fileUrl || '',
+    thumbnailUrl: result.thumbnailUrl || result.fileUrl || ''
+  };
+}
+
+function migrateDonationStorageToMappedSheetsProxy_() {
+  var result = proxyDonations_({
+    action: 'migrateDonationStorageToMappedSheets',
+    adminKey: dyesabelRequireScriptProperty_('DONATIONS_ADMIN_API_KEY')
+  });
+  if (!result.success) throw new Error(result.error || 'Unable to migrate donation storage.');
+  return result;
 }
 
 function saveData_(sheetKey, contentData) {

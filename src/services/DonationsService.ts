@@ -7,6 +7,7 @@ export interface DonationMethod {
   accountName: string;
   accountNumber: string;
   qrImageUrl: string;
+  qrImageFileId?: string;
   color?: string;
   isEnabled?: boolean;
   sortOrder?: number;
@@ -52,6 +53,22 @@ interface DonationsApiResponse<T = unknown> {
   data?: T;
 }
 
+interface DonationContentResponse {
+  donationContent?: Partial<DonationContent>;
+}
+
+interface DonationQrUploadResponse {
+  fileId?: string;
+  fileUrl?: string;
+  thumbnailUrl?: string;
+}
+
+interface DonationQrDownloadResponse {
+  fileName?: string;
+  fileType?: string;
+  fileData?: string;
+}
+
 const emptyContent: DonationContent = {
   localMethods: [],
   bankDetails: {
@@ -74,6 +91,7 @@ const normalizeMethod = (method: Partial<DonationMethod>, index: number): Donati
   accountName: String(method.accountName || ''),
   accountNumber: String(method.accountNumber || ''),
   qrImageUrl: convertToCORSFreeLink(method.qrImageUrl || ''),
+  qrImageFileId: String(method.qrImageFileId || ''),
   color: method.color || 'bg-primary-blue',
   isEnabled: method.isEnabled !== false,
   sortOrder: Number.isFinite(method.sortOrder) ? Number(method.sortOrder) : index
@@ -125,6 +143,21 @@ const normalizeContent = (content: Partial<DonationContent> | undefined): Donati
   };
 };
 
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result !== 'string') {
+        reject(new Error('File processing failed.'));
+        return;
+      }
+      resolve(result.split(',')[1] || '');
+    };
+    reader.onerror = () => reject(new Error('File processing failed.'));
+  });
+
 export const DonationsService = {
   async getPublicDonationData(): Promise<DonationsApiResponse<DonationContent>> {
     const result = await sendApiRequest<DonationContent>('donations', { action: 'getPublicDonationData' });
@@ -139,6 +172,111 @@ export const DonationsService = {
     return {
       success: true,
       data: normalizeContent(result.data)
+    };
+  },
+
+  async getEditableDonationContent(sessionToken: string): Promise<DonationsApiResponse<DonationContent>> {
+    const result = await sendApiRequest<DonationContentResponse>('main', {
+      action: 'getDonationContent',
+      sessionToken
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Unable to load donation content.'
+      };
+    }
+
+    return {
+      success: true,
+      data: normalizeContent(result.donationContent)
+    };
+  },
+
+  async saveDonationContent(
+    content: DonationContent,
+    sessionToken: string
+  ): Promise<DonationsApiResponse<DonationContent>> {
+    const result = await sendApiRequest<DonationContentResponse>('main', {
+      action: 'saveDonationContent',
+      sessionToken,
+      content
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Unable to save donation content.'
+      };
+    }
+
+    return {
+      success: true,
+      message: result.message,
+      data: normalizeContent(result.donationContent)
+    };
+  },
+
+  async uploadDonationQr(
+    file: File,
+    sessionToken: string
+  ): Promise<DonationsApiResponse<{ fileId: string; fileUrl: string; thumbnailUrl: string }>> {
+    if (file.size > 5 * 1024 * 1024) {
+      return { success: false, error: 'File too large. Maximum size is 5MB.' };
+    }
+
+    const base64 = await fileToBase64(file);
+    const result = await sendApiRequest<DonationQrUploadResponse>('main', {
+      action: 'uploadDonationQr',
+      sessionToken,
+      fileName: file.name,
+      fileType: file.type,
+      fileData: base64
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Unable to upload QR image.'
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        fileId: String(result.fileId || ''),
+        fileUrl: String(result.fileUrl || ''),
+        thumbnailUrl: String(result.thumbnailUrl || result.fileUrl || '')
+      }
+    };
+  },
+
+  async downloadDonationQr(fileId: string): Promise<DonationsApiResponse<{ fileName: string; fileType: string; fileData: string }>> {
+    const normalizedFileId = String(fileId || '').trim();
+    if (!normalizedFileId) {
+      return { success: false, error: 'QR file is missing.' };
+    }
+
+    const result = await sendApiRequest<DonationQrDownloadResponse>('donations', {
+      action: 'downloadDonationQr',
+      fileId: normalizedFileId
+    });
+
+    if (!result.success) {
+      return {
+        success: false,
+        error: result.error || 'Unable to download QR image.'
+      };
+    }
+
+    return {
+      success: true,
+      data: {
+        fileName: String(result.fileName || 'donation-qr.png'),
+        fileType: String(result.fileType || 'image/png'),
+        fileData: String(result.fileData || '')
+      }
     };
   },
 

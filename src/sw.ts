@@ -9,6 +9,13 @@ import { CacheFirst, NetworkFirst, NetworkOnly, StaleWhileRevalidate } from 'wor
 import { ExpirationPlugin } from 'workbox-expiration';
 
 declare let self: ServiceWorkerGlobalScope;
+declare global {
+  interface ServiceWorkerGlobalScope {
+    __WB_DISABLE_DEV_LOGS?: boolean;
+  }
+}
+
+self.__WB_DISABLE_DEV_LOGS = true;
 
 // Activate new service workers immediately
 self.skipWaiting();

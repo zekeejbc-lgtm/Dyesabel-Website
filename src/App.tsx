@@ -16,7 +16,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDialogProvider } from './contexts/AppDialogContext';
 import { AppView, patchPersistedAppState, readPersistedAppState } from './utils/appState';
 import { Chapter, ExecutiveOfficer, Pillar, User } from './types';
-import { DataService, getImageDebugInfo } from './services/DriveService';
+import { DataService } from './services/DriveService';
 import { getSessionUser } from './utils/session';
 import { BookOpen, Heart, Leaf, Palette, Scale } from 'lucide-react';
 import { APP_CONFIG } from './config';
@@ -254,10 +254,6 @@ function AppContent() {
   useEffect(() => {
     const loadAllData = async () => {
       setIsLoading(true);
-      console.info('[App] Starting homepage data load', {
-        mainApiUrl: APP_CONFIG.mainApiUrl || '(missing)',
-        donationsApiUrl: APP_CONFIG.donationsApiUrl || '(missing)'
-      });
 
       try {
         const [pillarsRes, chaptersRes, partnersRes, foundersRes, executiveOfficersRes] = await Promise.all([
@@ -268,49 +264,24 @@ function AppContent() {
           DataService.loadExecutiveOfficers()
         ]);
 
-        console.info('[App] Homepage data responses', {
-          pillarsRes,
-          chaptersRes,
-          partnersRes,
-          foundersRes,
-          executiveOfficersRes
-        });
-
         if (pillarsRes.success && Array.isArray(pillarsRes.pillars)) {
           setPillars(pillarsRes.pillars);
-        } else {
-          console.warn('[App] Pillars data missing or empty', pillarsRes);
         }
 
         if (chaptersRes.success && Array.isArray(chaptersRes.chapters)) {
           setChapters(chaptersRes.chapters);
-          console.info('[App] Chapters image diagnostics', chaptersRes.chapters.map((chapter: any) => ({
-            id: chapter.id,
-            name: chapter.name,
-            heroImage: getImageDebugInfo(chapter.image || chapter.imageUrl),
-            logoImage: getImageDebugInfo(chapter.logo),
-            headImage: getImageDebugInfo(chapter.headImageUrl)
-          })));
-        } else {
-          console.warn('[App] Chapters data missing or empty', chaptersRes);
         }
 
         if (partnersRes.success && partnersRes.partners) {
           setPartners(partnersRes.partners);
-        } else {
-          console.warn('[App] Partners data missing or empty', partnersRes);
         }
 
         if (foundersRes.success && foundersRes.founders) {
           setFounders(foundersRes.founders);
-        } else {
-          console.warn('[App] Founders data missing or empty', foundersRes);
         }
 
         if (executiveOfficersRes.success && executiveOfficersRes.executiveOfficers) {
           setExecutiveOfficers(executiveOfficersRes.executiveOfficers);
-        } else {
-          console.warn('[App] Executive officers data missing or empty', executiveOfficersRes);
         }
       } catch (error) {
         console.error('[App] Unhandled homepage data load error', error);

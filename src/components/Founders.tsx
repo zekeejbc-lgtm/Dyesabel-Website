@@ -30,16 +30,16 @@ export const Founders: React.FC<FoundersProps> = ({
     `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0D8ABC&color=fff&size=256&bold=true`;
 
   return (
-    <section className="py-24 relative">
-      <div className="container mx-auto px-4">
-        <div className="flex flex-col items-center gap-6 mb-16">
-          <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-center text-ocean-deep dark:text-white drop-shadow-md reveal">
+    <section className="relative py-16 sm:py-20 lg:py-24">
+      <div className="container mx-auto px-4 sm:px-5">
+        <div className="mb-10 flex flex-col items-center gap-4 sm:mb-14 sm:gap-6 lg:mb-16">
+          <h2 className="reveal text-center text-[clamp(2.1rem,8vw,4rem)] font-black tracking-[-0.04em] text-ocean-deep drop-shadow-md dark:text-white">
             Meet the Founders
           </h2>
           {onEdit && user?.role === 'admin' && (
             <button
               onClick={onEdit}
-              className="flex items-center gap-2 bg-primary-blue hover:bg-primary-cyan text-white font-medium px-6 py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl"
+              className="flex items-center gap-2 rounded-full bg-primary-blue px-5 py-2.5 text-sm font-medium text-white shadow-lg transition-all duration-300 hover:bg-primary-cyan hover:shadow-xl sm:px-6 sm:py-3 sm:text-base"
             >
               <Edit size={18} />
               <span>Edit Founders</span>
@@ -47,12 +47,12 @@ export const Founders: React.FC<FoundersProps> = ({
           )}
         </div>
 
-        <div className="flex flex-wrap justify-center gap-8 md:gap-10 max-w-7xl mx-auto">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:gap-6 md:flex-row md:flex-wrap md:justify-center md:gap-8 lg:gap-10">
           {isLoading ? (
             [1, 2].map((_, i) => (
-              <div key={i} className="glass-card flex flex-col md:flex-row items-center md:items-start gap-6 p-8 rounded-3xl w-full md:max-w-xl flex-1 border border-white/10">
-                <SkeletonCircle className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0" />
-                <div className="flex-1 w-full flex flex-col items-center md:items-start gap-3">
+              <div key={i} className="glass-card flex w-full flex-1 flex-col items-center gap-5 rounded-[2rem] border border-white/10 p-5 sm:p-6 md:max-w-xl md:flex-row md:items-start lg:p-8">
+                <SkeletonCircle className="h-28 w-28 flex-shrink-0 sm:h-32 sm:w-32 md:h-40 md:w-40" />
+                <div className="flex w-full flex-1 flex-col items-center gap-3 md:items-start">
                   <SkeletonBlock className="h-8 w-3/4" />
                   <SkeletonBlock className="h-4 w-1/2" />
                   <SkeletonBlock className="mt-2 h-20 w-full" />
@@ -63,9 +63,9 @@ export const Founders: React.FC<FoundersProps> = ({
             founders.map((founder, index) => (
               <div
                 key={founder.id}
-                className={`glass-card flex flex-col md:flex-row items-center md:items-start gap-6 p-8 rounded-3xl hover:bg-white/10 transition-all duration-300 hover:shadow-[0_0_30px_rgba(37,99,235,0.2)] reveal reveal-delay-${(index + 1) * 200} w-full md:max-w-xl flex-1 min-w-[300px]`}
+                className={`glass-card reveal flex w-full flex-col items-center gap-5 rounded-[2rem] p-5 transition-all duration-300 hover:bg-white/10 hover:shadow-[0_0_30px_rgba(37,99,235,0.2)] sm:p-6 md:max-w-xl md:flex-1 md:flex-row md:items-start lg:p-8 reveal-delay-${(index + 1) * 200}`}
               >
-                <div className="w-32 h-32 md:w-40 md:h-40 flex-shrink-0 relative group mx-auto md:mx-0">
+                <div className="relative mx-auto h-28 w-28 flex-shrink-0 group sm:h-32 sm:w-32 md:mx-0 md:h-40 md:w-40">
                   <div className="absolute inset-0 bg-gradient-to-tr from-primary-cyan to-primary-blue rounded-full blur-md opacity-50 group-hover:opacity-80 transition-opacity duration-500 animate-pulse-slow" />
                   <img
                     src={convertToCORSFreeLink(founder.imageUrl) || getAvatarUrl(founder.name)}
@@ -84,12 +84,12 @@ export const Founders: React.FC<FoundersProps> = ({
                   />
                 </div>
 
-                <div className="text-center md:text-left flex-1">
-                  <h3 className="text-2xl font-bold text-ocean-deep dark:text-white mb-1">{founder.name}</h3>
-                  <p className="text-transparent bg-clip-text bg-gradient-to-r from-primary-blue to-primary-cyan font-bold text-xs md:text-sm uppercase tracking-widest mb-3">
+                <div className="flex-1 text-center md:text-left">
+                  <h3 className="mb-1 text-[clamp(1.55rem,5vw,2rem)] font-bold text-ocean-deep dark:text-white">{founder.name}</h3>
+                  <p className="mb-3 bg-gradient-to-r from-primary-blue to-primary-cyan bg-clip-text text-[11px] font-bold uppercase tracking-[0.22em] text-transparent sm:text-xs md:text-sm">
                     {founder.role}
                   </p>
-                  <p className="text-ocean-deep/80 dark:text-gray-300 leading-relaxed text-sm font-medium">
+                  <p className="text-sm font-medium leading-relaxed text-ocean-deep/80 dark:text-gray-300 sm:text-[0.95rem]">
                     {founder.bio}
                   </p>
                 </div>
@@ -98,35 +98,35 @@ export const Founders: React.FC<FoundersProps> = ({
           )}
         </div>
 
-        <div className="mt-12 max-w-7xl mx-auto">
-          <div className="glass-card rounded-3xl border border-white/10 overflow-hidden">
+        <div className="mx-auto mt-8 max-w-7xl sm:mt-10 md:mt-12">
+          <div className="glass-card overflow-hidden rounded-[2rem] border border-white/10">
             <button
               type="button"
               onClick={() => setIsExecutivesOpen((prev) => !prev)}
-              className="w-full flex items-center justify-between gap-4 px-6 py-5 md:px-8 text-left hover:bg-white/10 transition-colors duration-300"
+              className="flex w-full flex-col items-start gap-3 px-4 py-4 text-left transition-colors duration-300 hover:bg-white/10 sm:px-6 sm:py-5 md:flex-row md:items-center md:justify-between md:px-8"
             >
               <div>
-                <h3 className="text-2xl md:text-3xl font-black tracking-tight text-ocean-deep dark:text-white">
+                <h3 className="text-[clamp(1.6rem,6vw,2.25rem)] font-black tracking-tight text-ocean-deep dark:text-white">
                   Meet the Executives
                 </h3>
-                <p className="text-sm md:text-base text-ocean-deep/70 dark:text-gray-300 mt-1">
+                <p className="mt-1 text-sm text-ocean-deep/70 dark:text-gray-300 sm:text-base">
                   National Executive Officers
                 </p>
               </div>
-              <span className="flex items-center gap-2 text-sm font-semibold text-primary-blue dark:text-primary-cyan whitespace-nowrap">
+              <span className="flex w-full items-center justify-between gap-2 text-sm font-semibold text-primary-blue dark:text-primary-cyan md:w-auto md:justify-start">
                 {isExecutivesOpen ? 'Collapse' : 'Show Executives'}
                 {isExecutivesOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </span>
             </button>
 
             {isExecutivesOpen && (
-              <div className="px-6 pb-6 md:px-8 md:pb-8">
+              <div className="px-4 pb-4 sm:px-6 sm:pb-6 md:px-8 md:pb-8">
                 {visibleExecutiveOfficers.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-5">
+                  <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 md:gap-5 xl:grid-cols-3">
                     {visibleExecutiveOfficers.map((executive, index) => (
                       <article
                         key={executive.id}
-                        className={`rounded-2xl border border-white/15 bg-white/10 dark:bg-white/5 p-4 md:p-5 flex items-center gap-4 hover:bg-white/15 transition-all duration-300 reveal active reveal-delay-${((index % 6) + 1) * 100}`}
+                        className={`reveal active flex items-center gap-3 rounded-[1.6rem] border border-white/15 bg-white/10 p-4 transition-all duration-300 hover:bg-white/15 dark:bg-white/5 max-[420px]:flex-col max-[420px]:items-center max-[420px]:text-center sm:gap-4 md:p-5 reveal-delay-${((index % 6) + 1) * 100}`}
                       >
                         <img
                           src={convertToCORSFreeLink(executive.imageUrl) || getAvatarUrl(executive.name)}
@@ -141,13 +141,13 @@ export const Founders: React.FC<FoundersProps> = ({
                             });
                             event.currentTarget.src = getAvatarUrl(executive.name);
                           }}
-                          className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover border-2 border-white/30 shadow-lg flex-shrink-0"
+                          className="h-16 w-16 flex-shrink-0 rounded-full border-2 border-white/30 object-cover shadow-lg sm:h-18 sm:w-18 md:h-20 md:w-20"
                         />
-                        <div className="min-w-0">
-                          <p className="text-[11px] md:text-xs font-bold uppercase tracking-[0.18em] text-primary-blue dark:text-primary-cyan mb-1">
+                        <div className="min-w-0 flex-1">
+                          <p className="mb-1 text-[clamp(0.7rem,2.7vw,0.8rem)] font-bold uppercase tracking-[0.16em] text-primary-blue dark:text-primary-cyan sm:tracking-[0.18em]">
                             {executive.role}
                           </p>
-                          <h4 className="text-base md:text-lg font-bold text-ocean-deep dark:text-white leading-tight break-words">
+                          <h4 className="text-[clamp(1rem,4.2vw,1.125rem)] font-bold leading-tight text-ocean-deep break-words dark:text-white">
                             {executive.name}
                           </h4>
                         </div>
@@ -155,7 +155,7 @@ export const Founders: React.FC<FoundersProps> = ({
                     ))}
                   </div>
                 ) : (
-                  <div className="py-8 text-center text-ocean-deep/60 dark:text-gray-300">
+                  <div className="py-8 text-center text-sm text-ocean-deep/60 dark:text-gray-300 sm:text-base">
                     No executive officers added yet.
                   </div>
                 )}
@@ -165,7 +165,7 @@ export const Founders: React.FC<FoundersProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowAllExecutives((prev) => !prev)}
-                      className="inline-flex items-center gap-2 rounded-full bg-primary-blue hover:bg-primary-cyan text-white font-semibold px-5 py-2.5 transition-all duration-300 shadow-lg hover:shadow-xl"
+                      className="inline-flex items-center gap-2 rounded-full bg-primary-blue px-5 py-2.5 text-sm font-semibold text-white shadow-lg transition-all duration-300 hover:bg-primary-cyan hover:shadow-xl sm:text-base"
                     >
                       {showAllExecutives ? 'Show Less' : 'Show More'}
                       {showAllExecutives ? <ChevronUp size={18} /> : <ChevronDown size={18} />}

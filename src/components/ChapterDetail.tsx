@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Globe, ExternalLink, Edit, Loader, X } from 'lucide-react';
 import { Chapter } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { DataService } from '../services/DriveService';
-import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
+import { convertToCORSFreeLink } from '../services/DriveService';
 
 // Add a simple pop-in animation for the modal
 const modalStyles = `
@@ -31,9 +31,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
   );
   const [chapter, setChapter] = useState<Chapter>(initialChapter);
   const [loading, setLoading] = useState(false);
-  const heroImageDebug = useMemo(() => getImageDebugInfo(chapter.image || chapter.imageUrl), [chapter.image, chapter.imageUrl]);
-  const logoImageDebug = useMemo(() => getImageDebugInfo(chapter.logo), [chapter.logo]);
-  const headImageDebug = useMemo(() => getImageDebugInfo(chapter.headImageUrl), [chapter.headImageUrl]);
   
   // State for the selected activity (Modal)
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
@@ -47,21 +44,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       try {
         const result = await DataService.loadChapter(initialChapter.id);
         if (result.success && result.chapter) {
-          console.log('[ChapterDetail] Loaded chapter from backend', {
-            chapterId: initialChapter.id,
-            chapter: result.chapter,
-            heroImage: getImageDebugInfo(result.chapter.image || result.chapter.imageUrl),
-            logoImage: getImageDebugInfo(result.chapter.logo),
-            headImage: getImageDebugInfo(result.chapter.headImageUrl),
-            activityImages: Array.isArray(result.chapter.activities)
-              ? result.chapter.activities.map((activity: any) => ({
-                  id: activity.id,
-                  title: activity.title,
-                  image: getImageDebugInfo(activity.imageUrl)
-                }))
-              : []
-          });
-          
           // Safeguard: Keep initial logo if backend returns empty
           const safeLogo = (result.chapter.logo && result.chapter.logo !== "") 
             ? result.chapter.logo 
@@ -90,21 +72,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       document.body.style.overflow = 'unset';
     };
   }, [selectedActivity]);
-
-  useEffect(() => {
-    console.log('[ChapterDetail] Render image diagnostics', {
-      chapterId: chapter.id,
-      chapterName: chapter.name,
-      heroImage: heroImageDebug,
-      logoImage: logoImageDebug,
-      headImage: headImageDebug,
-      activityImages: (chapter.activities || []).map((activity: any) => ({
-        id: activity.id,
-        title: activity.title,
-        image: getImageDebugInfo(activity.imageUrl)
-      }))
-    });
-  }, [chapter, heroImageDebug, logoImageDebug, headImageDebug]);
 
   return (
     <div className="min-h-screen pt-20 pb-10 relative">
@@ -150,7 +117,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
               console.error('[ChapterDetail] Hero image failed to load', {
                 chapterId: chapter.id,
                 chapterName: chapter.name,
-                image: heroImageDebug,
                 attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
               });
               event.currentTarget.src = 'https://picsum.photos/1200/600';
@@ -171,7 +137,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                 console.error('[ChapterDetail] Logo image failed to load', {
                   chapterId: chapter.id,
                   chapterName: chapter.name,
-                  image: logoImageDebug,
                   attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
                 });
                 event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chapter.name)}`;
@@ -237,7 +202,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                                   chapterName: chapter.name,
                                   activityId: activity.id,
                                   activityTitle: activity.title,
-                                  image: getImageDebugInfo(activity.imageUrl),
                                   attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
                                 });
                               }}
@@ -358,7 +322,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                       console.error('[ChapterDetail] Head image failed to load', {
                         chapterId: chapter.id,
                         chapterName: chapter.name,
-                        image: headImageDebug,
                         attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
                       });
                       event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chapter.headName || 'Head')}`;
@@ -455,7 +418,6 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                       chapterName: chapter.name,
                       activityId: selectedActivity.id,
                       activityTitle: selectedActivity.title,
-                      image: getImageDebugInfo(selectedActivity.imageUrl),
                       attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
                     });
                   }}

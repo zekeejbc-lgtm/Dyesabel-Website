@@ -93,12 +93,6 @@ export const sendApiRequest = async <T>(
       }
       const data = await response.json();
       if (!data || data.success === false) {
-        console.warn('[apiClient] API returned non-success payload', {
-          target,
-          url,
-          payload,
-          response: data
-        });
         if (isAuthInvalidError(data?.error)) {
           dispatchAuthInvalidEvent(data.error);
         }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Globe, Megaphone, Pencil, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
-import { DriveService, DataService, convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
+import { DriveService, DataService, convertToCORSFreeLink } from '../services/DriveService';
 import { Chapter } from '../types';
 import { getSessionToken } from '../utils/session';
 
@@ -72,20 +72,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       try {
         const result = await DataService.loadChapter(chapterId);
         if (result.success && result.chapter) {
-          console.log('[ChapterEditor] Loaded chapter for editing', {
-            chapterId,
-            chapter: result.chapter,
-            heroImage: getImageDebugInfo(result.chapter.image || result.chapter.imageUrl),
-            logoImage: getImageDebugInfo(result.chapter.logo),
-            headImage: getImageDebugInfo(result.chapter.headImageUrl),
-            activityImages: Array.isArray(result.chapter.activities)
-              ? result.chapter.activities.map((activity: any) => ({
-                  id: activity.id,
-                  title: activity.title,
-                  image: getImageDebugInfo(activity.imageUrl)
-                }))
-              : []
-          });
           const newData = {
             ...chapterData, // Keep defaults for missing fields
             ...result.chapter, // Overwrite with backend data
@@ -157,21 +143,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         activities: chapterData.activities
       };
 
-      console.log('[ChapterEditor] Saving chapter payload', {
-        chapterId,
-        payload,
-        heroImage: getImageDebugInfo(payload.image),
-        logoImage: getImageDebugInfo(payload.logo),
-        headImage: getImageDebugInfo(payload.headImageUrl),
-        activityImages: Array.isArray(payload.activities)
-          ? payload.activities.map((activity: any) => ({
-              id: activity.id,
-              title: activity.title,
-              image: getImageDebugInfo(activity.imageUrl)
-            }))
-          : []
-      });
-
       const result = await DataService.saveChapter(chapterId, payload, sessionToken);
 
       if (result.success) {
@@ -199,12 +170,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       const result = await DriveService.uploadImage(file, sessionToken);
       
       if (result.success && result.fileUrl) {
-        console.log('[ChapterEditor] Upload succeeded', {
-          field,
-          fileName: file.name,
-          rawUploadedUrl: result.fileUrl,
-          image: getImageDebugInfo(result.fileUrl)
-        });
         setChapterData(prev => ({ ...prev, [field]: result.fileUrl }));
       } else {
         await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
@@ -229,12 +194,6 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       }
       const result = await DriveService.uploadImage(file, sessionToken);
       if (result.success && result.fileUrl) {
-        console.log('[ChapterEditor] Activity image upload succeeded', {
-          index,
-          fileName: file.name,
-          rawUploadedUrl: result.fileUrl,
-          image: getImageDebugInfo(result.fileUrl)
-        });
         handleActivityChange(index, 'imageUrl', result.fileUrl);
       }
     } catch (error) {

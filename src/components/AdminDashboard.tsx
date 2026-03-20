@@ -1,13 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { ArrowLeft, BookOpen, Users as UsersIcon, Image as ImageIcon, FileText, Building2, Loader2, Edit, Globe } from 'lucide-react';
+import { ArrowLeft, BookOpen, Users as UsersIcon, FileText, Building2, Loader2, Globe, Heart, UserCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { PillarsEditor } from './PillarsEditor';
 import { PartnersEditor } from './PartnersEditor';
 import { FoundersEditor } from './FoundersEditor';
 import { DonationPageEditor } from './DonationPageEditor';
-import { LogoEditor } from './LogoEditor';
 import { ChaptersManagement } from './ChaptersManagement';
+import { ChapterEditor } from './ChapterEditor';
+import { MyProfileModal } from './MyProfileModal';
 import { DataService } from '../services/DriveService';
+import { DonationsService } from '../services/DonationsService';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { ExecutiveOfficer, Founder } from '../types';
 import { getSessionToken } from '../utils/session';
@@ -36,30 +38,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
   const { showAlert } = useAppDialog();
   const isAdmin = user?.role === 'admin';
   const isGlobalEditor = user?.role === 'editor' && !user?.chapterId;
+  const isScopedUser = !!user?.chapterId;
   const canEdit = isAdmin || isGlobalEditor;
+  const canAccessDashboard = canEdit || isScopedUser;
   const canEditPillars = canEdit;
   const canEditPartners = canEdit;
-  const canEditBranding = canEdit;
   const canEditFounders = isAdmin;
   const canEditDonations = isAdmin;
   const canManageChapters = isAdmin;
+  const canOpenOwnChapter = !!user?.chapterId;
+  const isScopedDashboard = canAccessDashboard && !canEdit;
 
   const [activeEditor, setActiveEditor] = useState<string | null>(null);
   const [pillars, setPillars] = useState<any[]>([]);
   const [partners, setPartners] = useState(initialPartnerCategories);
   const [founders, setFounders] = useState<Founder[]>([]);
   const [executiveOfficers, setExecutiveOfficers] = useState<ExecutiveOfficer[]>([]);
+  const [chapterCount, setChapterCount] = useState(0);
+  const [recentDonationsCount, setRecentDonationsCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [pillarsRes, partnersRes, foundersRes, executiveOfficersRes] = await Promise.all([
+        const [pillarsRes, partnersRes, foundersRes, executiveOfficersRes, chaptersRes, donationsRes] = await Promise.all([
           DataService.loadPillars(),
           DataService.loadPartners(),
           DataService.loadFounders(),
-          DataService.loadExecutiveOfficers()
+          DataService.loadExecutiveOfficers(),
+          DataService.listChapters(),
+          DonationsService.getPublicDonationData()
         ]);
 
         if (pillarsRes.success && pillarsRes.pillars?.length > 0) {
@@ -76,6 +86,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
 
         if (executiveOfficersRes.success && executiveOfficersRes.executiveOfficers) {
           setExecutiveOfficers(executiveOfficersRes.executiveOfficers);
+        }
+
+        if (chaptersRes.success && chaptersRes.chapters) {
+          setChapterCount(chaptersRes.chapters.length);
+        }
+
+        if (donationsRes.success && donationsRes.data?.recentDonations) {
+          setRecentDonationsCount(donationsRes.data.recentDonations.length);
         }
       } finally {
         setIsLoading(false);
@@ -121,7 +139,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
     }
   };
 
-  if (!canEdit) {
+  if (!canAccessDashboard) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-ocean-light to-ocean-mint dark:from-ocean-deep dark:to-ocean-dark flex items-center justify-center p-4">
         <div className="text-center text-ocean-deep dark:text-white">
@@ -169,22 +187,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                   <p className="text-ocean-deep/60 dark:text-gray-400 mt-1">
                     Welcome back, {user?.username || user?.email || 'Admin'} • Role: {user?.role}
                   </p>
+                  {isScopedDashboard && (
+                    <p className="text-sm text-ocean-deep/50 dark:text-gray-500 mt-1">
+                      Personal dashboard for your account and assigned chapter
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {canEditBranding && (
-                <button
-                  onClick={() => setActiveEditor('logo')}
-                  className="flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors shadow-lg hover:shadow-amber-500/30"
-                >
-                  <Edit size={18} />
-                  Edit Logo
-                </button>
-              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          {!isScopedDashboard && (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
             {canEditPillars && (
               <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
                 <div className="flex items-center gap-3">
@@ -215,27 +230,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
               </div>
             )}
 
-            {canEditFounders && (
+            {canManageChapters && (
               <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 bg-purple-500/10 rounded-lg">
-                    <UsersIcon className="text-purple-500" size={24} />
+                  <div className="p-3 bg-teal-500/10 rounded-lg">
+                    <Globe className="text-teal-500" size={24} />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-ocean-deep dark:text-white">{founders.length}</p>
-                    <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Founders</p>
+                    <p className="text-2xl font-bold text-ocean-deep dark:text-white">{chapterCount}</p>
+                    <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Chapters</p>
                   </div>
                 </div>
               </div>
             )}
-          </div>
+
+            {canEditDonations && (
+              <div className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-orange-500/10 rounded-lg">
+                    <Heart className="text-orange-500" size={24} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-ocean-deep dark:text-white">{recentDonationsCount}</p>
+                    <p className="text-sm text-ocean-deep/60 dark:text-gray-400">Recent Donations</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            </div>
+          )}
 
           <div className="space-y-6">
             <h2 className="text-2xl font-bold text-ocean-deep dark:text-white mb-4">
-              Edit Content Sections
+              {isScopedDashboard ? 'Quick Access' : 'Edit Content Sections'}
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <button
+                onClick={() => setIsProfileOpen(true)}
+                className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-sky-500 dark:hover:border-sky-400 transition-all hover:shadow-xl text-left group"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="p-3 bg-sky-500/10 rounded-lg group-hover:bg-sky-500/20 transition-colors">
+                    <UserCircle2 className="text-sky-500" size={28} />
+                  </div>
+                  <span className="text-sm font-medium text-sky-500">Open</span>
+                </div>
+                <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                  My Profile
+                </h3>
+                <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                  Update your username, email address, and password
+                </p>
+                <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                  {user?.email || user?.username || 'Signed-in account'}
+                </div>
+              </button>
+
+              {canOpenOwnChapter && (
+                <button
+                  onClick={() => setActiveEditor('our-chapter')}
+                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-teal-500 dark:hover:border-teal-400 transition-all hover:shadow-xl text-left group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-teal-500/10 rounded-lg group-hover:bg-teal-500/20 transition-colors">
+                      <Globe className="text-teal-500" size={28} />
+                    </div>
+                    <span className="text-sm font-medium text-teal-500">
+                      {user?.role === 'member' ? 'Open' : 'Edit'}
+                    </span>
+                  </div>
+                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
+                    Our Chapter
+                  </h3>
+                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
+                    {user?.role === 'member'
+                      ? 'View your assigned chapter in a read-only chapter editor view'
+                      : 'Open your assigned chapter editor and manage your chapter content'}
+                  </p>
+                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
+                    Chapter ID: {user?.chapterId}
+                  </div>
+                </button>
+              )}
+
               {canEditPillars && (
                 <button
                   onClick={() => setActiveEditor('pillars')}
@@ -328,29 +406,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
                 </button>
               )}
 
-              {canEditBranding && (
-                <button
-                  onClick={() => setActiveEditor('logo')}
-                  className="bg-white dark:bg-[#051923] rounded-xl shadow-lg border border-white/10 p-6 hover:border-pink-500 dark:hover:border-pink-400 transition-all hover:shadow-xl text-left group"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="p-3 bg-pink-500/10 rounded-lg group-hover:bg-pink-500/20 transition-colors">
-                      <ImageIcon className="text-pink-500" size={28} />
-                    </div>
-                    <span className="text-sm font-medium text-pink-500">Edit</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2">
-                    Logo & Branding
-                  </h3>
-                  <p className="text-sm text-ocean-deep/60 dark:text-gray-400 mb-3">
-                    Upload logo and update organization name
-                  </p>
-                  <div className="text-xs text-ocean-deep/40 dark:text-gray-500">
-                    Stored in Google Drive
-                  </div>
-                </button>
-              )}
-
               {canManageChapters && (
                 <button
                   onClick={() => setActiveEditor('chapters')}
@@ -411,16 +466,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBack }) => {
         <DonationPageEditor onBack={() => setActiveEditor(null)} />
       )}
 
-      {activeEditor === 'logo' && canEditBranding && (
-        <LogoEditor
-          onClose={() => setActiveEditor(null)}
-          onLogoUpdate={() => {}}
-        />
-      )}
-
       {activeEditor === 'chapters' && canManageChapters && (
         <ChaptersManagement onBack={() => setActiveEditor(null)} />
       )}
+
+      {activeEditor === 'our-chapter' && canOpenOwnChapter && (
+        <ChapterEditor onBack={() => setActiveEditor(null)} />
+      )}
+
+      <MyProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+      />
     </>
   );
 };

@@ -50,6 +50,7 @@ export interface Chapter {
   // Newly added fields
   twitter?: string;
   instagram?: string;
+  websiteUrl?: string;
   
   // Leadership fields
   headName?: string;

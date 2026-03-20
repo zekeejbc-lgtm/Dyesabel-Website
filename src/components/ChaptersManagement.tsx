@@ -589,6 +589,18 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                             />
                           </div>
                         </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold text-primary-cyan uppercase tracking-wider">Website URL</label>
+                          <div className="relative">
+                            <Globe size={16} className="absolute left-4 top-3.5 text-white/40" />
+                            <input 
+                              value={chapterFormData.websiteUrl || ''} 
+                              onChange={e => setChapterFormData({...chapterFormData, websiteUrl: e.target.value})}
+                              className="w-full bg-black/20 border border-white/10 rounded-lg pl-10 pr-4 py-3 text-white focus:border-primary-cyan focus:outline-none"
+                              placeholder="https://example.org"
+                            />
+                          </div>
+                        </div>
                         
                         {/* Logo Upload Section */}
                         <div className="space-y-2">

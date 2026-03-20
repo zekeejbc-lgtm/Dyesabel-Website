@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Pillar, PillarActivity } from '../types';
-import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, Loader } from 'lucide-react';
+import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, Loader, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { uploadImageToDrive } from '../utils/driveUpload';
@@ -21,6 +21,8 @@ const PILLAR_ICONS = {
   'Culture and Arts': <Palette className="w-6 h-6" />
 };
 
+var ACTIVITY_INITIAL_VISIBLE_COUNT = 6;
+
 export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, onClose, activitiesOnly = false }) => {
   const { user } = useAuth();
   const { showAlert, showConfirm } = useAppDialog();
@@ -29,11 +31,30 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   const [selectedPillarIndex, setSelectedPillarIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
+  const [visibleActivityCount, setVisibleActivityCount] = useState<Record<string, number>>({});
 
   // Check permission
   if (!canEdit) {
     return null;
   }
+
+  const getActivityKey = (pillarIndex: number, activity: PillarActivity, activityIndex: number) =>
+    `${pillarIndex}:${activity.id || activityIndex}`;
+
+  const getVisibleCountForPillar = (pillarIndex: number, totalActivities: number) =>
+    Math.min(visibleActivityCount[pillarIndex] || ACTIVITY_INITIAL_VISIBLE_COUNT, totalActivities);
+
+  const isActivityExpanded = (pillarIndex: number, activity: PillarActivity, activityIndex: number) =>
+    expandedActivities[getActivityKey(pillarIndex, activity, activityIndex)] !== false;
+
+  const toggleActivityExpanded = (pillarIndex: number, activity: PillarActivity, activityIndex: number) => {
+    const key = getActivityKey(pillarIndex, activity, activityIndex);
+    setExpandedActivities((current) => ({
+      ...current,
+      [key]: current[key] === false
+    }));
+  };
 
   const updatePillar = (index: number, field: keyof Pillar, value: any) => {
     const updated = [...editedPillars];
@@ -60,6 +81,14 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     };
     updated[pillarIndex].activities = [...updated[pillarIndex].activities, newActivity];
     setEditedPillars(updated);
+    setExpandedActivities((current) => ({
+      ...current,
+      [getActivityKey(pillarIndex, newActivity, updated[pillarIndex].activities.length - 1)]: true
+    }));
+    setVisibleActivityCount((current) => ({
+      ...current,
+      [pillarIndex]: updated[pillarIndex].activities.length
+    }));
   };
 
   const removeActivity = async (pillarIndex: number, activityIndex: number) => {
@@ -118,13 +147,21 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   };
 
   const currentPillar = editedPillars[selectedPillarIndex];
+  const visibleActivities = currentPillar.activities.slice(0, getVisibleCountForPillar(selectedPillarIndex, currentPillar.activities.length));
+  const hasHiddenActivities = visibleActivities.length < currentPillar.activities.length;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto">
-      <div className="min-h-screen p-4 md:p-8">
-        <div className="max-w-7xl mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm md:p-8">
+      <button
+        type="button"
+        aria-label="Close pillars editor"
+        className="absolute inset-0"
+        onClick={onClose}
+      />
+
+      <div className="relative flex w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-4rem)] dark:bg-gray-900">
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Pillars</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -139,9 +176,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
             </button>
           </div>
 
-          <div className="flex flex-col lg:flex-row">
+          <div className="min-h-0 flex flex-1 flex-col lg:flex-row">
             {/* Sidebar - Pillar Selection */}
-            <div className="lg:w-64 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 p-4">
+            <div className="shrink-0 border-b border-gray-200 p-4 lg:w-64 lg:overflow-y-auto lg:border-b-0 lg:border-r dark:border-gray-700">
               <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase mb-3">
                 Select Pillar
               </h3>
@@ -168,18 +205,18 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto p-6">
               <div className="space-y-6">
                 {!activitiesOnly && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
                     Pillar Cover Image
                   </label>
-                  <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                  <div className="relative mx-auto aspect-[3/2] w-full max-w-3xl max-h-[360px] rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                     <img
                       src={currentPillar.imageUrl}
                       alt={currentPillar.title}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
                       <input
@@ -279,13 +316,38 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                   </div>
 
                   <div className="space-y-4">
-                    {currentPillar.activities.map((activity, activityIndex) => (
+                    {visibleActivities.map((activity, activityIndex) => {
+                      var activityKey = getActivityKey(selectedPillarIndex, activity, activityIndex);
+                      var isExpanded = isActivityExpanded(selectedPillarIndex, activity, activityIndex);
+
+                      return (
                       <div
-                        key={activity.id}
+                        key={activityKey}
                         className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3"
                       >
-                        <div className="flex items-start justify-between">
-                          <h4 className="font-medium text-gray-900 dark:text-white">Activity {activityIndex + 1}</h4>
+                        <div className="flex items-start justify-between gap-3">
+                          <button
+                            type="button"
+                            onClick={() => toggleActivityExpanded(selectedPillarIndex, activity, activityIndex)}
+                            className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                          >
+                            <div className="mt-0.5 text-primary-blue dark:text-primary-cyan">
+                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                            </div>
+                            <div className="min-w-0">
+                              <h4 className="font-medium text-gray-900 dark:text-white">
+                                {activity.title || `Activity ${activityIndex + 1}`}
+                              </h4>
+                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                {activity.date || 'No date set'}
+                              </p>
+                              {!isExpanded && (
+                                <p className="mt-2 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">
+                                  {activity.description || 'No description yet.'}
+                                </p>
+                              )}
+                            </div>
+                          </button>
                           <button
                             onClick={() => removeActivity(selectedPillarIndex, activityIndex)}
                             className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-red-600 dark:text-red-400"
@@ -294,52 +356,69 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                           </button>
                         </div>
 
-                        {/* Activity Image */}
-                        <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                          <img
-                            src={activity.imageUrl}
-                            alt={activity.title}
-                            className="w-full h-full object-cover"
-                          />
-                          <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => e.target.files?.[0] && handleImageUpload(selectedPillarIndex, activityIndex, e.target.files[0])}
-                              className="hidden"
-                            />
-                            <div className="text-white text-center">
-                              <Upload className="w-6 h-6 mx-auto mb-1" />
-                              <span className="text-xs font-medium">Change Image</span>
+                        {isExpanded && (
+                          <div className="space-y-3">
+                            {/* Activity Image */}
+                            <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                              <img
+                                src={activity.imageUrl}
+                                alt={activity.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  onChange={(e) => e.target.files?.[0] && handleImageUpload(selectedPillarIndex, activityIndex, e.target.files[0])}
+                                  className="hidden"
+                                />
+                                <div className="text-white text-center">
+                                  <Upload className="w-6 h-6 mx-auto mb-1" />
+                                  <span className="text-xs font-medium">Change Image</span>
+                                </div>
+                              </label>
                             </div>
-                          </label>
-                        </div>
 
-                        <input
-                          type="text"
-                          value={activity.title}
-                          onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'title', e.target.value)}
-                          placeholder="Activity title"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
+                            <input
+                              type="text"
+                              value={activity.title}
+                              onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'title', e.target.value)}
+                              placeholder="Activity title"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            />
 
-                        <input
-                          type="text"
-                          value={activity.date}
-                          onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'date', e.target.value)}
-                          placeholder="Date (e.g., January 2024)"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
+                            <input
+                              type="text"
+                              value={activity.date}
+                              onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'date', e.target.value)}
+                              placeholder="Date (e.g., January 2024)"
+                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            />
 
-                        <textarea
-                          value={activity.description}
-                          onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'description', e.target.value)}
-                          placeholder="Activity description"
-                          rows={2}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                        />
+                            <textarea
+                              value={activity.description}
+                              onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'description', e.target.value)}
+                              placeholder="Activity description"
+                              rows={2}
+                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                            />
+                          </div>
+                        )}
                       </div>
-                    ))}
+                    )})}
+
+                    {hasHiddenActivities && (
+                      <button
+                        type="button"
+                        onClick={() => setVisibleActivityCount((current) => ({
+                          ...current,
+                          [selectedPillarIndex]: (current[selectedPillarIndex] || ACTIVITY_INITIAL_VISIBLE_COUNT) + ACTIVITY_INITIAL_VISIBLE_COUNT
+                        }))}
+                        className="w-full rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                      >
+                        Load More Activities
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -347,7 +426,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="shrink-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={onClose}
               className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
@@ -363,7 +442,6 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
               {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
-        </div>
       </div>
     </div>
   );

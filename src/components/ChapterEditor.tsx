@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Megaphone, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Globe, Megaphone, Pencil, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
-import { DriveService, DataService } from '../services/DriveService';
+import { DriveService, DataService, convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
 import { Chapter } from '../types';
 import { getSessionToken } from '../utils/session';
 
@@ -16,9 +16,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   const { showAlert, showConfirm } = useAppDialog();
   const [isSaving, setIsSaving] = useState(false);
   const chapterId = user?.chapterId || chapter?.id;
+  const isAdmin = !!user && user.role === 'admin';
   const isScopedEditor = !!user && user.role === 'editor' && !!user.chapterId && user.chapterId === chapterId;
+  const isScopedChapterHead = !!user && user.role === 'chapter_head' && !!user.chapterId && user.chapterId === chapterId;
+  const canEditChapter = isAdmin || isScopedEditor || isScopedChapterHead;
   const canEditLeadershipAndCta = !isScopedEditor;
-  const canEditChapterInfo = true;
+  const canEditChapterInfo = canEditChapter;
   
   // Edit State
   const [isEditing, setIsEditing] = useState(false);
@@ -40,6 +43,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     facebook: chapter?.facebook || '',
     twitter: chapter?.twitter || '', 
     instagram: chapter?.instagram || '',
+    websiteUrl: chapter?.websiteUrl || '',
 
     // Leadership
     headName: chapter?.headName || '',
@@ -68,6 +72,20 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       try {
         const result = await DataService.loadChapter(chapterId);
         if (result.success && result.chapter) {
+          console.log('[ChapterEditor] Loaded chapter for editing', {
+            chapterId,
+            chapter: result.chapter,
+            heroImage: getImageDebugInfo(result.chapter.image || result.chapter.imageUrl),
+            logoImage: getImageDebugInfo(result.chapter.logo),
+            headImage: getImageDebugInfo(result.chapter.headImageUrl),
+            activityImages: Array.isArray(result.chapter.activities)
+              ? result.chapter.activities.map((activity: any) => ({
+                  id: activity.id,
+                  title: activity.title,
+                  image: getImageDebugInfo(activity.imageUrl)
+                }))
+              : []
+          });
           const newData = {
             ...chapterData, // Keep defaults for missing fields
             ...result.chapter, // Overwrite with backend data
@@ -128,6 +146,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         facebook: chapterData.facebook,
         twitter: chapterData.twitter,
         instagram: chapterData.instagram,
+        websiteUrl: chapterData.websiteUrl,
         // Custom fields for extended data
         headName: chapterData.headName,
         headRole: chapterData.headRole,
@@ -137,6 +156,21 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
         joinUrl: chapterData.joinUrl,
         activities: chapterData.activities
       };
+
+      console.log('[ChapterEditor] Saving chapter payload', {
+        chapterId,
+        payload,
+        heroImage: getImageDebugInfo(payload.image),
+        logoImage: getImageDebugInfo(payload.logo),
+        headImage: getImageDebugInfo(payload.headImageUrl),
+        activityImages: Array.isArray(payload.activities)
+          ? payload.activities.map((activity: any) => ({
+              id: activity.id,
+              title: activity.title,
+              image: getImageDebugInfo(activity.imageUrl)
+            }))
+          : []
+      });
 
       const result = await DataService.saveChapter(chapterId, payload, sessionToken);
 
@@ -165,6 +199,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       const result = await DriveService.uploadImage(file, sessionToken);
       
       if (result.success && result.fileUrl) {
+        console.log('[ChapterEditor] Upload succeeded', {
+          field,
+          fileName: file.name,
+          rawUploadedUrl: result.fileUrl,
+          image: getImageDebugInfo(result.fileUrl)
+        });
         setChapterData(prev => ({ ...prev, [field]: result.fileUrl }));
       } else {
         await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
@@ -189,6 +229,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
       }
       const result = await DriveService.uploadImage(file, sessionToken);
       if (result.success && result.fileUrl) {
+        console.log('[ChapterEditor] Activity image upload succeeded', {
+          index,
+          fileName: file.name,
+          rawUploadedUrl: result.fileUrl,
+          image: getImageDebugInfo(result.fileUrl)
+        });
         handleActivityChange(index, 'imageUrl', result.fileUrl);
       }
     } catch (error) {
@@ -221,11 +267,12 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
             <div className="flex gap-2">
               {!isEditing ? (
                 <button
+                  disabled={!canEditChapter}
                   onClick={() => setIsEditing(true)}
-                  className="flex items-center gap-2 px-6 py-2 bg-primary-blue hover:bg-primary-cyan text-white rounded-lg transition-colors font-bold shadow-lg"
+                  className="flex items-center gap-2 px-6 py-2 bg-primary-blue hover:bg-primary-cyan text-white rounded-lg transition-colors font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Pencil size={18} />
-                  {isScopedEditor ? 'Edit Chapter Info' : 'Edit Details'}
+                  {!canEditChapter ? 'View Only' : (isScopedEditor ? 'Edit Chapter Info' : 'Edit Details')}
                 </button>
               ) : (
                 <>
@@ -274,7 +321,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                 {/* Cover Image */}
                 <div className={`relative aspect-video rounded-xl overflow-hidden bg-gray-100 dark:bg-black/20 border-2 border-dashed border-gray-300 dark:border-gray-700 group ${!isEditing ? 'opacity-90' : ''}`}>
                   {chapterData.imageUrl ? (
-                    <img src={chapterData.imageUrl} alt="Cover" className="w-full h-full object-cover" />
+                    <img src={convertToCORSFreeLink(chapterData.imageUrl)} alt="Cover" className="w-full h-full object-cover" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-gray-400">No Cover Image</div>
                   )}
@@ -370,7 +417,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                       {/* Activity Image */}
                       <div className="w-full md:w-32 h-32 bg-gray-200 dark:bg-black/20 rounded-lg overflow-hidden relative group flex-shrink-0">
                         {activity.imageUrl ? (
-                          <img src={activity.imageUrl} className="w-full h-full object-cover" alt="Activity" />
+                          <img src={convertToCORSFreeLink(activity.imageUrl)} className="w-full h-full object-cover" alt="Activity" />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">No Image</div>
                         )}
@@ -426,7 +473,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Logo</h2>
               <div className="flex flex-col items-center">
                 <div className="w-32 h-32 rounded-full border-4 border-gray-100 dark:border-white/10 overflow-hidden relative group mb-4">
-                  <img src={chapterData.logoUrl || `https://ui-avatars.com/api/?name=${chapterData.title}&background=random`} alt="Logo" className="w-full h-full object-cover" />
+                  <img src={convertToCORSFreeLink(chapterData.logoUrl) || `https://ui-avatars.com/api/?name=${chapterData.title}&background=random`} alt="Logo" className="w-full h-full object-cover" />
                   {isEditing && canEditChapterInfo && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
                       <Upload size={24} />
@@ -465,6 +512,10 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                   <Instagram size={16} className="absolute left-3 top-3 text-gray-400" />
                   <input type="text" placeholder="Instagram URL (Optional)" value={chapterData.instagram} onChange={(e) => setChapterData({...chapterData, instagram: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
                 </div>
+                <div className="relative">
+                  <Globe size={16} className="absolute left-3 top-3 text-gray-400" />
+                  <input type="text" placeholder="Website URL (Optional)" value={chapterData.websiteUrl} onChange={(e) => setChapterData({...chapterData, websiteUrl: e.target.value})} disabled={!isEditing || !canEditChapterInfo} className="w-full p-2 pl-9 bg-gray-50 dark:bg-white/5 border rounded-lg text-sm dark:text-white dark:border-white/10 disabled:opacity-70 disabled:cursor-not-allowed" />
+                </div>
               </div>
             </div>
 
@@ -476,7 +527,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               </h2>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden relative group flex-shrink-0">
-                  <img src={chapterData.headImageUrl || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" alt="Leader" />
+                  <img src={convertToCORSFreeLink(chapterData.headImageUrl) || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" alt="Leader" />
                   {isEditing && canEditLeadershipAndCta && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
                       <Upload size={16} className="text-white" />

@@ -17,7 +17,6 @@ import { LandingPageEditor } from './components/LandingPageEditor';
 import { PillarsEditor } from './components/PillarsEditor';
 import { PartnersEditor } from './components/PartnersEditor';
 import { FoundersEditor } from './components/FoundersEditor';
-import { LogoEditor } from './components/LogoEditor';
 import { BackgroundBubbles } from './components/BackgroundBubbles';
 import { LoadingScreen } from './components/LoadingScreen';
 
@@ -25,6 +24,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDialogProvider } from './contexts/AppDialogContext';
 import { Chapter, ExecutiveOfficer, Pillar, USER_STORAGE_KEY, User } from './types';
 import { DataService } from './services/DriveService';
+import { getImageDebugInfo } from './services/DriveService';
 import { BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 import { APP_CONFIG } from './config';
 
@@ -32,7 +32,8 @@ function AppContent() {
   const { user, isAuthenticated } = useAuth();
   const isAdmin = user?.role === 'admin';
   const isGlobalEditor = user?.role === 'editor' && !user?.chapterId;
-  const canAccessDashboard = isAdmin || isGlobalEditor;
+  const isScopedDashboardUser = !!user?.chapterId;
+  const canAccessDashboard = isAdmin || isGlobalEditor || isScopedDashboardUser;
   
   // Initialize theme
   const [theme, setTheme] = useState(() => {
@@ -62,8 +63,6 @@ function AppContent() {
   const [isPartnersEditorOpen, setIsPartnersEditorOpen] = useState(false);
   const [isFoundersEditorOpen, setIsFoundersEditorOpen] = useState(false);
   const [isLandingEditorOpen, setIsLandingEditorOpen] = useState(false); // New State
-  const [isLogoEditorOpen, setIsLogoEditorOpen] = useState(false);
-  
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isDonatePageOpen, setIsDonatePageOpen] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
@@ -74,14 +73,6 @@ function AppContent() {
   const [partners, setPartners] = useState<any[]>([]);
   const [founders, setFounders] = useState<any[]>([]);
   const [executiveOfficers, setExecutiveOfficers] = useState<ExecutiveOfficer[]>([]);
-
-  const visibleChapters = user && (
-    user.role === 'chapter_head' ||
-    user.role === 'member' ||
-    (user.role === 'editor' && !!user.chapterId)
-  )
-    ? chapters.filter(chapter => chapter.id === user.chapterId)
-    : chapters;
 
   // Helper to map index to icon
   const getIconForIndex = (index: number) => {
@@ -153,6 +144,13 @@ function AppContent() {
         }
         if (chaptersRes.success && chaptersRes.chapters) {
           setChapters(chaptersRes.chapters);
+          console.info('[App] Chapters image diagnostics', chaptersRes.chapters.map((chapter: any) => ({
+            id: chapter.id,
+            name: chapter.name,
+            heroImage: getImageDebugInfo(chapter.image || chapter.imageUrl),
+            logoImage: getImageDebugInfo(chapter.logo),
+            headImage: getImageDebugInfo(chapter.headImageUrl)
+          })));
         } else {
           console.warn('[App] Chapters data missing or empty', chaptersRes);
         }
@@ -203,7 +201,6 @@ function AppContent() {
     setIsPartnersEditorOpen(false);
     setIsFoundersEditorOpen(false);
     setIsLandingEditorOpen(false);
-    setIsLogoEditorOpen(false);
     setShowDashboard(false); 
     window.scrollTo(0, 0);
   };
@@ -242,13 +239,13 @@ function AppContent() {
     }
 
     if (!storedUser) return;
-    if (storedUser.role === 'admin' || (storedUser.role === 'editor' && !storedUser.chapterId)) {
+    if (storedUser.role === 'admin' || (storedUser.role === 'editor' && !storedUser.chapterId) || !!storedUser.chapterId) {
       setShowDashboard(true);
       return;
     }
 
     setShowDashboard(false);
-    if (storedUser.chapterId) {
+    if (storedUser.role !== 'member' && storedUser.chapterId) {
       const matchedChapter = chapters.find(chapter => chapter.id === storedUser.chapterId);
       if (matchedChapter) {
         setSelectedChapter(matchedChapter);
@@ -266,7 +263,6 @@ function AppContent() {
         toggleTheme={toggleTheme} 
         onHomeClick={handleBackToHome} 
         onSignInClick={() => setIsLoginModalOpen(true)}
-        onEditLogo={isAdmin ? () => setIsLogoEditorOpen(true) : undefined}
         onOpenDashboard={canAccessDashboard ? () => setShowDashboard(true) : undefined}
         isDashboardOpen={showDashboard}
       />
@@ -276,9 +272,7 @@ function AppContent() {
             EDITOR MODALS (Higher Priority)
             These render ON TOP of everything else if active.
            ========================================================= */}
-        {isLogoEditorOpen ? (
-          <LogoEditor onClose={() => setIsLogoEditorOpen(false)} />
-        ) : isLandingEditorOpen ? (
+        {isLandingEditorOpen ? (
           <LandingPageEditor onBack={() => setIsLandingEditorOpen(false)} />
         ) : isPartnersEditorOpen ? (
           <PartnersEditor 
@@ -354,7 +348,7 @@ function AppContent() {
             />
             
             <Chapters 
-              chapters={visibleChapters} 
+              chapters={chapters} 
               isLoading={isLoading}
               onSelectChapter={(c) => { setSelectedChapter(c); window.scrollTo(0,0); }} 
             />

@@ -21,6 +21,7 @@ function doPost(e) {
       case 'logout': result = logout_(data); break;
       case 'validateSession': result = validateSession_(data); break;
       case 'register': result = register_(data); break;
+      case 'updateOwnProfile': result = updateOwnProfile_(data); break;
       case 'updatePassword': result = updatePassword_(data); break;
       case 'createUser': result = createUser_(data); break;
       case 'updateUser': result = updateUser_(data); break;
@@ -176,6 +177,41 @@ function updatePassword_(data) {
       return { message: 'Password updated successfully' };
     }
   }
+  throw new Error('User not found');
+}
+
+function updateOwnProfile_(data) {
+  var session = getSessionOrThrow_(data.sessionToken);
+  var nextUsername = String(data.username || '');
+  var nextEmail = String(data.email || '');
+  var nextPassword = String(data.newPassword || '');
+
+  if (!nextUsername) throw new Error('Username is required');
+  if (!nextEmail) throw new Error('Email is required');
+
+  var sheet = getUsersSheet_();
+  var rows = sheet.getDataRange().getValues();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][4] || '') === String(session.user.id || '')) {
+      ensureUniqueUserForUpdate_(String(rows[i][4] || ''), nextUsername, nextEmail);
+      sheet.getRange(i + 1, 1).setValue(nextUsername);
+      sheet.getRange(i + 1, 3).setValue(nextEmail);
+      if (nextPassword) {
+        sheet.getRange(i + 1, 2).setValue(hashPassword_(nextPassword));
+      }
+
+      var updatedUser = {
+        username: nextUsername,
+        email: nextEmail,
+        role: normalizeUserRole_(rows[i][3]),
+        id: String(rows[i][4] || ''),
+        chapterId: String(rows[i][5] || '')
+      };
+      syncSessionsForUser_(updatedUser.id, updatedUser);
+      return { message: 'Profile updated successfully', user: updatedUser };
+    }
+  }
+
   throw new Error('User not found');
 }
 

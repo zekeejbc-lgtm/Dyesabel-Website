@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
-  ArrowLeft,
   CreditCard,
   Image as ImageIcon,
   Loader2,
@@ -9,7 +8,8 @@ import {
   Save,
   ShieldCheck,
   Trash2,
-  Wallet
+  Wallet,
+  X
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -205,6 +205,39 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
     });
   }, [content.localMethods]);
 
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalBodyPaddingRight = document.body.style.paddingRight;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    if (scrollbarWidth > 0) {
+      document.body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.body.style.paddingRight = originalBodyPaddingRight;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onBack();
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [onBack]);
+
   if (!canEdit) {
     return null;
   }
@@ -342,43 +375,45 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-ocean-light via-[#b2dfdb] to-ocean-mint dark:from-ocean-deep dark:via-[#021017] dark:to-ocean-dark pt-24 pb-16 px-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div className="flex items-center gap-4">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm">
+      <div className="min-h-screen p-4 md:p-8">
+        <div className="max-w-6xl mx-auto overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+          <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-700">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Donation Page Editor</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Manage donation methods, bank details, allocations, and published recent donations
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="flex items-center gap-2 rounded-lg bg-primary-blue px-4 py-2 text-white transition-colors hover:bg-primary-cyan disabled:opacity-50"
+              >
+                {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
               <button
                 onClick={onBack}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                aria-label="Close donation editor"
               >
-                <ArrowLeft className="text-ocean-deep dark:text-white" size={24} />
+                <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
               </button>
-              <div>
-                <h1 className="text-3xl font-black text-ocean-deep dark:text-white">Donation Page Editor</h1>
-                <p className="text-ocean-deep/60 dark:text-gray-400 mt-1">
-                  Manage donation methods, bank details, allocations, and published recent donations
-                </p>
-              </div>
             </div>
-            <button
-              onClick={handleSave}
-              disabled={saving || loading}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-blue hover:bg-primary-cyan text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-              {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
           </div>
-        </div>
 
-        {loading ? (
-          <div className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-10 text-center">
-            <Loader2 className="w-10 h-10 text-primary-blue animate-spin mx-auto mb-4" />
-            <p className="text-ocean-deep dark:text-white font-medium">Loading donation content...</p>
-          </div>
-        ) : (
-          <>
-            <section className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+          <div className="bg-gray-50 p-6 dark:bg-gray-950/40">
+            <div className="space-y-6">
+              {loading ? (
+                <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm dark:border-white/10 dark:bg-gray-900">
+                  <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-primary-blue" />
+                  <p className="font-medium text-ocean-deep dark:text-white">Loading donation content...</p>
+                </div>
+              ) : (
+                <>
+                  <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
               <div className="flex items-center gap-2 mb-6">
                 <Wallet className="text-primary-blue" size={20} />
                 <h2 className="text-xl font-bold text-ocean-deep dark:text-white">National Payment Methods</h2>
@@ -511,11 +546,11 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
                   <Plus size={18} />
                   Add Payment Method
                 </button>
-              </div>
-            </section>
+                    </div>
+                  </section>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <section className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+                  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
                 <div className="flex items-center gap-2 mb-6">
                   <CreditCard className="text-primary-cyan" size={20} />
                   <h2 className="text-xl font-bold text-ocean-deep dark:text-white">International Bank Details</h2>
@@ -530,9 +565,9 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
                 </div>
                 <textarea value={content.bankDetails.bankAddress} onChange={(e) => setContent((prev) => ({ ...prev, bankDetails: { ...prev.bankDetails, bankAddress: e.target.value } }))} placeholder="Bank address" rows={3} className="mt-4 w-full px-4 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-ocean-deep dark:text-white" />
                 <textarea value={content.referenceNote} onChange={(e) => setContent((prev) => ({ ...prev, referenceNote: e.target.value }))} placeholder="Reference note shown on the donation page" rows={4} className="mt-4 w-full px-4 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-lg text-ocean-deep dark:text-white" />
-              </section>
+                    </section>
 
-              <section className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+                    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
                 <div className="flex items-center gap-2 mb-6">
                   <ShieldCheck className="text-emerald-500" size={20} />
                   <h2 className="text-xl font-bold text-ocean-deep dark:text-white">Donation Allocations</h2>
@@ -586,10 +621,10 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
                     Add Allocation
                   </button>
                 </div>
-              </section>
-            </div>
+                    </section>
+                  </div>
 
-            <section className="bg-white dark:bg-[#051923] rounded-2xl shadow-lg border border-white/10 p-6">
+                  <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-[#051923]">
               <div className="flex items-center gap-2 mb-6">
                 <ImageIcon className="text-pink-500" size={20} />
                 <h2 className="text-xl font-bold text-ocean-deep dark:text-white">Recent Donations</h2>
@@ -632,10 +667,13 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
                   <Plus size={18} />
                   Add Recent Donation
                 </button>
-              </div>
-            </section>
-          </>
-        )}
+                    </div>
+                  </section>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -19,7 +19,7 @@ var MAIN_DATA_CONFIG = {
   }
 };
 var PARTNER_HEADERS = ['CategoryID', 'CategoryTitle', 'PartnerID', 'PartnerName', 'PartnerLogo'];
-var CHAPTER_HEADERS = ['ChapterID', 'Title', 'Description', 'ImageURL', 'LogoURL', 'Location', 'HeadName', 'HeadRole', 'HeadQuote', 'HeadImageUrl', 'Email', 'Phone', 'Facebook', 'Twitter', 'Instagram', 'JoinUrl', 'JoinCtaDescription'];
+var CHAPTER_HEADERS = ['ChapterID', 'Title', 'Description', 'ImageURL', 'LogoURL', 'Location', 'HeadName', 'HeadRole', 'HeadQuote', 'HeadImageUrl', 'Email', 'Phone', 'Facebook', 'Twitter', 'Instagram', 'WebsiteUrl', 'JoinUrl', 'JoinCtaDescription'];
 var CHAPTER_ACTIVITY_HEADERS = ['ChapterID', 'ActivityID', 'Title', 'Description', 'Date', 'ImageURL', 'SortOrder'];
 
 function doGet() {
@@ -676,6 +676,7 @@ function normalizeChapterRecord_(chapterId, chapterData) {
     facebook: chapterData.facebook || '',
     twitter: chapterData.twitter || '',
     instagram: chapterData.instagram || '',
+    websiteUrl: chapterData.websiteUrl || '',
     joinUrl: chapterData.joinUrl || '',
     joinCtaDescription: chapterData.joinCtaDescription || ''
   });
@@ -720,7 +721,7 @@ function loadLegacyChapters_(rows) {
       id: row[0], name: row[1] || '', description: row[2] || '', imageUrl: row[3] || '', image: row[3] || '', logo: extended.logo || row[5] || '',
       location: extended.location || '', headName: extended.headName || '', headRole: extended.headRole || '', headQuote: extended.headQuote || '',
       headImageUrl: extended.headImageUrl || '', email: extended.email || '', phone: extended.phone || '', facebook: extended.facebook || '',
-      twitter: extended.twitter || '', instagram: extended.instagram || '', joinUrl: extended.joinUrl || '', joinCtaDescription: extended.joinCtaDescription || '',
+      twitter: extended.twitter || '', instagram: extended.instagram || '', websiteUrl: extended.websiteUrl || '', joinUrl: extended.joinUrl || '', joinCtaDescription: extended.joinCtaDescription || '',
       activities: Array.isArray(activities) ? activities : []
     };
   });
@@ -742,7 +743,7 @@ function loadAllChaptersNormalized_(ss) {
       id: chapterId, name: row[indexMap.Title] || '', description: row[indexMap.Description] || '', imageUrl: row[indexMap.ImageURL] || '', image: row[indexMap.ImageURL] || '',
       logo: row[indexMap.LogoURL] || '', location: row[indexMap.Location] || '', headName: row[indexMap.HeadName] || '', headRole: row[indexMap.HeadRole] || '',
       headQuote: row[indexMap.HeadQuote] || '', headImageUrl: row[indexMap.HeadImageUrl] || '', email: row[indexMap.Email] || '', phone: row[indexMap.Phone] || '',
-      facebook: row[indexMap.Facebook] || '', twitter: row[indexMap.Twitter] || '', instagram: row[indexMap.Instagram] || '', joinUrl: row[indexMap.JoinUrl] || '',
+      facebook: row[indexMap.Facebook] || '', twitter: row[indexMap.Twitter] || '', instagram: row[indexMap.Instagram] || '', websiteUrl: row[indexMap.WebsiteUrl] || '', joinUrl: row[indexMap.JoinUrl] || '',
       joinCtaDescription: row[indexMap.JoinCtaDescription] || '', activities: activitiesByChapter[String(chapterId)] || []
     };
   });
@@ -753,7 +754,7 @@ function rewriteChaptersSheets_(ss, chapters) {
   var activityRows = [];
   chapters.forEach(function(rawChapter) {
     var chapter = normalizeChapterRecord_(rawChapter.id, rawChapter);
-    chapterRows.push([chapter.id, chapter.name || '', chapter.description || '', chapter.imageUrl || chapter.image || '', chapter.logo || '', chapter.location || '', chapter.headName || '', chapter.headRole || '', chapter.headQuote || '', chapter.headImageUrl || '', chapter.email || '', chapter.phone || '', chapter.facebook || '', chapter.twitter || '', chapter.instagram || '', chapter.joinUrl || '', chapter.joinCtaDescription || '']);
+    chapterRows.push([chapter.id, chapter.name || '', chapter.description || '', chapter.imageUrl || chapter.image || '', chapter.logo || '', chapter.location || '', chapter.headName || '', chapter.headRole || '', chapter.headQuote || '', chapter.headImageUrl || '', chapter.email || '', chapter.phone || '', chapter.facebook || '', chapter.twitter || '', chapter.instagram || '', chapter.websiteUrl || '', chapter.joinUrl || '', chapter.joinCtaDescription || '']);
     (chapter.activities || []).forEach(function(activity, index) {
       activityRows.push([chapter.id, activity.id || Utilities.getUuid(), activity.title || '', activity.description || '', activity.date || '', activity.imageUrl || '', index]);
     });

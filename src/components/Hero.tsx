@@ -2,6 +2,7 @@ import React from 'react';
 import { useAppDialog } from '../contexts/AppDialogContext';
 
 const VOLUNTEER_URL = "https://forms.gle/W6WVpftGDwM7fUm19";
+const HERO_BACKGROUND_IMAGE = 'https://i.imgur.com/LH9trqH.jpeg';
 
 interface HeroProps {
   onDonateClick: (e: React.MouseEvent) => void;
@@ -19,7 +20,15 @@ export const Hero: React.FC<HeroProps> = ({ onDonateClick }) => {
 
   return (
     <section className="relative h-screen min-h-[700px] flex items-center justify-center overflow-hidden">
-      {/* Background is handled in App.tsx via BackgroundBubbles */}
+      <div
+        className="hero-background-image"
+        style={{ backgroundImage: `url(${HERO_BACKGROUND_IMAGE})` }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-ocean-deep/5 via-ocean-deep/20 to-ocean-light dark:to-ocean-dark pointer-events-none"
+        aria-hidden="true"
+      />
       
       <div className="relative z-10 container mx-auto px-4 text-center text-ocean-deep dark:text-white reveal active">
         

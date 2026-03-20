@@ -1,6 +1,7 @@
 import React from 'react';
 import { ArrowUpRight, MapPin } from 'lucide-react';
 import { Chapter } from '../types';
+import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
 
 interface ChaptersProps {
   chapters: Chapter[];
@@ -47,8 +48,18 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
                 <div className="w-20 h-20 flex-shrink-0 bg-white/20 dark:bg-black/20 rounded-full p-1 border border-white/30 shadow-inner group-hover:scale-105 transition-transform duration-500 overflow-hidden relative">
                   <div className="absolute inset-0 bg-gradient-to-tr from-primary-cyan/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   <img 
-                      src={chapter.logo || `https://ui-avatars.com/api/?name=${chapter.name}&background=random`} 
+                      src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}&background=random`} 
                       alt={`${chapter.name} Logo`} 
+                      referrerPolicy="no-referrer"
+                      onError={(event) => {
+                        console.error('[Chapters] Card logo failed to load', {
+                          chapterId: chapter.id,
+                          chapterName: chapter.name,
+                          image: getImageDebugInfo(chapter.logo),
+                          attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+                        });
+                        event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chapter.name)}&background=random`;
+                      }}
                       className="w-full h-full object-cover rounded-full" 
                   />
                 </div>

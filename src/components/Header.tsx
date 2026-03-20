@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Menu, X, Sun, Moon, LogIn, LogOut, LayoutDashboard, Home } from 'lucide-react';
-import { toast } from 'sonner';
 import { NavLink } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useAppDialog } from '../contexts/AppDialogContext';
 import { APP_CONFIG } from '../config';
 
 const navLinks: NavLink[] = [
@@ -18,7 +18,6 @@ interface HeaderProps {
   toggleTheme: () => void;
   onHomeClick?: () => void;
   onSignInClick: () => void;
-  onEditLogo?: () => void;
   onOpenDashboard?: () => void;
   isDashboardOpen?: boolean;
 }
@@ -32,8 +31,9 @@ export const Header: React.FC<HeaderProps> = ({
   isDashboardOpen = false
 }) => {
   const { user, logout } = useAuth();
+  const { showConfirm } = useAppDialog();
   const isAdmin = user?.role === 'admin';
-  const canAccessDashboard = isAdmin || (user?.role === 'editor' && !user?.chapterId);
+  const canAccessDashboard = !!user && (isAdmin || (user.role === 'editor' && !user.chapterId) || !!user.chapterId);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -51,22 +51,20 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
-  const handleLogout = () => {
-    toast.warning('Log out now?', {
-      description: 'Your current session will be ended on this device.',
-      action: {
-        label: 'Log out',
-        onClick: () => {
-          logout();
-          setIsMobileMenuOpen(false);
-          onHomeClick?.();
-        }
-      },
-      cancel: {
-        label: 'Cancel',
-        onClick: () => {}
-      }
+  const handleLogout = async () => {
+    const shouldLogout = await showConfirm('Your current session will be ended on this device.', {
+      title: 'Log out now?',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel'
     });
+
+    if (!shouldLogout) {
+      return;
+    }
+
+    logout();
+    setIsMobileMenuOpen(false);
+    onHomeClick?.();
   };
 
   const handleNavigation = (e: React.MouseEvent<HTMLAnchorElement>, link: NavLink) => {

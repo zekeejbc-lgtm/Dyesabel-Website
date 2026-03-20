@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Edit, Loader, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Globe, ExternalLink, Edit, Loader, X } from 'lucide-react';
 import { Chapter } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { DataService } from '../services/DriveService';
+import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
 
 // Add a simple pop-in animation for the modal
 const modalStyles = `
@@ -30,6 +31,9 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
   );
   const [chapter, setChapter] = useState<Chapter>(initialChapter);
   const [loading, setLoading] = useState(false);
+  const heroImageDebug = useMemo(() => getImageDebugInfo(chapter.image || chapter.imageUrl), [chapter.image, chapter.imageUrl]);
+  const logoImageDebug = useMemo(() => getImageDebugInfo(chapter.logo), [chapter.logo]);
+  const headImageDebug = useMemo(() => getImageDebugInfo(chapter.headImageUrl), [chapter.headImageUrl]);
   
   // State for the selected activity (Modal)
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
@@ -48,7 +52,20 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       try {
         const result = await DataService.loadChapter(initialChapter.id);
         if (result.success && result.chapter) {
-          console.log('Loaded chapter from backend:', result.chapter);
+          console.log('[ChapterDetail] Loaded chapter from backend', {
+            chapterId: initialChapter.id,
+            chapter: result.chapter,
+            heroImage: getImageDebugInfo(result.chapter.image || result.chapter.imageUrl),
+            logoImage: getImageDebugInfo(result.chapter.logo),
+            headImage: getImageDebugInfo(result.chapter.headImageUrl),
+            activityImages: Array.isArray(result.chapter.activities)
+              ? result.chapter.activities.map((activity: any) => ({
+                  id: activity.id,
+                  title: activity.title,
+                  image: getImageDebugInfo(activity.imageUrl)
+                }))
+              : []
+          });
           
           // Safeguard: Keep initial logo if backend returns empty
           const safeLogo = (result.chapter.logo && result.chapter.logo !== "") 
@@ -78,6 +95,21 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       document.body.style.overflow = 'unset';
     };
   }, [selectedActivity]);
+
+  useEffect(() => {
+    console.log('[ChapterDetail] Render image diagnostics', {
+      chapterId: chapter.id,
+      chapterName: chapter.name,
+      heroImage: heroImageDebug,
+      logoImage: logoImageDebug,
+      headImage: headImageDebug,
+      activityImages: (chapter.activities || []).map((activity: any) => ({
+        id: activity.id,
+        title: activity.title,
+        image: getImageDebugInfo(activity.imageUrl)
+      }))
+    });
+  }, [chapter, heroImageDebug, logoImageDebug, headImageDebug]);
 
   return (
     <div className="min-h-screen pt-20 pb-10 relative">
@@ -114,8 +146,18 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       <section className="relative h-[50vh] min-h-[400px] flex items-end pb-12 overflow-hidden mb-12">
         <div className="absolute inset-0 z-0">
           <img 
-            src={chapter.image || 'https://picsum.photos/1200/600'} 
+            src={convertToCORSFreeLink(chapter.image || chapter.imageUrl) || 'https://picsum.photos/1200/600'} 
             alt={chapter.name} 
+            referrerPolicy="no-referrer"
+            onError={(event) => {
+              console.error('[ChapterDetail] Hero image failed to load', {
+                chapterId: chapter.id,
+                chapterName: chapter.name,
+                image: heroImageDebug,
+                attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+              });
+              event.currentTarget.src = 'https://picsum.photos/1200/600';
+            }}
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep via-ocean-deep/60 to-transparent"></div>
@@ -124,8 +166,18 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
         <div className="container mx-auto px-4 relative z-10 flex flex-col md:flex-row items-center md:items-end gap-6 md:gap-8 reveal active">
           <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white/20 bg-white/10 backdrop-blur-md shadow-2xl p-2 flex-shrink-0 overflow-hidden">
             <img 
-              src={chapter.logo || `https://ui-avatars.com/api/?name=${chapter.name}`} 
+              src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}`} 
               alt={chapter.name} 
+              referrerPolicy="no-referrer"
+              onError={(event) => {
+                console.error('[ChapterDetail] Logo image failed to load', {
+                  chapterId: chapter.id,
+                  chapterName: chapter.name,
+                  image: logoImageDebug,
+                  attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+                });
+                event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chapter.name)}`;
+              }}
               className="w-full h-full object-cover rounded-full"
             />
           </div>
@@ -175,7 +227,22 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                       >
                         <div className="w-full md:w-48 h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-white/5 relative">
                           {activity.imageUrl ? (
-                            <img src={activity.imageUrl} alt="Activity" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                            <img
+                              src={convertToCORSFreeLink(activity.imageUrl)}
+                              alt="Activity"
+                              referrerPolicy="no-referrer"
+                              onError={(event) => {
+                                console.error('[ChapterDetail] Activity image failed to load', {
+                                  chapterId: chapter.id,
+                                  chapterName: chapter.name,
+                                  activityId: activity.id,
+                                  activityTitle: activity.title,
+                                  image: getImageDebugInfo(activity.imageUrl),
+                                  attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+                                });
+                              }}
+                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                            />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
                           )}
@@ -242,6 +309,16 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                     <span>{chapter.location}</span>
                   </li>
                 )}
+                {chapter.websiteUrl && (
+                  <li className="flex items-center gap-3 text-ocean-deep/80 dark:text-gray-300">
+                    <div className="w-10 h-10 rounded-full bg-primary-blue/10 flex items-center justify-center text-primary-blue dark:text-primary-cyan flex-shrink-0">
+                      <Globe size={18} />
+                    </div>
+                    <a href={chapter.websiteUrl} target="_blank" rel="noopener noreferrer" className="truncate hover:text-primary-cyan transition-colors">
+                      Access Our Website
+                    </a>
+                  </li>
+                )}
               </ul>
               
               {/* Social Links */}
@@ -271,7 +348,21 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
               <div className="glass-card p-8 rounded-3xl reveal reveal-delay-400">
                 <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-6">Chapter Leadership</h3>
                 <div className="flex items-center gap-4 mb-4">
-                  <img src={chapter.headImageUrl || `https://ui-avatars.com/api/?name=${chapter.headName || 'Head'}`} alt="Chapter Head" className="w-14 h-14 rounded-full object-cover" />
+                  <img
+                    src={convertToCORSFreeLink(chapter.headImageUrl) || `https://ui-avatars.com/api/?name=${chapter.headName || 'Head'}`}
+                    alt="Chapter Head"
+                    referrerPolicy="no-referrer"
+                    onError={(event) => {
+                      console.error('[ChapterDetail] Head image failed to load', {
+                        chapterId: chapter.id,
+                        chapterName: chapter.name,
+                        image: headImageDebug,
+                        attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+                      });
+                      event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chapter.headName || 'Head')}`;
+                    }}
+                    className="w-14 h-14 rounded-full object-cover"
+                  />
                   <div>
                     <h4 className="font-bold text-ocean-deep dark:text-white">{chapter.headName || 'Leader'}</h4>
                     <p className="text-xs text-primary-blue dark:text-primary-cyan uppercase font-bold tracking-wider">{chapter.headRole || 'Chapter Head'}</p>
@@ -304,6 +395,26 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
               </div>
             )}
 
+            {chapter.websiteUrl && (
+              <div className="glass-card p-6 rounded-3xl reveal reveal-delay-500 border border-white/10">
+                <div className="flex items-center gap-3 mb-3 text-ocean-deep dark:text-white">
+                  <div className="w-10 h-10 rounded-full bg-primary-blue/10 flex items-center justify-center text-primary-blue dark:text-primary-cyan">
+                    <Globe size={18} />
+                  </div>
+                  <h3 className="text-xl font-bold">Chapter Website</h3>
+                </div>
+                <a
+                  href={chapter.websiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-primary-blue text-white font-bold px-5 py-3 hover:bg-primary-cyan transition-colors"
+                >
+                  <span>Access Our Website</span>
+                  <ExternalLink size={16} />
+                </a>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -332,8 +443,19 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
             <div className="h-64 md:h-80 w-full bg-gray-200 dark:bg-black/20 flex-shrink-0 relative">
               {selectedActivity.imageUrl ? (
                 <img 
-                  src={selectedActivity.imageUrl} 
+                  src={convertToCORSFreeLink(selectedActivity.imageUrl)} 
                   alt={selectedActivity.title} 
+                  referrerPolicy="no-referrer"
+                  onError={(event) => {
+                    console.error('[ChapterDetail] Modal activity image failed to load', {
+                      chapterId: chapter.id,
+                      chapterName: chapter.name,
+                      activityId: selectedActivity.id,
+                      activityTitle: selectedActivity.title,
+                      image: getImageDebugInfo(selectedActivity.imageUrl),
+                      attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+                    });
+                  }}
                   className="w-full h-full object-cover"
                 />
               ) : (

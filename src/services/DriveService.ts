@@ -82,6 +82,18 @@ export const AuthService = {
     });
   },
 
+  updateOwnProfile: async (sessionToken: string, profileData: {
+    username: string;
+    email: string;
+    newPassword?: string;
+  }) => {
+    return sendUsersRequest<{ user: User }>({
+      action: 'updateOwnProfile',
+      sessionToken,
+      ...profileData
+    });
+  },
+
   deleteUser: async (sessionToken: string, userId: string) => {
     return sendUsersRequest({
       action: 'deleteUser',
@@ -533,18 +545,47 @@ export const convertToCORSFreeLink = (url: string | undefined): string => {
   if (!url) return '';
 
   const normalizedUrl = url.trim();
+  if (!normalizedUrl) return '';
+
   if (normalizedUrl.includes('drive.google.com/thumbnail')) {
     return normalizedUrl;
   }
 
-  const idMatch =
-    normalizedUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/) ||
-    normalizedUrl.match(/\/d\/([a-zA-Z0-9_-]+)/) ||
-    normalizedUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  const fileId = extractDriveFileId(normalizedUrl);
 
-  if (idMatch && idMatch[1]) {
-    return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w4000`;
+  if (fileId) {
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w4000`;
   }
 
   return normalizedUrl;
+};
+
+export const extractDriveFileId = (url: string | undefined): string => {
+  if (!url) return '';
+
+  const normalizedUrl = url.trim();
+  if (!normalizedUrl) return '';
+
+  const idMatch =
+    normalizedUrl.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) ||
+    normalizedUrl.match(/\/d\/([a-zA-Z0-9_-]{20,})/) ||
+    normalizedUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) ||
+    normalizedUrl.match(/[-\w]{25,}/);
+
+  return idMatch?.[1] || idMatch?.[0] || '';
+};
+
+export const getImageDebugInfo = (url: string | undefined) => {
+  const rawUrl = String(url || '').trim();
+  const fileId = extractDriveFileId(rawUrl);
+  const normalizedUrl = convertToCORSFreeLink(rawUrl);
+
+  return {
+    rawUrl,
+    normalizedUrl,
+    fileId,
+    isDriveUrl: /drive\.google\.com|googleusercontent\.com/.test(rawUrl),
+    isDataUrl: rawUrl.startsWith('data:'),
+    hasUrl: !!rawUrl
+  };
 };

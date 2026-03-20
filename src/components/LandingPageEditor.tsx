@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Save, LogOut, Layout, Type, Image } from 'lucide-react';
-import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { DataService } from '../services/DriveService';
@@ -13,7 +12,7 @@ interface LandingPageEditorProps {
 
 export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) => {
   const { user, logout } = useAuth();
-  const { showAlert } = useAppDialog();
+  const { showAlert, showConfirm } = useAppDialog();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const [isSaving, setIsSaving] = useState(false);
 
@@ -55,21 +54,19 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
     }
   };
 
-  const handleLogout = () => {
-    toast.warning('Log out now?', {
-      description: 'Your current session will be ended on this device.',
-      action: {
-        label: 'Log out',
-        onClick: () => {
-          logout();
-          onBack();
-        }
-      },
-      cancel: {
-        label: 'Cancel',
-        onClick: () => {}
-      }
+  const handleLogout = async () => {
+    const shouldLogout = await showConfirm('Your current session will be ended on this device.', {
+      title: 'Log out now?',
+      confirmLabel: 'Log out',
+      cancelLabel: 'Cancel'
     });
+
+    if (!shouldLogout) {
+      return;
+    }
+
+    logout();
+    onBack();
   };
 
   return (

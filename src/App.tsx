@@ -63,11 +63,47 @@ const readStoredTheme = () => {
 const SEO_SITE_ORIGIN = 'https://www.dyesabelph.org';
 const SEO_HOME_PATH = '/home';
 const SEO_DEFAULT_IMAGE = `${SEO_SITE_ORIGIN}/icons/social-preview-image.png`;
-const SEO_DEFAULT_DESCRIPTION = 'Empowering communities through sustainable development and education.';
+const SEO_DEFAULT_DESCRIPTION =
+  'Empowering communities through youth environmental advocacy, sustainable development, and education as a non-profit organization in the Philippines, with active programs in Davao City and nearby communities.';
+const SEO_BASE_KEYWORDS = [
+  'Dyesabel Philippines',
+  'Dyesabel PH',
+  'youth environmental advocacy',
+  'non-profit organization in the Philippines',
+  'environmental education Philippines',
+  'community development Philippines',
+  'sustainable development Philippines',
+  'Davao City youth organization',
+  'Davao City environmental advocacy',
+  'non-profit organization in Davao City',
+  'volunteer opportunities Davao City',
+  'eco advocacy Mindanao'
+];
 
 const normalizeSeoPath = (path: string): string => {
   if (!path || path === '/') return SEO_HOME_PATH;
   return path.startsWith('/') ? path : `/${path}`;
+};
+
+const toTitleCaseFromSlug = (value: string): string => {
+  return String(value || '')
+    .split('-')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+    .trim();
+};
+
+const joinSeoKeywords = (...groups: Array<Array<string | undefined | null>>): string => {
+  const unique = Array.from(
+    new Set(
+      groups
+        .flat()
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    )
+  );
+  return unique.join(', ');
 };
 
 const ensureMetaTag = (attribute: 'name' | 'property', value: string): HTMLMetaElement => {
@@ -165,36 +201,65 @@ function AppContent() {
     const organization = APP_CONFIG.organizationName || 'Dyesabel Philippines, Inc.';
 
     const metadata = {
-      title: `${currentPageLabel} | Dyesabel PH Inc.`,
+      title: `${currentPageLabel} - Dyesabel Philippines`,
       description: SEO_DEFAULT_DESCRIPTION,
       canonicalUrl,
       image: SEO_DEFAULT_IMAGE,
+      imageAlt: 'Dyesabel Philippines social preview image',
+      keywords: joinSeoKeywords(SEO_BASE_KEYWORDS),
       robots: 'index,follow',
       ogType: 'website'
     };
 
     if (routeType === 'donate') {
-      metadata.title = `Donate | ${organization}`;
-      metadata.description = 'Support Dyesabel projects focused on youth empowerment and environmental sustainability in the Philippines.';
+      metadata.title = `Donate - Dyesabel Philippines`;
+      metadata.description = 'Support Dyesabel projects for youth environmental advocacy, education, and sustainable community development in Davao City and across the Philippines.';
+      metadata.keywords = joinSeoKeywords(
+        SEO_BASE_KEYWORDS,
+        ['donate to non-profit Philippines', 'donate Davao City', 'support youth advocacy Philippines']
+      );
       return metadata;
     }
 
     if (routeType === 'chapter') {
-      const chapterName = selectedChapter?.name || 'Chapter';
-      const chapterDescription = selectedChapter?.description || `Discover ${chapterName} and its local sustainability programs.`;
-      metadata.title = `${chapterName} Chapter | ${organization}`;
+      const chapterNameFromRoute = toTitleCaseFromSlug(currentRoute.chapterSlug);
+      const chapterName = selectedChapter?.name || chapterNameFromRoute || 'Chapter';
+      const chapterDescription =
+        selectedChapter?.description ||
+        `Explore ${chapterName} Chapter programs on youth environmental advocacy, sustainability education, and community action in the Philippines.`;
+      const chapterLocation = selectedChapter?.location || '';
+      metadata.title = `${chapterName} Chapter - Dyesabel Philippines`;
       metadata.description = chapterDescription;
       metadata.image = selectedChapter?.imageUrl || selectedChapter?.image || selectedChapter?.logo || SEO_DEFAULT_IMAGE;
+      metadata.imageAlt = `${chapterName} Chapter - Dyesabel Philippines`;
+      metadata.keywords = joinSeoKeywords(
+        SEO_BASE_KEYWORDS,
+        [
+          `${chapterName} chapter`,
+          `${chapterName} environmental advocacy`,
+          chapterLocation ? `${chapterLocation} non-profit` : undefined,
+          chapterLocation ? `${chapterLocation} youth organization` : undefined
+        ]
+      );
       metadata.ogType = 'article';
       return metadata;
     }
 
     if (routeType === 'pillar') {
-      const pillarTitle = selectedPillar?.title || 'Pillar';
-      const pillarDescription = selectedPillar?.excerpt || selectedPillar?.description || `Learn about the ${pillarTitle} pillar of Dyesabel.`;
-      metadata.title = `${pillarTitle} | ${organization}`;
+      const pillarTitleFromRoute = toTitleCaseFromSlug(currentRoute.pillarSlug);
+      const pillarTitle = selectedPillar?.title || pillarTitleFromRoute || 'Pillar';
+      const pillarDescription =
+        selectedPillar?.excerpt ||
+        selectedPillar?.description ||
+        `Learn about the ${pillarTitle} pillar of Dyesabel Philippines focused on youth, environment, and sustainable communities.`;
+      metadata.title = `${pillarTitle} - Dyesabel Philippines`;
       metadata.description = pillarDescription;
       metadata.image = selectedPillar?.imageUrl || SEO_DEFAULT_IMAGE;
+      metadata.imageAlt = `${pillarTitle} - Dyesabel Philippines`;
+      metadata.keywords = joinSeoKeywords(
+        SEO_BASE_KEYWORDS,
+        [`${pillarTitle} Dyesabel`, `${pillarTitle} Philippines`, 'youth sustainability programs']
+      );
       metadata.ogType = 'article';
       return metadata;
     }
@@ -204,9 +269,18 @@ function AppContent() {
       return metadata;
     }
 
-    metadata.title = `${organization} | Home`;
+    metadata.title = `${organization} - Youth Environmental Advocacy in Davao City`;
+    metadata.keywords = joinSeoKeywords(
+      SEO_BASE_KEYWORDS,
+      [
+        'Davao City non-profit organization',
+        'Philippines environmental NGO',
+        'youth empowerment Davao City',
+        'community outreach Philippines'
+      ]
+    );
     return metadata;
-  }, [currentPageLabel, currentRoute.type, pathname, selectedChapter, selectedPillar]);
+  }, [currentPageLabel, currentRoute.chapterSlug, currentRoute.pillarSlug, currentRoute.type, pathname, selectedChapter, selectedPillar]);
 
   const currentView: AppView = showDashboard
     ? 'dashboard'
@@ -392,6 +466,7 @@ function AppContent() {
     setCanonicalTag(seoMetadata.canonicalUrl);
 
     setMetaTag('name', 'description', seoMetadata.description);
+    setMetaTag('name', 'keywords', seoMetadata.keywords);
     setMetaTag('name', 'robots', seoMetadata.robots);
 
     setMetaTag('property', 'og:type', seoMetadata.ogType);
@@ -399,6 +474,7 @@ function AppContent() {
     setMetaTag('property', 'og:description', seoMetadata.description);
     setMetaTag('property', 'og:url', seoMetadata.canonicalUrl);
     setMetaTag('property', 'og:image', seoMetadata.image);
+    setMetaTag('property', 'og:image:alt', seoMetadata.imageAlt);
 
     setMetaTag('name', 'twitter:title', seoMetadata.title);
     setMetaTag('name', 'twitter:description', seoMetadata.description);

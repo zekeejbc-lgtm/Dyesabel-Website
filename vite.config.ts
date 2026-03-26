@@ -34,8 +34,8 @@ export default defineConfig(({ mode }) => {
             'icons/maskable-512x512.png'
           ],
           manifest: {
-            name: 'Dyesabel Philippines, Inc.',
-            short_name: 'Dyesabel',
+            name: 'DYESABEL PH Inc.',
+            short_name: 'DYESABEL PH Inc.',
             description: 'Developing the Youth with Environmentally Sustainable Advocacies Building and Empowering Lives Philippines, Inc.',
             id: '/',
             start_url: '/',

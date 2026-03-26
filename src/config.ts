@@ -7,7 +7,7 @@ export const APP_CONFIG = {
   mainApiUrl: readEnv('VITE_MAIN_API_URL'),
   usersApiUrl: readEnv('VITE_USERS_API_URL'),
   donationsApiUrl: readEnv('VITE_DONATIONS_API_URL'),
-  organizationName: readEnv('VITE_ORGANIZATION_NAME') || 'Dyesabel Philippines, Inc.',
+  organizationName: readEnv('VITE_ORGANIZATION_NAME') || 'DYESABEL PH Inc.',
   supportEmail: readEnv('VITE_SUPPORT_EMAIL') || 'projectdyesabel@gmail.com',
   supportPhone: readEnv('VITE_SUPPORT_PHONE'),
   supportLocation: readEnv('VITE_SUPPORT_LOCATION') || 'Davao, Philippines',

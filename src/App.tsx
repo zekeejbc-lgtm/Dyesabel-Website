@@ -198,7 +198,7 @@ function AppContent() {
     const routePath = normalizeSeoPath(pathname || SEO_HOME_PATH);
     const canonicalUrl = `${SEO_SITE_ORIGIN}${routePath}`;
     const routeType = currentRoute.type;
-    const organization = APP_CONFIG.organizationName || 'Dyesabel Philippines, Inc.';
+    const organization = APP_CONFIG.organizationName || 'DYESABEL PH Inc.';
 
     const metadata = {
       title: `${currentPageLabel} - Dyesabel Philippines`,

@@ -50,7 +50,7 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
                   <div className="absolute inset-0 bg-gradient-to-tr from-primary-cyan/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   <img 
                       src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}&background=random`} 
-                      alt={`${chapter.name} Logo`} 
+                      alt={`${chapter.name} chapter logo`} 
                       loading="lazy"
                       decoding="async"
                       referrerPolicy="no-referrer"

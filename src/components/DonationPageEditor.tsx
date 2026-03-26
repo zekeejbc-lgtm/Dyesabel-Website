@@ -539,7 +539,7 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
                         {(localQrPreviews[method.id] || method.qrImageUrl) ? (
                           <img
                             src={localQrPreviews[method.id] || convertToCORSFreeLink(method.qrImageUrl)}
-                            alt={method.name}
+                            alt={`${method.name} donation QR code preview`}
                             referrerPolicy="no-referrer"
                             onError={(event) => {
                               console.error('[DonationPageEditor] QR preview image failed to load', {

@@ -263,7 +263,7 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
                           <div className="relative w-24 h-24 mx-auto rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
                             <img
                               src={partner.logo}
-                              alt={partner.name}
+                              alt={`${partner.name} logo preview`}
                               className="w-full h-full object-cover"
                             />
                             <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">

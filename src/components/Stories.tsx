@@ -77,7 +77,7 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, 
               <div className="relative h-48 md:h-36 lg:h-48 overflow-hidden">
                 <img 
                   src={pillar.imageUrl} 
-                  alt={pillar.title} 
+                  alt={`${pillar.title} pillar image`} 
                   loading="lazy"
                   decoding="async"
                   className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-1000"

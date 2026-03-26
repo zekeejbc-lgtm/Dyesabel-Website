@@ -25,7 +25,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
             <img
               src={APP_CONFIG.logoUrl}
               className="relative z-10 h-20 w-20 rounded-full object-contain drop-shadow-md"
-              alt="Dyesabel Logo"
+              alt="Dyesabel Philippines logo"
             />
           </div>
         </div>

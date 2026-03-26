@@ -441,7 +441,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                         <div className="relative w-32 h-32 rounded-full overflow-hidden bg-gray-100 dark:bg-gray-800">
                           <img
                             src={convertToCORSFreeLink(founder.imageUrl) || getAvatarUrl(founder.name)}
-                            alt={founder.name}
+                            alt={`Portrait preview of ${founder.name}`}
                             referrerPolicy="no-referrer"
                             onError={(event) => {
                               console.error('[FoundersEditor] Founder preview image failed to load', {
@@ -561,7 +561,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                             {officer.imageUrl ? (
                               <img
                                 src={convertToCORSFreeLink(officer.imageUrl) || getAvatarUrl(officer.name)}
-                                alt={officer.name}
+                                alt={`Portrait preview of ${officer.name}`}
                                 referrerPolicy="no-referrer"
                                 onError={(event) => {
                                   console.error('[FoundersEditor] Executive preview image failed to load', {

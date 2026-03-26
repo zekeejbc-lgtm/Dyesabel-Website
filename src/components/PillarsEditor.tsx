@@ -215,7 +215,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                   <div className="relative mx-auto aspect-[3/2] w-full max-w-3xl max-h-[360px] rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                     <img
                       src={currentPillar.imageUrl}
-                      alt={currentPillar.title}
+                      alt={`${currentPillar.title || 'Pillar'} cover image preview`}
                       className="w-full h-full object-contain"
                     />
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
@@ -362,7 +362,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                             <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                               <img
                                 src={activity.imageUrl}
-                                alt={activity.title}
+                                alt={`${activity.title || 'Pillar activity'} image preview`}
                                 className="w-full h-full object-cover"
                               />
                               <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">

@@ -143,7 +143,7 @@ export const Partners: React.FC<PartnersProps> = ({ partners = [], isLoading = f
                       className="group flex flex-col items-center justify-center p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-all duration-300 border border-transparent hover:border-primary-cyan/30 cursor-pointer"
                     >
                       <div className="w-16 h-16 rounded-full mb-3 shadow-md group-hover:scale-110 transition-transform duration-300 overflow-hidden bg-white/20">
-                        <img src={partner.logo} alt={partner.name} className="w-full h-full object-cover" />
+                        <img src={partner.logo} alt={`${partner.name} logo`} className="w-full h-full object-cover" />
                       </div>
                       <span className="text-sm font-semibold text-center text-ocean-deep/80 dark:text-gray-200 group-hover:text-primary-blue dark:group-hover:text-primary-cyan transition-colors leading-tight">
                         {partner.name}

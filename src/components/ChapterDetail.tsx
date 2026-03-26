@@ -109,7 +109,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
         <div className="absolute inset-0 z-0">
           <img 
             src={convertToCORSFreeLink(chapter.image || chapter.imageUrl) || 'https://picsum.photos/1200/600'} 
-            alt={chapter.name} 
+            alt={`${chapter.name} chapter cover photo`} 
             fetchPriority="high"
             decoding="async"
             referrerPolicy="no-referrer"
@@ -130,7 +130,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
           <div className="w-32 h-32 md:w-40 md:h-40 rounded-full border-4 border-white/20 bg-white/10 backdrop-blur-md shadow-2xl p-2 flex-shrink-0 overflow-hidden">
             <img 
               src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}`} 
-              alt={chapter.name} 
+              alt={`${chapter.name} chapter logo`} 
               decoding="async"
               referrerPolicy="no-referrer"
               onError={(event) => {
@@ -192,7 +192,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                           {activity.imageUrl ? (
                             <img
                               src={convertToCORSFreeLink(activity.imageUrl)}
-                              alt="Activity"
+                              alt={`${activity.title || 'Chapter activity'} in ${chapter.name}`}
                               loading="lazy"
                               decoding="async"
                               referrerPolicy="no-referrer"
@@ -314,7 +314,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                 <div className="flex items-center gap-4 mb-4">
                   <img
                     src={convertToCORSFreeLink(chapter.headImageUrl) || `https://ui-avatars.com/api/?name=${chapter.headName || 'Head'}`}
-                    alt="Chapter Head"
+                    alt={`Portrait of ${chapter.headName || 'chapter head'} of ${chapter.name}`}
                     loading="lazy"
                     decoding="async"
                     referrerPolicy="no-referrer"
@@ -409,7 +409,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
               {selectedActivity.imageUrl ? (
                 <img 
                   src={convertToCORSFreeLink(selectedActivity.imageUrl)} 
-                  alt={selectedActivity.title} 
+                  alt={`${selectedActivity.title || 'Chapter activity'} full-size image in ${chapter.name}`} 
                   decoding="async"
                   referrerPolicy="no-referrer"
                   onError={(event) => {

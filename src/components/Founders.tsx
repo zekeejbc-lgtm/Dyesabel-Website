@@ -69,7 +69,7 @@ export const Founders: React.FC<FoundersProps> = ({
                   <div className="absolute inset-0 bg-gradient-to-tr from-primary-cyan to-primary-blue rounded-full blur-md opacity-50 group-hover:opacity-80 transition-opacity duration-500 animate-pulse-slow" />
                   <img
                     src={convertToCORSFreeLink(founder.imageUrl) || getAvatarUrl(founder.name)}
-                    alt={founder.name}
+                    alt={`Portrait of ${founder.name}`}
                     referrerPolicy="no-referrer"
                     onError={(event) => {
                       console.error('[Founders] Founder image failed to load', {
@@ -130,7 +130,7 @@ export const Founders: React.FC<FoundersProps> = ({
                       >
                         <img
                           src={convertToCORSFreeLink(executive.imageUrl) || getAvatarUrl(executive.name)}
-                          alt={executive.name}
+                          alt={`Portrait of ${executive.name}`}
                           referrerPolicy="no-referrer"
                           onError={(event) => {
                             console.error('[Founders] Executive image failed to load', {

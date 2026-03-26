@@ -202,7 +202,7 @@ export const LandingPageEditor: React.FC<LandingPageEditorProps> = ({ onBack }) 
                 <div className="aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-white/5">
                   <img 
                     src={pageData.featuredImageUrl} 
-                    alt="Featured" 
+                    alt="Landing page featured image preview" 
                     className="w-full h-full object-cover"
                   />
                 </div>

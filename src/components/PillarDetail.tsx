@@ -40,7 +40,7 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
         <div className="absolute inset-0 z-0">
           <img 
             src={pillar.imageUrl} 
-            alt={pillar.title} 
+            alt={`${pillar.title} pillar cover image`} 
             fetchPriority="high"
             decoding="async"
             className="w-full h-full object-cover"
@@ -91,7 +91,7 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
                       <div className="w-full md:w-1/3 h-48 md:h-auto relative overflow-hidden">
                          <img 
                             src={activity.imageUrl} 
-                            alt={activity.title}
+                           alt={`${activity.title || 'Pillar activity'} image for ${pillar.title}`}
                             loading="lazy"
                             decoding="async"
                             className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"

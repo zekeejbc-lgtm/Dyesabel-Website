@@ -88,7 +88,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
             <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center">
               <img
                 src={APP_CONFIG.logoUrl}
-                alt="Dyesabel Logo"
+                alt="Dyesabel Philippines logo"
                 className="h-full w-full rounded-full object-contain drop-shadow-md"
               />
             </div>

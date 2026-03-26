@@ -481,7 +481,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                          <div className="flex items-start justify-between mb-4 w-full">
                             <div className="w-14 h-14 rounded-full bg-black/30 border border-white/20 flex items-center justify-center overflow-hidden">
                               {chapter.logo ? (
-                                <img src={chapter.logo} alt={chapter.name} className="w-full h-full object-cover" />
+                                <img src={chapter.logo} alt={`${chapter.name} chapter logo`} className="w-full h-full object-cover" />
                               ) : (
                                 <Globe className="text-white/40" size={24} />
                               )}
@@ -627,7 +627,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                             {/* Preview */}
                             <div className="w-20 h-20 rounded-lg bg-black/20 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                                {chapterFormData.logo ? (
-                                 <img src={chapterFormData.logo} alt="Logo Preview" className="w-full h-full object-cover" />
+                                 <img src={chapterFormData.logo} alt={`${chapterFormData.name || chapterFormData.title || 'Chapter'} logo preview`} className="w-full h-full object-cover" />
                                ) : (
                                  <ImageIcon className="text-white/20" />
                                )}
@@ -729,7 +729,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                                       {/* ✅ FIX 2: Profile Picture Preview */}
                                       <img 
                                         src={`https://ui-avatars.com/api/?name=${user.username}&background=random&color=fff`} 
-                                        alt={user.username}
+                                        alt={`Profile avatar for ${user.username}`}
                                         className="w-8 h-8 rounded-full border border-white/20"
                                       />
                                       <span className="text-white font-medium">{user.username}</span>
@@ -807,7 +807,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                                     <div className="flex items-center gap-3">
                                       <img
                                         src={`https://ui-avatars.com/api/?name=${user.username}&background=random&color=fff`}
-                                        alt={user.username}
+                                        alt={`Profile avatar for ${user.username}`}
                                         className="w-8 h-8 rounded-full border border-white/20"
                                       />
                                       <span className="text-white font-medium">{user.username}</span>

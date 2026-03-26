@@ -280,7 +280,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                 {/* Cover Image */}
                 <div className={`relative aspect-video rounded-xl overflow-hidden bg-gray-100 dark:bg-black/20 border-2 border-dashed border-gray-300 dark:border-gray-700 group ${!isEditing ? 'opacity-90' : ''}`}>
                   {chapterData.imageUrl ? (
-                    <img src={convertToCORSFreeLink(chapterData.imageUrl)} alt="Cover" className="w-full h-full object-cover" />
+                    <img src={convertToCORSFreeLink(chapterData.imageUrl)} alt={`${chapterData.title || 'Chapter'} cover image`} className="w-full h-full object-cover" />
                   ) : (
                     <div className="absolute inset-0 flex items-center justify-center text-gray-400">No Cover Image</div>
                   )}
@@ -376,7 +376,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
                       {/* Activity Image */}
                       <div className="w-full md:w-32 h-32 bg-gray-200 dark:bg-black/20 rounded-lg overflow-hidden relative group flex-shrink-0">
                         {activity.imageUrl ? (
-                          <img src={convertToCORSFreeLink(activity.imageUrl)} className="w-full h-full object-cover" alt="Activity" />
+                          <img src={convertToCORSFreeLink(activity.imageUrl)} className="w-full h-full object-cover" alt={`${activity.title || `Chapter activity ${index + 1}`} image for ${chapterData.title || 'this chapter'}`} />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">No Image</div>
                         )}
@@ -432,7 +432,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Logo</h2>
               <div className="flex flex-col items-center">
                 <div className="w-32 h-32 rounded-full border-4 border-gray-100 dark:border-white/10 overflow-hidden relative group mb-4">
-                  <img src={convertToCORSFreeLink(chapterData.logoUrl) || `https://ui-avatars.com/api/?name=${chapterData.title}&background=random`} alt="Logo" className="w-full h-full object-cover" />
+                  <img src={convertToCORSFreeLink(chapterData.logoUrl) || `https://ui-avatars.com/api/?name=${chapterData.title}&background=random`} alt={`${chapterData.title || 'Chapter'} logo`} className="w-full h-full object-cover" />
                   {isEditing && canEditChapterInfo && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity text-white">
                       <Upload size={24} />
@@ -486,7 +486,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
               </h2>
               <div className="flex items-center gap-4 mb-4">
                 <div className="w-16 h-16 rounded-full bg-gray-200 dark:bg-white/10 overflow-hidden relative group flex-shrink-0">
-                  <img src={convertToCORSFreeLink(chapterData.headImageUrl) || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" alt="Leader" />
+                  <img src={convertToCORSFreeLink(chapterData.headImageUrl) || `https://ui-avatars.com/api/?name=${chapterData.headName || 'Head'}`} className="w-full h-full object-cover" alt={`Portrait of ${chapterData.headName || 'chapter leader'}${chapterData.title ? ` for ${chapterData.title}` : ''}`} />
                   {isEditing && canEditLeadershipAndCta && (
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 cursor-pointer transition-opacity">
                       <Upload size={16} className="text-white" />

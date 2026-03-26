@@ -10,6 +10,7 @@ const PREVIEW_HOST = '127.0.0.1';
 const PREFERRED_PREVIEW_PORT = Number(process.env.PRERENDER_PORT || 4173);
 const BUILD_DIR = path.resolve(process.cwd(), 'build');
 const SITEMAP_PATH = path.resolve(process.cwd(), 'public', 'sitemap.xml');
+const ALLOW_SKIP_ON_MISSING_BROWSER = process.env.PRERENDER_STRICT !== 'true';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -82,6 +83,14 @@ const findAvailablePort = async (startingPort) => {
   throw new Error(`Unable to find an available preview port near ${startingPort}.`);
 };
 
+const isMissingPlaywrightBrowserError = (error) => {
+  const message = String(error?.message || error || '');
+  return (
+    message.includes("Executable doesn't exist") ||
+    message.includes('Please run the following command to download new browsers')
+  );
+};
+
 const prerenderPath = async (page, baseUrl, routePath) => {
   const targetUrl = `${baseUrl}${routePath}`;
   await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -125,7 +134,18 @@ const run = async () => {
   try {
     await waitForPreview(baseUrl);
 
-    const browser = await chromium.launch({ headless: true });
+    let browser;
+    try {
+      browser = await chromium.launch({ headless: true });
+    } catch (error) {
+      if (ALLOW_SKIP_ON_MISSING_BROWSER && isMissingPlaywrightBrowserError(error)) {
+        console.warn('[prerender] Playwright browser is not installed in this environment. Skipping prerender.');
+        console.warn('[prerender] Set PRERENDER_STRICT=true to fail the build when prerender cannot run.');
+        return;
+      }
+      throw error;
+    }
+
     const page = await browser.newPage({
       viewport: { width: 1366, height: 768 },
       userAgent: 'Mozilla/5.0 (compatible; DyesabelPrerenderBot/1.0; +https://www.dyesabelph.org)'

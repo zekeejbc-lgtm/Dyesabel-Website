@@ -60,6 +60,41 @@ const readStoredTheme = () => {
   return window.localStorage.getItem('theme') || 'dark';
 };
 
+const SEO_SITE_ORIGIN = 'https://www.dyesabelph.org';
+const SEO_HOME_PATH = '/home';
+const SEO_DEFAULT_IMAGE = `${SEO_SITE_ORIGIN}/icons/social-preview-image.png`;
+const SEO_DEFAULT_DESCRIPTION = 'Empowering communities through sustainable development and education.';
+
+const normalizeSeoPath = (path: string): string => {
+  if (!path || path === '/') return SEO_HOME_PATH;
+  return path.startsWith('/') ? path : `/${path}`;
+};
+
+const ensureMetaTag = (attribute: 'name' | 'property', value: string): HTMLMetaElement => {
+  const selector = `meta[${attribute}="${value}"]`;
+  const existing = document.head.querySelector(selector);
+  if (existing instanceof HTMLMetaElement) return existing;
+  const tag = document.createElement('meta');
+  tag.setAttribute(attribute, value);
+  document.head.appendChild(tag);
+  return tag;
+};
+
+const setMetaTag = (attribute: 'name' | 'property', value: string, content: string) => {
+  ensureMetaTag(attribute, value).setAttribute('content', content);
+};
+
+const setCanonicalTag = (href: string) => {
+  const selector = 'link[rel="canonical"]';
+  const existing = document.head.querySelector(selector);
+  const link = existing instanceof HTMLLinkElement ? existing : document.createElement('link');
+  link.setAttribute('rel', 'canonical');
+  link.setAttribute('href', href);
+  if (!(existing instanceof HTMLLinkElement)) {
+    document.head.appendChild(link);
+  }
+};
+
 function AppContent() {
   const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -122,7 +157,56 @@ function AppContent() {
     if (selectedPillar) return selectedPillar.title;
     return 'Home';
   }, [isDonatePageOpen, isLoginModalOpen, selectedChapter, selectedPillar, showDashboard, user]);
-  const currentDocumentTitle = `${currentPageLabel} | Dyesabel PH Inc.`;
+
+  const seoMetadata = useMemo(() => {
+    const routePath = normalizeSeoPath(pathname || SEO_HOME_PATH);
+    const canonicalUrl = `${SEO_SITE_ORIGIN}${routePath}`;
+    const routeType = currentRoute.type;
+    const organization = APP_CONFIG.organizationName || 'Dyesabel Philippines, Inc.';
+
+    const metadata = {
+      title: `${currentPageLabel} | Dyesabel PH Inc.`,
+      description: SEO_DEFAULT_DESCRIPTION,
+      canonicalUrl,
+      image: SEO_DEFAULT_IMAGE,
+      robots: 'index,follow',
+      ogType: 'website'
+    };
+
+    if (routeType === 'donate') {
+      metadata.title = `Donate | ${organization}`;
+      metadata.description = 'Support Dyesabel projects focused on youth empowerment and environmental sustainability in the Philippines.';
+      return metadata;
+    }
+
+    if (routeType === 'chapter') {
+      const chapterName = selectedChapter?.name || 'Chapter';
+      const chapterDescription = selectedChapter?.description || `Discover ${chapterName} and its local sustainability programs.`;
+      metadata.title = `${chapterName} Chapter | ${organization}`;
+      metadata.description = chapterDescription;
+      metadata.image = selectedChapter?.imageUrl || selectedChapter?.image || selectedChapter?.logo || SEO_DEFAULT_IMAGE;
+      metadata.ogType = 'article';
+      return metadata;
+    }
+
+    if (routeType === 'pillar') {
+      const pillarTitle = selectedPillar?.title || 'Pillar';
+      const pillarDescription = selectedPillar?.excerpt || selectedPillar?.description || `Learn about the ${pillarTitle} pillar of Dyesabel.`;
+      metadata.title = `${pillarTitle} | ${organization}`;
+      metadata.description = pillarDescription;
+      metadata.image = selectedPillar?.imageUrl || SEO_DEFAULT_IMAGE;
+      metadata.ogType = 'article';
+      return metadata;
+    }
+
+    if (routeType === 'dashboard' || routeType === 'login') {
+      metadata.robots = 'noindex,nofollow';
+      return metadata;
+    }
+
+    metadata.title = `${organization} | Home`;
+    return metadata;
+  }, [currentPageLabel, currentRoute.type, pathname, selectedChapter, selectedPillar]);
 
   const currentView: AppView = showDashboard
     ? 'dashboard'
@@ -304,8 +388,22 @@ function AppContent() {
   }, [theme]);
 
   useEffect(() => {
-    document.title = currentDocumentTitle;
-  }, [currentDocumentTitle]);
+    document.title = seoMetadata.title;
+    setCanonicalTag(seoMetadata.canonicalUrl);
+
+    setMetaTag('name', 'description', seoMetadata.description);
+    setMetaTag('name', 'robots', seoMetadata.robots);
+
+    setMetaTag('property', 'og:type', seoMetadata.ogType);
+    setMetaTag('property', 'og:title', seoMetadata.title);
+    setMetaTag('property', 'og:description', seoMetadata.description);
+    setMetaTag('property', 'og:url', seoMetadata.canonicalUrl);
+    setMetaTag('property', 'og:image', seoMetadata.image);
+
+    setMetaTag('name', 'twitter:title', seoMetadata.title);
+    setMetaTag('name', 'twitter:description', seoMetadata.description);
+    setMetaTag('name', 'twitter:image', seoMetadata.image);
+  }, [seoMetadata]);
 
   useEffect(() => {
     if (isLoading || hasRestoredAppState.current) return;

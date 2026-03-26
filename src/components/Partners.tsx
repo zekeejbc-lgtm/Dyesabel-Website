@@ -61,9 +61,9 @@ export const Partners: React.FC<PartnersProps> = ({ partners = [], isLoading = f
         
         {/* Header */}
         <div className="text-center mb-16 reveal flex flex-col items-center">
-           <h3 className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">
+           <p className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">
              Together We Are Stronger
-           </h3>
+           </p>
            <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-ocean-deep dark:text-white drop-shadow-lg mb-6">
             Our Partners
           </h2>

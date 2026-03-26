@@ -15,7 +15,7 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
     <section id="chapters" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-16 reveal">
-           <h3 className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">Our Network</h3>
+            <p className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">Our Network</p>
            <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-ocean-deep dark:text-white drop-shadow-lg mb-6">
             Our Chapters
           </h2>

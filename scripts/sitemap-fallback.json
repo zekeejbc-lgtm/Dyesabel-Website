@@ -1,0 +1,54 @@
+{
+  "chapters": [
+    {
+      "id": "tagum_city_chapter_2026-6aki",
+      "name": "Tagum City"
+    },
+    {
+      "id": "nabunturan_chapter_2026-s61a",
+      "name": "Nabunturan"
+    },
+    {
+      "id": "maco_chapter_2026-d8p5",
+      "name": "Maco"
+    },
+    {
+      "id": "mabini_chapter_2026-0pgo",
+      "name": "Mabini"
+    },
+    {
+      "id": "new_corella_chapter_2026-b0y9",
+      "name": "New Corella"
+    },
+    {
+      "id": "mati_chapter_2026-m2y9",
+      "name": "Mati"
+    },
+    {
+      "id": "panabo_chapter_chapter_2026-yc5r",
+      "name": "Panabo Chapter"
+    }
+  ],
+  "pillars": [
+    {
+      "id": "1",
+      "title": "Research and Education"
+    },
+    {
+      "id": "2",
+      "title": "Good Governance"
+    },
+    {
+      "id": "3",
+      "title": "Sustainable Livelihood"
+    },
+    {
+      "id": "4",
+      "title": "Community Health"
+    },
+    {
+      "id": "5",
+      "title": "Culture and Arts"
+    }
+  ]
+}

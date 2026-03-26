@@ -63,7 +63,7 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, 
     <section id="pillars" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
         <div className="text-center mb-20 reveal">
-          <h3 className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">What Drives Us</h3>
+          <p className="text-sm font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-[0.3em] mb-4">What Drives Us</p>
           <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-ocean-deep dark:text-white drop-shadow-lg">Our Core Pillars</h2>
         </div>
 

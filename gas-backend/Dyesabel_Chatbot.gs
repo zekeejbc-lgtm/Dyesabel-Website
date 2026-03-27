@@ -1,10 +1,21 @@
 var CHATBOT_DEFAULT_SUPPORT_EMAIL = 'projectdyesabel@gmail.com';
 var CHATBOT_DEFAULT_MODEL = 'gemini-2.5-flash';
 var CHATBOT_NO_DATA_TOKEN = 'NO_DATA';
+var CHATBOT_EXHAUSTED_TOKEN = 'MODEL_EXHAUSTED';
+var CHATBOT_COOLDOWN_MIN_MS = 3000;
+var CHATBOT_COOLDOWN_MAX_MS = 5000;
 var CHATBOT_DEFAULT_PERSONA_NAME = 'Ka-Dyesa';
 var CHATBOT_DEFAULT_PERSONA_ROLE = 'official digital guide of DYESABEL PH Inc.';
 var CHATBOT_DEFAULT_PERSONA_TONE = 'warm, respectful, youth-centered, and mission-driven';
 var CHATBOT_DEFAULT_PERSONA_STYLE = 'clear, concise, encouraging, and practical';
+var CHATBOT_TRUSTED_SOURCE_HOSTS = [
+	'who.int',
+	'unep.org',
+	'oecd.org',
+	'worldbank.org',
+	'gov.ph',
+	'pubmed.ncbi.nlm.nih.gov'
+];
 
 var CHATBOT_CONFIG = {
 	model: 'gemini-2.5-flash',
@@ -13,7 +24,8 @@ var CHATBOT_CONFIG = {
 	dataSpreadsheetIdProperty: 'DATA_SPREADSHEET_ID',
 	unknownLogSpreadsheetIdProperty: 'CHATBOT_UNKNOWN_LOG_SPREADSHEET_ID',
 	unknownLogSheetName: 'UnknownQuestions',
-	unknownCuratedAnswerColumn: 'CuratedAnswer'
+	unknownCuratedAnswerColumn: 'CuratedAnswer',
+	ticketSheetName: 'Tickets'
 };
 
 var CHATBOT_LOCAL_KNOWLEDGE = [
@@ -64,11 +76,29 @@ function doPost(e) {
 	try {
 		var data = chatbotParseJsonBody_(e);
 		var action = String(data.action || 'chatbotAsk');
-		if (action !== 'chatbotAsk') {
+		if (
+			action !== 'chatbotAsk' &&
+			action !== 'chatbotCreateTicket' &&
+			action !== 'chatbotDiagnose' &&
+			action !== 'chatbotForceTicketAuth' &&
+			action !== 'chatbotForceAuth'
+		) {
 			throw new Error('Unknown action: ' + action);
 		}
 
-		var result = chatbotAsk_(data);
+		var result;
+		if (action === 'chatbotCreateTicket') {
+			result = chatbotCreateTicket_(data);
+		} else if (action === 'chatbotDiagnose') {
+			result = chatbotDiagnose_(data);
+		} else if (action === 'chatbotForceTicketAuth') {
+			result = chatbotForceTicketAuth_(data);
+		} else if (action === 'chatbotForceAuth') {
+			result = chatbotForceAuth_(data);
+		} else {
+			result = chatbotAsk_(data);
+		}
+
 		return chatbotCreateResponse_(true, null, result);
 	} catch (error) {
 		return chatbotCreateResponse_(false, error && error.message ? error.message : String(error));
@@ -83,11 +113,23 @@ function chatbotAsk_(data) {
 		context.supportEmail ||
 		chatbotGetScriptProperty_('SUPPORT_EMAIL', CHATBOT_DEFAULT_SUPPORT_EMAIL)
 	).trim() || CHATBOT_DEFAULT_SUPPORT_EMAIL;
+	var clientId = chatbotExtractClientId_(data, context);
 
 	if (!question) {
 		return {
 			source: 'fallback',
 			answer: 'Please type your inquiry. If you need direct help, email us at ' + supportEmail + '.',
+			confidence: 1,
+			noData: false,
+			usedGemini: false
+		};
+	}
+
+	var cooldownGate = chatbotConsumeCooldownWindow_(clientId);
+	if (cooldownGate.blocked) {
+		return {
+			source: 'fallback',
+			answer: 'Please wait about ' + cooldownGate.waitSeconds + ' second(s) before sending another message.',
 			confidence: 1,
 			noData: false,
 			usedGemini: false
@@ -163,8 +205,44 @@ function chatbotAsk_(data) {
 
 	var history = chatbotNormalizeHistory_(data.history);
 	var orgContext = chatbotBuildOrgContext_(context, supportEmail, localMatch);
+	var wantsAdvocacyWebStats = chatbotIsRealtimeAdvocacyIntent_(question);
+
+	if (wantsAdvocacyWebStats) {
+		var webGrounded = chatbotAskGeminiWithWebGrounding_(question, history, orgContext);
+		if (webGrounded && webGrounded.exhausted) {
+			return {
+				source: 'fallback',
+				answer: chatbotBuildAiExhaustedMessage_(supportEmail),
+				confidence: 1,
+				matchedIntent: localMatch ? localMatch.id : 'advocacy-web-stats',
+				noData: true,
+				usedGemini: false
+			};
+		}
+		if (webGrounded && webGrounded.answer) {
+			return {
+				source: 'web-grounded',
+				answer: webGrounded.answer,
+				sources: webGrounded.sources,
+				confidence: 0.82,
+				matchedIntent: localMatch ? localMatch.id : 'advocacy-web-stats',
+				noData: false,
+				usedGemini: true
+			};
+		}
+	}
 
 	var groundedAnswer = chatbotAskGemini_(question, history, orgContext, true);
+	if (groundedAnswer === CHATBOT_EXHAUSTED_TOKEN) {
+		return {
+			source: 'fallback',
+			answer: chatbotBuildAiExhaustedMessage_(supportEmail),
+			confidence: 1,
+			matchedIntent: localMatch ? localMatch.id : '',
+			noData: true,
+			usedGemini: false
+		};
+	}
 	if (groundedAnswer && groundedAnswer !== CHATBOT_NO_DATA_TOKEN) {
 		return {
 			source: 'hybrid-gemini',
@@ -177,6 +255,16 @@ function chatbotAsk_(data) {
 	}
 
 	var generalAnswer = chatbotAskGemini_(question, history, orgContext, false);
+	if (generalAnswer === CHATBOT_EXHAUSTED_TOKEN) {
+		return {
+			source: 'fallback',
+			answer: chatbotBuildAiExhaustedMessage_(supportEmail),
+			confidence: 1,
+			matchedIntent: localMatch ? localMatch.id : '',
+			noData: true,
+			usedGemini: false
+		};
+	}
 	if (generalAnswer && generalAnswer !== CHATBOT_NO_DATA_TOKEN) {
 		return {
 			source: 'gemini',
@@ -719,6 +807,266 @@ function chatbotScoreKeywords_(normalizedQuestion, keywords) {
 	return Math.min(1, 0.55 + coverage + boost);
 }
 
+function chatbotIsRealtimeAdvocacyIntent_(question) {
+	var normalized = chatbotNormalizeText_(question);
+	if (!normalized) return false;
+
+	var keywords = [
+		'plastic',
+		'plastics',
+		'microplastic',
+		'microplastics',
+		'waste',
+		'pollution',
+		'marine litter',
+		'ocean',
+		'river',
+		'water quality',
+		'water pollution',
+		'chemical',
+		'chemicals',
+		'bpa',
+		'phthalate',
+		'pfas',
+		'landfill',
+		'recycling',
+		'environmental data',
+		'environmental statistics',
+		'latest data',
+		'latest stats',
+		'real time',
+		'current data'
+	];
+
+	return chatbotIncludesAnyKeyword_(normalized, keywords);
+}
+
+function chatbotAskGeminiWithWebGrounding_(question, history, orgContext) {
+	var apiKeys = chatbotGetGeminiApiKeys_();
+	if (!apiKeys.length) return null;
+
+	var model = String(chatbotGetScriptProperty_('GEMINI_MODEL', CHATBOT_CONFIG.model || CHATBOT_DEFAULT_MODEL)).trim() || CHATBOT_CONFIG.model || CHATBOT_DEFAULT_MODEL;
+	var personaInstruction = chatbotBuildPersonaInstruction_();
+	var systemInstruction = [
+		personaInstruction,
+		'You are the official chatbot assistant for DYESABEL PH Inc.',
+		'Use live web grounding to answer advocacy data requests.',
+		'Only state facts supported by retrieved web sources. If sources are missing or unclear, output exactly NO_DATA.',
+		'Prefer reputable institutions (UNEP, WHO, UNICEF, World Bank, OECD, peer-reviewed journals, government agencies).',
+		'Keep answer practical, concise, and easy to read.'
+	].join(' ');
+
+	var contents = [];
+	if (history && history.length) {
+		for (var i = 0; i < history.length; i += 1) {
+			var item = history[i] || {};
+			var role = String(item.role || 'user') === 'assistant' ? 'model' : 'user';
+			var text = String(item.content || '').trim();
+			if (!text) continue;
+			contents.push({ role: role, parts: [{ text: text }] });
+		}
+	}
+
+	var userPrompt = [
+		'User question:',
+		question,
+		'',
+		'Organization context JSON:',
+		JSON.stringify(orgContext),
+		'',
+		'Response requirements:',
+		'- Provide 3 to 5 concise bullets with latest available figures relevant to the question.',
+		'- Include year or timeframe in each bullet whenever available.',
+		'- Do not fabricate numbers or dates.',
+		'- End your answer with a Sources section and include direct URLs only from trusted institutions when available.',
+		'- If you cannot verify from grounded web results, output exactly NO_DATA.'
+	].join('\n');
+
+	contents.push({ role: 'user', parts: [{ text: userPrompt }] });
+
+	var payload = {
+		systemInstruction: {
+			parts: [{ text: systemInstruction }]
+		},
+		tools: [{ google_search: {} }],
+		contents: contents,
+		generationConfig: {
+			temperature: 0.1,
+			topP: 0.9,
+			maxOutputTokens: 500
+		}
+	};
+
+	for (var keyIndex = 0; keyIndex < apiKeys.length; keyIndex += 1) {
+		var apiKey = apiKeys[keyIndex];
+		var endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(apiKey);
+
+		try {
+			var response = UrlFetchApp.fetch(endpoint, {
+				method: 'post',
+				contentType: 'application/json',
+				payload: JSON.stringify(payload),
+				muteHttpExceptions: true
+			});
+
+			var statusCode = response.getResponseCode();
+			var responseText = response.getContentText() || '';
+
+			if (statusCode < 200 || statusCode >= 300) {
+				var shouldRotate = chatbotShouldRotateGeminiKey_(statusCode, responseText);
+				if (shouldRotate && keyIndex < apiKeys.length - 1) {
+					Logger.log('Gemini web-grounded key exhausted or rate-limited. Trying next key. HTTP=' + statusCode);
+					continue;
+				}
+
+				if (shouldRotate) {
+					return { exhausted: true };
+				}
+
+				Logger.log('Gemini web-grounded request failed. HTTP=' + statusCode + ', body=' + responseText);
+				return null;
+			}
+
+			var parsed = JSON.parse(responseText || '{}');
+			var answer = chatbotExtractGeminiAnswer_(parsed);
+			if (!answer) {
+				if (keyIndex < apiKeys.length - 1) continue;
+				return null;
+			}
+
+			if (answer === CHATBOT_NO_DATA_TOKEN || chatbotContainsNoDataSignal_(answer)) {
+				return null;
+			}
+
+			var sources = chatbotExtractGroundingSources_(parsed, answer);
+			if (!sources.length) {
+				if (keyIndex < apiKeys.length - 1) continue;
+				return null;
+			}
+
+			return {
+				answer: answer,
+				sources: sources
+			};
+		} catch (error) {
+			if (keyIndex < apiKeys.length - 1) {
+				Logger.log('Gemini web-grounded request error on current key. Trying next key.');
+				continue;
+			}
+			Logger.log('Gemini web-grounded request error: ' + (error && error.message ? error.message : String(error)));
+			return null;
+		}
+	}
+
+	return null;
+}
+
+function chatbotExtractGroundingSources_(parsedResponse, answerText) {
+	var candidates = (parsedResponse && parsedResponse.candidates) || [];
+	if (!candidates.length) {
+		return chatbotExtractTrustedSourcesFromAnswerText_(answerText);
+	}
+
+	var groundingMetadata = (candidates[0] || {}).groundingMetadata || {};
+	var groundingChunks = groundingMetadata.groundingChunks || [];
+	var citations = (((candidates[0] || {}).citationMetadata || {}).citations) || [];
+	var sources = [];
+	var seen = {};
+
+	for (var i = 0; i < groundingChunks.length; i += 1) {
+		var chunk = groundingChunks[i] || {};
+		var web = chunk.web || chunk.retrievedContext || {};
+		var url = String(web.uri || web.url || '').trim();
+		if (!url || !/^https?:\/\//i.test(url)) continue;
+		if (!chatbotIsTrustedCitationUrl_(url)) continue;
+
+		if (seen[url]) continue;
+		seen[url] = true;
+
+		sources.push({
+			title: String(web.title || url).trim(),
+			url: url
+		});
+
+		if (sources.length >= 6) break;
+	}
+
+	for (var j = 0; j < citations.length; j += 1) {
+		var citation = citations[j] || {};
+		var citationUrl = String(citation.uri || citation.url || '').trim();
+		if (!citationUrl || !/^https?:\/\//i.test(citationUrl)) continue;
+		if (!chatbotIsTrustedCitationUrl_(citationUrl)) continue;
+		if (seen[citationUrl]) continue;
+
+		seen[citationUrl] = true;
+		sources.push({
+			title: String(citation.title || citationUrl).trim(),
+			url: citationUrl
+		});
+
+		if (sources.length >= 6) break;
+	}
+
+	if (!sources.length) {
+		sources = chatbotExtractTrustedSourcesFromAnswerText_(answerText);
+	}
+
+	return sources;
+}
+
+function chatbotExtractTrustedSourcesFromAnswerText_(answerText) {
+	var text = String(answerText || '');
+	if (!text) return [];
+
+	var urlMatches = text.match(/https?:\/\/[^\s)\]\[<>"']+/gi) || [];
+	var sources = [];
+	var seen = {};
+
+	for (var i = 0; i < urlMatches.length; i += 1) {
+		var rawUrl = String(urlMatches[i] || '').trim();
+		if (!rawUrl) continue;
+
+		var cleanedUrl = rawUrl.replace(/[.,;:!?]+$/g, '');
+		if (!chatbotIsTrustedCitationUrl_(cleanedUrl)) continue;
+		if (seen[cleanedUrl]) continue;
+
+		seen[cleanedUrl] = true;
+		sources.push({
+			title: chatbotExtractHostFromUrl_(cleanedUrl) || cleanedUrl,
+			url: cleanedUrl
+		});
+
+		if (sources.length >= 6) break;
+	}
+
+	return sources;
+}
+
+function chatbotIsTrustedCitationUrl_(url) {
+	var host = chatbotExtractHostFromUrl_(url);
+	if (!host) return false;
+
+	for (var i = 0; i < CHATBOT_TRUSTED_SOURCE_HOSTS.length; i += 1) {
+		var trustedHost = String(CHATBOT_TRUSTED_SOURCE_HOSTS[i] || '').toLowerCase().trim();
+		if (!trustedHost) continue;
+		if (host === trustedHost || host.slice(-(trustedHost.length + 1)) === '.' + trustedHost) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+function chatbotExtractHostFromUrl_(url) {
+	var text = String(url || '').trim();
+	if (!text) return '';
+
+	var hostMatch = text.match(/^https?:\/\/([^\/?#:]+)/i);
+	if (!hostMatch || !hostMatch[1]) return '';
+
+	return String(hostMatch[1] || '').toLowerCase().replace(/^www\./, '').trim();
+}
+
 function chatbotAskGemini_(question, history, orgContext, useGroundedMode) {
 	var apiKeys = chatbotGetGeminiApiKeys_();
 	if (!apiKeys.length) return '';
@@ -806,6 +1154,10 @@ function chatbotAskGemini_(question, history, orgContext, useGroundedMode) {
 					continue;
 				}
 
+				if (shouldRotate) {
+					return CHATBOT_EXHAUSTED_TOKEN;
+				}
+
 				Logger.log('Gemini request failed. HTTP=' + statusCode + ', body=' + responseText);
 				return '';
 			}
@@ -832,6 +1184,63 @@ function chatbotAskGemini_(question, history, orgContext, useGroundedMode) {
 	}
 
 	return '';
+}
+
+function chatbotBuildAiExhaustedMessage_(supportEmail) {
+	return 'Our AI assistant is temporarily busy due to high traffic. Please wait a minute and try again. If you need urgent help, email us at ' + supportEmail + '.';
+}
+
+function chatbotExtractClientId_(data, context) {
+	var rawId = String(
+		(data && data.clientId) ||
+		(context && context.clientId) ||
+		''
+	).trim();
+
+	if (!rawId) return '';
+	return rawId.replace(/[^a-zA-Z0-9._-]/g, '').substring(0, 80);
+}
+
+function chatbotConsumeCooldownWindow_(clientId) {
+	if (!clientId) {
+		return { blocked: false, waitSeconds: 0 };
+	}
+
+	try {
+		var cache = CacheService.getScriptCache();
+		var key = 'chatbot-cooldown-' + clientId;
+		var now = Date.now();
+		var notBefore = Number(cache.get(key) || 0);
+
+		if (notBefore && now < notBefore) {
+			return {
+				blocked: true,
+				waitSeconds: Math.max(1, Math.ceil((notBefore - now) / 1000))
+			};
+		}
+
+		var cooldownMs = chatbotRandomInt_(CHATBOT_COOLDOWN_MIN_MS, CHATBOT_COOLDOWN_MAX_MS);
+		var nextAllowed = now + cooldownMs;
+		var ttlSeconds = Math.max(10, Math.ceil((cooldownMs + 2000) / 1000));
+		cache.put(key, String(nextAllowed), ttlSeconds);
+
+		return { blocked: false, waitSeconds: 0 };
+	} catch (error) {
+		Logger.log('chatbotConsumeCooldownWindow_ failed: ' + (error && error.message ? error.message : String(error)));
+		return { blocked: false, waitSeconds: 0 };
+	}
+}
+
+function chatbotRandomInt_(minValue, maxValue) {
+	var min = Number(minValue || 0);
+	var max = Number(maxValue || 0);
+	if (max < min) {
+		var temp = min;
+		min = max;
+		max = temp;
+	}
+
+	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function chatbotGetGeminiApiKeys_() {
@@ -1317,6 +1726,174 @@ function chatbotFindCuratedUnknownAnswer_(question) {
 	return null;
 }
 
+function chatbotCreateTicket_(data) {
+	var email = String((data && data.email) || '').trim().toLowerCase();
+	if (!chatbotIsValidEmail_(email)) {
+		throw new Error('Please provide a valid email address before submitting a ticket.');
+	}
+
+	var ticketMessages = chatbotNormalizeTicketMessages_((data && data.messages) || []);
+	if (!ticketMessages.length) {
+		throw new Error('Please provide ticket details before submitting.');
+	}
+
+	var spreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.unknownLogSpreadsheetIdProperty, '')).trim();
+	if (!spreadsheetId) {
+		throw new Error('Ticket logging is not configured.');
+	}
+
+	var context = (data && data.context) || {};
+	var activeContext = (context && context.activeContext) || {};
+	var clientId = chatbotExtractClientId_(data, context);
+	var now = new Date();
+	var timestampManila = Utilities.formatDate(now, 'Asia/Manila', 'MM/dd/yyyy hh:mm:ss a');
+
+	var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+	var configuredSheetName = String(chatbotGetScriptProperty_('CHATBOT_TICKET_SHEET_NAME', CHATBOT_CONFIG.ticketSheetName || 'Tickets')).trim();
+	var ticketSheetName = configuredSheetName || CHATBOT_CONFIG.ticketSheetName || 'Tickets';
+	var ticketSheet = spreadsheet.getSheetByName(ticketSheetName) || spreadsheet.insertSheet(ticketSheetName);
+	var headerMap = chatbotEnsureTicketSheetHeaders_(ticketSheet);
+	var trackingNumber = chatbotGenerateTicketTrackingNumber_(ticketSheet, headerMap, now);
+
+	var messageLines = [];
+	for (var i = 0; i < ticketMessages.length; i += 1) {
+		var item = ticketMessages[i] || {};
+		var line = '- ' + String(item.content || '').trim();
+		if (item.sentAt) {
+			line += ' [' + String(item.sentAt).trim() + ']';
+		}
+		messageLines.push(line);
+	}
+
+	var rowValues = new Array(ticketSheet.getLastColumn());
+	for (var valueIndex = 0; valueIndex < rowValues.length; valueIndex += 1) {
+		rowValues[valueIndex] = '';
+	}
+
+	rowValues[headerMap['Timestamp'] - 1] = now;
+	rowValues[headerMap['TimestampManila'] - 1] = timestampManila;
+	rowValues[headerMap['TrackingNumber'] - 1] = trackingNumber;
+	rowValues[headerMap['Email'] - 1] = email;
+	rowValues[headerMap['MessageCount'] - 1] = ticketMessages.length;
+	rowValues[headerMap['Messages'] - 1] = messageLines.join('\n');
+	rowValues[headerMap['MessagesJson'] - 1] = JSON.stringify(ticketMessages);
+	rowValues[headerMap['Status'] - 1] = 'Submitted';
+	rowValues[headerMap['ClientId'] - 1] = clientId;
+	rowValues[headerMap['ActiveContextType'] - 1] = String(activeContext.type || '');
+	rowValues[headerMap['ActiveContextTitle'] - 1] = String(activeContext.title || '');
+
+	ticketSheet.appendRow(rowValues);
+
+	return {
+		submitted: true,
+		trackingNumber: trackingNumber,
+		timestampManila: timestampManila
+	};
+}
+
+function chatbotNormalizeTicketMessages_(messages) {
+	if (!Array.isArray(messages)) return [];
+
+	var normalized = [];
+	for (var i = 0; i < messages.length; i += 1) {
+		var item = messages[i] || {};
+		var content = String((item && item.content) || item || '').trim();
+		if (!content) continue;
+
+		normalized.push({
+			content: content.substring(0, 3000),
+			sentAt: String(item.sentAt || item.timestamp || '').trim().substring(0, 80)
+		});
+	}
+
+	if (normalized.length > 80) {
+		normalized = normalized.slice(normalized.length - 80);
+	}
+
+	return normalized;
+}
+
+function chatbotIsValidEmail_(value) {
+	var email = String(value || '').trim();
+	if (!email) return false;
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function chatbotEnsureTicketSheetHeaders_(sheet) {
+	var requiredHeaders = [
+		'Timestamp',
+		'TimestampManila',
+		'TrackingNumber',
+		'Email',
+		'MessageCount',
+		'Messages',
+		'MessagesJson',
+		'Status',
+		'ClientId',
+		'ActiveContextType',
+		'ActiveContextTitle'
+	];
+
+	var headerRow = [];
+	if (sheet.getLastRow() > 0) {
+		var lastColumn = sheet.getLastColumn();
+		headerRow = sheet.getRange(1, 1, 1, lastColumn).getValues()[0];
+	}
+
+	var normalizedHeaders = [];
+	for (var i = 0; i < headerRow.length; i += 1) {
+		normalizedHeaders.push(String(headerRow[i] || '').trim());
+	}
+
+	for (var j = 0; j < requiredHeaders.length; j += 1) {
+		if (normalizedHeaders.indexOf(requiredHeaders[j]) === -1) {
+			normalizedHeaders.push(requiredHeaders[j]);
+		}
+	}
+
+	if (!normalizedHeaders.length) {
+		normalizedHeaders = requiredHeaders.slice();
+	}
+
+	sheet.getRange(1, 1, 1, normalizedHeaders.length).setValues([normalizedHeaders]);
+
+	var map = {};
+	for (var k = 0; k < normalizedHeaders.length; k += 1) {
+		map[normalizedHeaders[k]] = k + 1;
+	}
+
+	return map;
+}
+
+function chatbotGenerateTicketTrackingNumber_(sheet, headerMap, timestamp) {
+	var dateValue = timestamp || new Date();
+	var yearTwoDigits = Utilities.formatDate(dateValue, 'Asia/Manila', 'yy');
+	var trackingColumn = Number(headerMap['TrackingNumber'] || 0);
+	var existing = {};
+
+	if (trackingColumn > 0 && sheet.getLastRow() >= 2) {
+		var rows = sheet.getRange(2, trackingColumn, sheet.getLastRow() - 1, 1).getValues();
+		for (var i = 0; i < rows.length; i += 1) {
+			var value = String((rows[i] || [])[0] || '').trim();
+			if (value) existing[value] = true;
+		}
+	}
+
+	for (var attempt = 0; attempt < 200; attempt += 1) {
+		var suffix = ('0000' + String(chatbotRandomInt_(0, 9999))).slice(-4);
+		var candidate = 'DYESABEL-' + yearTwoDigits + '-' + suffix;
+		if (!existing[candidate]) return candidate;
+	}
+
+	for (var serial = 0; serial < 10000; serial += 1) {
+		var fallbackSuffix = ('0000' + String(serial)).slice(-4);
+		var fallbackCandidate = 'DYESABEL-' + yearTwoDigits + '-' + fallbackSuffix;
+		if (!existing[fallbackCandidate]) return fallbackCandidate;
+	}
+
+	throw new Error('Unable to generate a unique tracking number. Please try again.');
+}
+
 function chatbotMergeUniqueByKey_(preferredItems, fallbackItems, keySelector) {
 	var merged = [];
 	var seen = {};
@@ -1523,4 +2100,148 @@ function chatbotCreateResponse_(success, error, data) {
 	return ContentService
 		.createTextOutput(JSON.stringify(result))
 		.setMimeType(ContentService.MimeType.JSON);
+}
+
+function chatbotAuthorizeTicketStorage_() {
+	var unknownSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.unknownLogSpreadsheetIdProperty, '')).trim();
+	var dataSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.dataSpreadsheetIdProperty, '')).trim();
+	var opened = [];
+
+	if (unknownSpreadsheetId) {
+		SpreadsheetApp.openById(unknownSpreadsheetId);
+		opened.push('unknown-log spreadsheet');
+	}
+
+	if (dataSpreadsheetId) {
+		SpreadsheetApp.openById(dataSpreadsheetId);
+		opened.push('data spreadsheet');
+	}
+
+	if (!opened.length) {
+		throw new Error('No spreadsheet IDs are configured. Set CHATBOT_UNKNOWN_LOG_SPREADSHEET_ID and/or DATA_SPREADSHEET_ID first.');
+	}
+
+	return 'Authorization check successful for: ' + opened.join(', ') + '.';
+}
+
+function chatbotDiagnose_(data) {
+	var unknownSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.unknownLogSpreadsheetIdProperty, '')).trim();
+	var dataSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.dataSpreadsheetIdProperty, '')).trim();
+	var configuredTicketSheetName = String(chatbotGetScriptProperty_('CHATBOT_TICKET_SHEET_NAME', CHATBOT_CONFIG.ticketSheetName || 'Tickets')).trim();
+	var diagnosis = {
+		action: 'chatbotDiagnose',
+		serverTimeManila: Utilities.formatDate(new Date(), 'Asia/Manila', 'MM/dd/yyyy hh:mm:ss a'),
+		configuration: {
+			unknownLogSpreadsheetConfigured: !!unknownSpreadsheetId,
+			dataSpreadsheetConfigured: !!dataSpreadsheetId,
+			ticketSheetName: configuredTicketSheetName || CHATBOT_CONFIG.ticketSheetName || 'Tickets'
+		},
+		checks: {
+			unknownLogSpreadsheetAccess: chatbotDiagnoseSpreadsheetAccess_(unknownSpreadsheetId),
+			dataSpreadsheetAccess: chatbotDiagnoseSpreadsheetAccess_(dataSpreadsheetId)
+		},
+		notes: [
+			'If spreadsheet access check fails with authorization error, redeploy web app as Execute as Me and re-authorize in the owner account.',
+			'If only chatbotCreateTicket fails while chatbotAsk works, the deployment likely lacks spreadsheet scope in the active version.'
+		],
+		clientEcho: {
+			requestAction: String((data && data.action) || ''),
+			requestClientId: chatbotExtractClientId_(data, (data && data.context) || {})
+		}
+	};
+
+	return diagnosis;
+}
+
+function chatbotDiagnoseSpreadsheetAccess_(spreadsheetId) {
+	if (!spreadsheetId) {
+		return {
+			ok: false,
+			error: 'Spreadsheet ID is not configured.'
+		};
+	}
+
+	try {
+		var spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+		return {
+			ok: true,
+			title: String(spreadsheet.getName() || '').trim(),
+			idSuffix: spreadsheetId.slice(-6)
+		};
+	} catch (error) {
+		return {
+			ok: false,
+			error: error && error.message ? String(error.message) : String(error)
+		};
+	}
+}
+
+function chatbotForceTicketAuth_() {
+	var unknownSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.unknownLogSpreadsheetIdProperty, '')).trim();
+	if (!unknownSpreadsheetId) {
+		throw new Error('CHATBOT_UNKNOWN_LOG_SPREADSHEET_ID is not configured.');
+	}
+
+	var spreadsheet = SpreadsheetApp.openById(unknownSpreadsheetId);
+	var ticketSheetName = String(chatbotGetScriptProperty_('CHATBOT_TICKET_SHEET_NAME', CHATBOT_CONFIG.ticketSheetName || 'Tickets')).trim() || CHATBOT_CONFIG.ticketSheetName || 'Tickets';
+	var ticketSheet = spreadsheet.getSheetByName(ticketSheetName) || spreadsheet.insertSheet(ticketSheetName);
+	chatbotEnsureTicketSheetHeaders_(ticketSheet);
+
+	return {
+		action: 'chatbotForceTicketAuth',
+		ok: true,
+		message: 'Spreadsheet access and ticket sheet initialization succeeded.',
+		ticketSheetName: ticketSheetName,
+		serverTimeManila: Utilities.formatDate(new Date(), 'Asia/Manila', 'MM/dd/yyyy hh:mm:ss a')
+	};
+}
+
+function chatbotForceAuth_() {
+	var unknownSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.unknownLogSpreadsheetIdProperty, '')).trim();
+	var dataSpreadsheetId = String(chatbotGetScriptProperty_(CHATBOT_CONFIG.dataSpreadsheetIdProperty, '')).trim();
+
+	if (!unknownSpreadsheetId) {
+		throw new Error('CHATBOT_UNKNOWN_LOG_SPREADSHEET_ID is not configured.');
+	}
+
+	var now = new Date();
+	var nowManila = Utilities.formatDate(now, 'Asia/Manila', 'MM/dd/yyyy hh:mm:ss a');
+
+	var unknownSpreadsheet = SpreadsheetApp.openById(unknownSpreadsheetId);
+	var unknownSheet = unknownSpreadsheet.getSheetByName(CHATBOT_CONFIG.unknownLogSheetName) || unknownSpreadsheet.insertSheet(CHATBOT_CONFIG.unknownLogSheetName);
+	chatbotEnsureUnknownSheetHeaders_(unknownSheet);
+
+	var ticketSheetName = String(chatbotGetScriptProperty_('CHATBOT_TICKET_SHEET_NAME', CHATBOT_CONFIG.ticketSheetName || 'Tickets')).trim() || CHATBOT_CONFIG.ticketSheetName || 'Tickets';
+	var ticketSheet = unknownSpreadsheet.getSheetByName(ticketSheetName) || unknownSpreadsheet.insertSheet(ticketSheetName);
+	chatbotEnsureTicketSheetHeaders_(ticketSheet);
+
+	var dataSpreadsheetStatus = { configured: !!dataSpreadsheetId, opened: false };
+	if (dataSpreadsheetId) {
+		var dataSpreadsheet = SpreadsheetApp.openById(dataSpreadsheetId);
+		dataSpreadsheetStatus.opened = !!dataSpreadsheet;
+	}
+
+	PropertiesService.getScriptProperties().setProperty('CHATBOT_LAST_FORCE_AUTH_AT', now.toISOString());
+
+	return {
+		action: 'chatbotForceAuth',
+		ok: true,
+		message: 'Force auth check succeeded. Spreadsheet access is available in this execution context.',
+		serverTimeManila: nowManila,
+		unknownLogSpreadsheetIdSuffix: unknownSpreadsheetId.slice(-6),
+		ticketSheetName: ticketSheetName,
+		dataSpreadsheet: dataSpreadsheetStatus
+	};
+}
+
+function chatbotForceAuthManual_() {
+	return chatbotForceAuth_();
+}
+
+function chatbotForceAuthManual() {
+	return chatbotForceAuth_();
+}
+
+function chatbotAuthorizeTicketStorage() {
+	return chatbotAuthorizeTicketStorage_();
 }

@@ -4,10 +4,13 @@ import { APP_CONFIG } from '../config';
 import {
   askHybridChatbot,
   ChatbotActiveContext,
+  ChatbotCitation,
   ChatbotMedia,
   ChatbotPersonSummary,
+  ChatbotTicketMessage,
   ChatHistoryItem,
-  normalizeChatbotImageUrl
+  normalizeChatbotImageUrl,
+  submitChatbotTicket
 } from '../services/ChatbotService';
 import { Chapter, Pillar } from '../types';
 
@@ -21,19 +24,25 @@ interface ChatbotWidgetProps {
 }
 
 type UiMessageRole = 'assistant' | 'user';
+type TicketStage = 'idle' | 'awaiting-email' | 'collecting';
 
 interface UiMessage {
   id: string;
   role: UiMessageRole;
   content: string;
-  sourceLabel?: string;
   media?: ChatbotMedia[];
+  sources?: ChatbotCitation[];
 }
 
 const MOBILE_BREAKPOINT = 768;
-const BASE_QUICK_PROMPTS = ['What is DYESABEL all about?', 'How can I volunteer?', 'How can I contact your team?'];
+const BASE_QUICK_PROMPTS = ['File a Ticket', 'What is DYESABEL all about?', 'How can I volunteer?', 'How can I contact your team?'];
 const TYPING_FRAMES = ['Thinking', 'Thinking.', 'Thinking..', 'Thinking...'];
 const MIN_TYPING_DURATION_MS = 850;
+const SEND_COOLDOWN_MIN_MS = 3000;
+const SEND_COOLDOWN_MAX_MS = 5000;
+const CHATBOT_CLIENT_ID_STORAGE_KEY = 'dyesabel.chatbot.client_id';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i;
+const FILE_TICKET_TRIGGER = 'file a ticket';
 
 const makeMessageId = () => {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -45,11 +54,27 @@ const waitFor = (ms: number): Promise<void> => {
   });
 };
 
-const inferSourceLabel = (source: string): string => {
-  if (source === 'local') return 'Local knowledge';
-  if (source === 'hybrid-gemini') return 'Hybrid AI';
-  if (source === 'gemini') return 'Gemini AI';
-  return 'Support fallback';
+const randomIntBetween = (min: number, max: number): number => {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+const createChatbotClientId = (): string => {
+  return `cb-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+};
+
+const getOrCreateChatbotClientId = (): string => {
+  if (typeof window === 'undefined') return createChatbotClientId();
+
+  try {
+    const existing = String(window.localStorage.getItem(CHATBOT_CLIENT_ID_STORAGE_KEY) || '').trim();
+    if (existing) return existing;
+
+    const created = createChatbotClientId();
+    window.localStorage.setItem(CHATBOT_CLIENT_ID_STORAGE_KEY, created);
+    return created;
+  } catch {
+    return createChatbotClientId();
+  }
 };
 
 const INLINE_TOKEN_REGEX = /(\*\*[^*]+\*\*|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/gi;
@@ -146,6 +171,30 @@ const renderMessageMedia = (media: ChatbotMedia[] | undefined) => {
   );
 };
 
+const renderMessageSources = (sources: ChatbotCitation[] | undefined) => {
+  if (!sources || !sources.length) return null;
+
+  return (
+    <div className="mt-2 border-t border-ocean-deep/10 pt-2 dark:border-white/10">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-ocean-deep/65 dark:text-white/60">Sources</p>
+      <ul className="mt-1 space-y-1">
+        {sources.map((source, index) => (
+          <li key={`${source.url}-${index}`}>
+            <a
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-primary-blue underline decoration-primary-blue/40 underline-offset-2 hover:decoration-primary-blue dark:text-primary-cyan dark:decoration-primary-cyan/40"
+            >
+              {source.title || source.url}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
 const ChatMediaImage: React.FC<{ url: string; alt: string }> = ({ url, alt }) => {
   const [resolvedUrl, setResolvedUrl] = useState(() => normalizeChatbotImageUrl(url));
   const [isBroken, setIsBroken] = useState(false);
@@ -198,8 +247,15 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
+  const [ticketStage, setTicketStage] = useState<TicketStage>('idle');
+  const [ticketEmail, setTicketEmail] = useState('');
+  const [ticketMessages, setTicketMessages] = useState<ChatbotTicketMessage[]>([]);
+  const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
   const [typingFrameIndex, setTypingFrameIndex] = useState(0);
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < MOBILE_BREAKPOINT);
+  const chatbotClientId = useMemo(() => getOrCreateChatbotClientId(), []);
+  const cooldownSeconds = Math.max(1, Math.ceil(cooldownRemainingMs / 1000));
 
   const quickPrompts = useMemo(() => {
     if (activeContext.type === 'pillar') {
@@ -225,7 +281,6 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     {
       id: makeMessageId(),
       role: 'assistant',
-      sourceLabel: 'Local knowledge',
       content: `Hello. I am the DYESABEL assistant. Ask me about our chapters, pillars, volunteering, donations, and partnerships. If I cannot find enough data, I will share our official contact at ${APP_CONFIG.supportEmail}.`
     }
   ]);
@@ -277,6 +332,16 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     return () => window.clearInterval(intervalId);
   }, [isSending]);
 
+  useEffect(() => {
+    if (cooldownRemainingMs <= 0) return;
+
+    const intervalId = window.setInterval(() => {
+      setCooldownRemainingMs((previous) => Math.max(0, previous - 250));
+    }, 250);
+
+    return () => window.clearInterval(intervalId);
+  }, [cooldownRemainingMs]);
+
   const closePanel = () => {
     setIsOpen(false);
   };
@@ -286,7 +351,92 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
 
   const submitQuestion = async (question: string) => {
     const trimmed = question.trim();
-    if (!trimmed || isSending) return;
+    if (!trimmed || isSending || isSubmittingTicket) return;
+
+    if (ticketStage === 'idle' && trimmed.toLowerCase() === FILE_TICKET_TRIGGER) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'user',
+          content: trimmed
+        },
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content: 'Sure. Please provide your email address first so I can open your support ticket draft.'
+        }
+      ]);
+      setInput('');
+      setTicketStage('awaiting-email');
+      setTicketEmail('');
+      setTicketMessages([]);
+      return;
+    }
+
+    if (ticketStage === 'awaiting-email') {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'user',
+          content: trimmed
+        }
+      ]);
+      setInput('');
+
+      if (!EMAIL_REGEX.test(trimmed)) {
+        setMessages((previous) => [
+          ...previous,
+          {
+            id: makeMessageId(),
+            role: 'assistant',
+            content: 'That email format looks invalid. Please send a valid email (example: name@email.com).'
+          }
+        ]);
+        return;
+      }
+
+      const normalizedEmail = trimmed.toLowerCase();
+      setTicketEmail(normalizedEmail);
+      setTicketStage('collecting');
+      setTicketMessages([]);
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content: 'Email received. Now send all ticket details you want to report. When done, press Submit Ticket. Only details sent from now until submit will be included.'
+        }
+      ]);
+      return;
+    }
+
+    if (ticketStage === 'collecting') {
+      const ticketMessage: ChatbotTicketMessage = {
+        content: trimmed,
+        sentAt: new Date().toISOString()
+      };
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'user',
+          content: trimmed
+        },
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content: 'Ticket note saved. Add more details or press Submit Ticket when ready.'
+        }
+      ]);
+      setInput('');
+      setTicketMessages((previous) => [...previous, ticketMessage]);
+      return;
+    }
+
+    if (cooldownRemainingMs > 0) return;
 
     const userMessage: UiMessage = {
       id: makeMessageId(),
@@ -297,6 +447,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
     setMessages((previous) => [...previous, userMessage]);
     setInput('');
     setIsSending(true);
+    setCooldownRemainingMs(randomIntBetween(SEND_COOLDOWN_MIN_MS, SEND_COOLDOWN_MAX_MS));
 
     const requestStartedAt = Date.now();
     const ensureMinimumTypingDuration = async () => {
@@ -316,6 +467,7 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
       const response = await askHybridChatbot(trimmed, history, {
         organizationName: APP_CONFIG.organizationName,
         supportEmail: APP_CONFIG.supportEmail,
+        clientId: chatbotClientId,
         supportPhone: APP_CONFIG.supportPhone,
         supportLocation: APP_CONFIG.supportLocation,
         volunteerUrl: APP_CONFIG.volunteerUrl,
@@ -342,8 +494,8 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
         id: makeMessageId(),
         role: 'assistant',
         content: response.answer,
-        sourceLabel: inferSourceLabel(response.source),
-        media: response.media
+        media: response.media,
+        sources: response.sources
       };
 
       await ensureMinimumTypingDuration();
@@ -356,12 +508,112 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
         {
           id: makeMessageId(),
           role: 'assistant',
-          sourceLabel: 'Support fallback',
           content: `I am having trouble connecting right now. Please email us at ${APP_CONFIG.supportEmail} for immediate assistance.`
         }
       ]);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const resetTicketDraft = () => {
+    setTicketStage('idle');
+    setTicketEmail('');
+    setTicketMessages([]);
+  };
+
+  const handleSubmitTicket = async () => {
+    if (isSubmittingTicket || ticketStage !== 'collecting') return;
+
+    if (!ticketEmail) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content: 'Please provide your email first to continue with ticket submission.'
+        }
+      ]);
+      setTicketStage('awaiting-email');
+      return;
+    }
+
+    if (!ticketMessages.length) {
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content: 'Please add at least one ticket detail before submitting.'
+        }
+      ]);
+      return;
+    }
+
+    setIsSubmittingTicket(true);
+    try {
+      const result = await submitChatbotTicket(ticketEmail, ticketMessages, {
+        organizationName: APP_CONFIG.organizationName,
+        supportEmail: APP_CONFIG.supportEmail,
+        clientId: chatbotClientId,
+        supportPhone: APP_CONFIG.supportPhone,
+        supportLocation: APP_CONFIG.supportLocation,
+        volunteerUrl: APP_CONFIG.volunteerUrl,
+        activeContext,
+        chapters: chapters.map((chapter) => ({
+          id: String(chapter.id),
+          name: String(chapter.name || ''),
+          location: String(chapter.location || ''),
+          headName: String(chapter.headName || ''),
+          headRole: String(chapter.headRole || ''),
+          headQuote: String(chapter.headQuote || ''),
+          headImageUrl: String(chapter.headImageUrl || '')
+        })),
+        pillars: pillars.map((pillar) => ({
+          id: String(pillar.id),
+          title: String(pillar.title || ''),
+          excerpt: String(pillar.excerpt || '')
+        })),
+        founders: normalizedFounders,
+        executiveOfficers: normalizedExecutiveOfficers
+      });
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content:
+            `Ticket submitted successfully. Tracking Number: **${result.trackingNumber}**.` +
+            ` Manila Time: ${result.timestampManila}. We will follow up through ${ticketEmail}.`
+        }
+      ]);
+
+      resetTicketDraft();
+    } catch (error) {
+      const rawError = error instanceof Error ? String(error.message || '').trim() : '';
+      const normalizedError = rawError.toLowerCase();
+      const needsSheetAuthorization =
+        normalizedError.includes('spreadsheetapp.openbyid') ||
+        normalizedError.includes('authorization') ||
+        normalizedError.includes('pahintulot');
+
+      const supportMessage = needsSheetAuthorization
+        ? 'Ticket backend is not authorized to access Google Sheets yet. Please ask an admin to re-authorize and redeploy the Apps Script web app.'
+        : rawError
+          ? `I could not submit your ticket right now. Reason: ${rawError}`
+          : `I could not submit your ticket right now. Please try again in a moment or email us at ${APP_CONFIG.supportEmail}.`;
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          id: makeMessageId(),
+          role: 'assistant',
+          content: supportMessage
+        }
+      ]);
+    } finally {
+      setIsSubmittingTicket(false);
     }
   };
 
@@ -434,13 +686,23 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
                       : 'mr-auto border border-ocean-deep/10 bg-ocean-deep/[0.04] text-ocean-deep dark:border-white/10 dark:bg-white/5 dark:text-white'
                   }`}
                 >
-                  {message.sourceLabel && message.role === 'assistant' && (
-                    <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-primary-blue dark:text-primary-cyan/90">
-                      {message.sourceLabel}
-                    </p>
+                  {message.role === 'assistant' && (
+                    <div className="mb-2 flex items-center gap-2">
+                      <img
+                        src={APP_CONFIG.logoUrl}
+                        alt="DYESABEL logo"
+                        loading="lazy"
+                        decoding="async"
+                        className="h-6 w-6 rounded-full object-contain ring-1 ring-ocean-deep/15 dark:ring-white/20"
+                      />
+                      <p className="text-[11px] font-bold uppercase tracking-[0.1em] text-primary-blue dark:text-primary-cyan/95">
+                        DYESABEL Assistant
+                      </p>
+                    </div>
                   )}
                   {renderMessageContent(message.content)}
                   {renderMessageMedia(message.media)}
+                  {renderMessageSources(message.sources)}
                 </article>
               ))}
 
@@ -464,13 +726,40 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
                       type="button"
                       key={prompt}
                       onClick={() => void submitQuestion(prompt)}
-                      className="shrink-0 whitespace-nowrap rounded-full border border-ocean-deep/15 bg-white px-3 py-1 text-xs font-semibold text-ocean-deep/85 transition-colors hover:bg-primary-cyan/10 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10"
+                      disabled={isSending || isSubmittingTicket || ticketStage !== 'idle' || cooldownRemainingMs > 0}
+                      className="shrink-0 whitespace-nowrap rounded-full border border-ocean-deep/15 bg-white px-3 py-1 text-xs font-semibold text-ocean-deep/85 transition-colors hover:bg-primary-cyan/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/15 dark:bg-white/5 dark:text-white/85 dark:hover:bg-white/10"
                     >
                       {prompt}
                     </button>
                   ))}
                 </div>
               </div>
+              {ticketStage !== 'idle' && (
+                <div className="mt-2 rounded-xl border border-primary-cyan/40 bg-primary-cyan/10 px-3 py-2 text-xs text-[#063444] dark:border-primary-cyan/45 dark:bg-primary-cyan/10 dark:text-primary-cyan">
+                  {ticketStage === 'awaiting-email' && 'Ticket mode is active. Send your email to begin collecting ticket details.'}
+                  {ticketStage === 'collecting' && `Ticket mode active for ${ticketEmail}. Notes captured: ${ticketMessages.length}.`}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {ticketStage === 'collecting' && (
+                      <button
+                        type="button"
+                        onClick={() => void handleSubmitTicket()}
+                        disabled={isSubmittingTicket || !ticketMessages.length}
+                        className="rounded-full bg-primary-blue px-3 py-1 text-[11px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#164a8a] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSubmittingTicket ? 'Submitting...' : 'Submit Ticket'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={resetTicketDraft}
+                      disabled={isSubmittingTicket}
+                      className="rounded-full border border-ocean-deep/20 bg-white px-3 py-1 text-[11px] font-semibold text-ocean-deep transition-colors hover:bg-white/80 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:bg-white/10 dark:text-white"
+                    >
+                      Cancel Ticket
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <form onSubmit={handleFormSubmit} className="border-t border-ocean-deep/10 bg-ocean-deep/[0.03] px-3 py-3 dark:border-white/10 dark:bg-black/20">
@@ -479,19 +768,32 @@ export const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({
                   value={input}
                   onChange={(event) => setInput(event.target.value)}
                   onKeyDown={handleInputKeyDown}
-                  placeholder="Type your inquiry..."
+                  placeholder={
+                    ticketStage === 'awaiting-email'
+                      ? 'Enter your email address...'
+                      : ticketStage === 'collecting'
+                        ? 'Type ticket details to save in your draft...'
+                        : cooldownRemainingMs > 0
+                          ? `Please wait ${cooldownSeconds}s before sending again...`
+                          : 'Type your inquiry...'
+                  }
                   rows={1}
                   className="max-h-28 min-h-[2.25rem] w-full resize-none bg-transparent px-1 py-1 text-sm text-ocean-deep placeholder:text-ocean-deep/45 focus:outline-none dark:text-white dark:placeholder:text-white/45"
                 />
                 <button
                   type="submit"
-                  disabled={isSending || !input.trim()}
+                  disabled={isSending || isSubmittingTicket || (ticketStage === 'idle' && cooldownRemainingMs > 0) || !input.trim()}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary-cyan text-[#062438] transition-colors hover:bg-[#7bf0ff] disabled:cursor-not-allowed disabled:opacity-50"
                   aria-label="Send message"
                 >
                   <Send className="h-4 w-4" />
                 </button>
               </div>
+              {ticketStage === 'idle' && cooldownRemainingMs > 0 && (
+                <p className="mt-2 text-xs font-medium text-ocean-deep/70 dark:text-white/70">
+                  Cooldown active. Please wait about {cooldownSeconds} second(s).
+                </p>
+              )}
             </form>
           </div>
         )}

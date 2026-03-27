@@ -3,7 +3,12 @@ import { sendApiRequest } from './apiClient';
 import { getCachedValue } from '../utils/cache';
 
 export type ChatbotRole = 'user' | 'assistant';
-export type ChatbotSource = 'local' | 'hybrid-gemini' | 'gemini' | 'fallback';
+export type ChatbotSource = 'local' | 'hybrid-gemini' | 'gemini' | 'web-grounded' | 'fallback';
+
+export interface ChatbotCitation {
+  title: string;
+  url: string;
+}
 
 export interface ChatbotMedia {
   type: 'image';
@@ -36,6 +41,7 @@ export interface ChatHistoryItem {
 export interface ChatbotRequestContext {
   organizationName: string;
   supportEmail: string;
+  clientId?: string;
   supportPhone?: string;
   supportLocation?: string;
   volunteerUrl?: string;
@@ -56,6 +62,16 @@ export interface ChatbotRequestContext {
   activeContext?: ChatbotActiveContext;
 }
 
+export interface ChatbotTicketMessage {
+  content: string;
+  sentAt?: string;
+}
+
+export interface ChatbotTicketResult {
+  trackingNumber: string;
+  timestampManila: string;
+}
+
 export interface ChatbotAnswer {
   source: ChatbotSource;
   answer: string;
@@ -63,6 +79,7 @@ export interface ChatbotAnswer {
   matchedIntent?: string;
   usedGemini: boolean;
   media?: ChatbotMedia[];
+  sources?: ChatbotCitation[];
 }
 
 interface LocalKnowledgeItem {
@@ -81,6 +98,29 @@ interface CachedApiPayload<T> {
   error?: string;
   [key: string]: unknown;
 }
+
+const TRUSTED_CHATBOT_SOURCE_HOSTS = [
+  'who.int',
+  'unep.org',
+  'oecd.org',
+  'worldbank.org',
+  'gov.ph',
+  'pubmed.ncbi.nlm.nih.gov'
+];
+
+const isTrustedChatbotSourceUrl = (value: string): boolean => {
+  const text = String(value || '').trim();
+  if (!/^https?:\/\//i.test(text)) return false;
+
+  try {
+    const host = new URL(text).hostname.toLowerCase().replace(/^www\./, '');
+    return TRUSTED_CHATBOT_SOURCE_HOSTS.some(
+      (trustedHost) => host === trustedHost || host.endsWith(`.${trustedHost}`)
+    );
+  } catch {
+    return false;
+  }
+};
 
 const extractGoogleDriveFileId = (value: string): string => {
   const text = String(value || '').trim();
@@ -487,6 +527,7 @@ export const askHybridChatbot = async (
     matchedIntent?: string;
     noData?: boolean;
     media?: ChatbotMedia[];
+    sources?: ChatbotCitation[];
   }>('chatbot', {
     action: 'chatbotAsk',
     question: trimmedQuestion,
@@ -506,13 +547,24 @@ export const askHybridChatbot = async (
           .slice(0, 4)
       : undefined;
 
+    const sources = Array.isArray(apiResult.sources)
+      ? apiResult.sources
+          .map((item) => ({
+            title: String(item?.title || '').trim(),
+            url: String(item?.url || '').trim()
+          }))
+          .filter((item) => item.title && isTrustedChatbotSourceUrl(item.url))
+          .slice(0, 6)
+      : undefined;
+
     return {
       source: apiResult.source || 'hybrid-gemini',
       answer: String(apiResult.answer || '').trim(),
       confidence: Number(apiResult.confidence || 0.7),
       matchedIntent: apiResult.matchedIntent,
-      usedGemini: apiResult.source === 'hybrid-gemini' || apiResult.source === 'gemini',
-      media
+      usedGemini: apiResult.source === 'hybrid-gemini' || apiResult.source === 'gemini' || apiResult.source === 'web-grounded',
+      media,
+      sources
     };
   }
 
@@ -531,5 +583,45 @@ export const askHybridChatbot = async (
     answer: buildNoDataMessage(supportEmail),
     confidence: 1,
     usedGemini: false
+  };
+};
+
+export const submitChatbotTicket = async (
+  email: string,
+  messages: ChatbotTicketMessage[],
+  context: ChatbotRequestContext
+): Promise<ChatbotTicketResult> => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  const normalizedMessages = (messages || [])
+    .map((item) => ({
+      content: String(item?.content || '').trim(),
+      sentAt: String(item?.sentAt || '').trim()
+    }))
+    .filter((item) => item.content)
+    .slice(0, 80);
+
+  const apiResult = await sendApiRequest<{
+    trackingNumber?: string;
+    timestampManila?: string;
+  }>('chatbot', {
+    action: 'chatbotCreateTicket',
+    email: normalizedEmail,
+    messages: normalizedMessages,
+    context: hydrateContextFromCache(context)
+  });
+
+  if (!apiResult.success) {
+    throw new Error(String(apiResult.error || 'Unable to submit ticket right now.'));
+  }
+
+  const trackingNumber = String(apiResult.trackingNumber || '').trim();
+  const timestampManila = String(apiResult.timestampManila || '').trim();
+  if (!trackingNumber) {
+    throw new Error('Ticket submission failed. Please try again.');
+  }
+
+  return {
+    trackingNumber,
+    timestampManila
   };
 };

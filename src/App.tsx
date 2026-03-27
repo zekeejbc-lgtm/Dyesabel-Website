@@ -12,6 +12,7 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { DonatePage } from './components/DonatePage';
 import { PillarDetail } from './components/PillarDetail';
 import { ChapterDetail } from './components/ChapterDetail';
+import { ChatbotWidget } from './components/ChatbotWidget';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDialogProvider } from './contexts/AppDialogContext';
 import { AppView, patchPersistedAppState, readPersistedAppState } from './utils/appState';
@@ -935,6 +936,52 @@ function AppContent() {
       {!isDonatePageOpen && !showDashboard && !isLandingEditorOpen && !isChapterEditorOpen && !isPillarEditorOpen && !isPartnersEditorOpen && !isFoundersEditorOpen && (
         <Footer onDonateClick={handleDonateClick} onNavigate={handleFooterNavigation} />
       )}
+
+      <ChatbotWidget
+        chapters={chapters}
+        pillars={pillars}
+        founders={founders.map((founder: any) => ({
+          name: String(founder?.name || ''),
+          role: String(founder?.role || ''),
+          bio: String(founder?.bio || ''),
+          imageUrl: String(founder?.imageUrl || founder?.image || '')
+        }))}
+        executiveOfficers={executiveOfficers.map((officer: any) => ({
+          name: String(officer?.name || ''),
+          role: String(officer?.role || ''),
+          imageUrl: String(officer?.imageUrl || officer?.image || '')
+        }))}
+        activeContext={
+          selectedPillar
+            ? {
+                type: 'pillar',
+                id: String(selectedPillar.id || ''),
+                title: String(selectedPillar.title || ''),
+                excerpt: String(selectedPillar.excerpt || ''),
+                description: String(selectedPillar.description || '')
+              }
+            : selectedChapter
+              ? {
+                  type: 'chapter',
+                  id: String(selectedChapter.id || ''),
+                  title: String(selectedChapter.name || ''),
+                  description: String(selectedChapter.description || ''),
+                  location: String(selectedChapter.location || '')
+                }
+              : isDonatePageOpen
+                ? { type: 'donate', title: 'Donate' }
+                : { type: 'home', title: 'Home' }
+        }
+        hidden={
+          !(currentView === 'home' || currentView === 'chapter' || currentView === 'pillar') ||
+          isLandingEditorOpen ||
+          isChapterEditorOpen ||
+          isPillarEditorOpen ||
+          isPartnersEditorOpen ||
+          isFoundersEditorOpen ||
+          isLoginModalOpen
+        }
+      />
 
       <Suspense fallback={null}>
         <LoginModal

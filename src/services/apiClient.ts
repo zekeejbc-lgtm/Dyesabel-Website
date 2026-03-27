@@ -8,7 +8,7 @@ export interface ApiResponse<T = unknown> {
   [key: string]: any;
 }
 
-type ApiTarget = 'main' | 'users' | 'donations';
+type ApiTarget = 'main' | 'users' | 'donations' | 'chatbot';
 
 const isAuthInvalidError = (error?: string): boolean => {
   const normalized = String(error || '').toLowerCase();
@@ -25,7 +25,10 @@ const resolveApiUrl = (target: ApiTarget): string => {
   if (target === 'users') {
     return requireConfig(APP_CONFIG.usersApiUrl, 'VITE_USERS_API_URL');
   }
-  return requireConfig(APP_CONFIG.donationsApiUrl, 'VITE_DONATIONS_API_URL');
+  if (target === 'donations') {
+    return requireConfig(APP_CONFIG.donationsApiUrl, 'VITE_DONATIONS_API_URL');
+  }
+  return requireConfig(APP_CONFIG.chatbotApiUrl, 'VITE_CHATBOT_API_URL');
 };
 
 const fetchWithTextPlain = async (url: string, payload: string): Promise<Response> => {

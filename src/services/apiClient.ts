@@ -82,8 +82,21 @@ export const sendApiRequest = async <T>(
     };
   }
   const payloadJson = JSON.stringify(payload);
-  const strategies = [fetchWithTextPlain, fetchWithMinimalHeaders];
+  const payloadRecord = payload as { action?: string };
+  const action = String(payloadRecord.action || '');
+  const nonIdempotentActions = new Set(['uploadImage', 'uploadImageFromUrl', 'uploadDonationQr']);
+  const allowFallbackRetry = !nonIdempotentActions.has(action);
+  const strategies = allowFallbackRetry
+    ? [fetchWithTextPlain, fetchWithMinimalHeaders]
+    : [fetchWithTextPlain];
   let lastError: Error | null = null;
+
+  if (!allowFallbackRetry) {
+    console.warn('[apiClient] Fallback retry disabled for non-idempotent action', {
+      target,
+      action
+    });
+  }
 
   for (const strategy of strategies) {
     try {

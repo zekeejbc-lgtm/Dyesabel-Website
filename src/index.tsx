@@ -79,7 +79,7 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
-      <Toaster position="bottom-right" richColors />
+      <Toaster position="bottom-right" closeButton visibleToasts={5} offset={20} />
       <App />
     </ErrorBoundary>
   </React.StrictMode>

@@ -6,7 +6,6 @@ import {
   Eye, EyeOff
 } from 'lucide-react';
 import { DataService, AuthService } from '../services/DriveService';
-import { uploadImageToDrive } from '../utils/driveUpload';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { Chapter, User } from '../types';
 import { getSessionToken } from '../utils/session';
@@ -68,6 +67,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     chapterId: ''
   });
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isSavingChapter, setIsSavingChapter] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -82,7 +82,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     setLoading(true);
     try {
       // ✅ FIX: Get the real token from Local Storage
-      const token = getSessionToken();
+      const token = getSessionToken() || '';
 
       const [chapRes, userRes] = await Promise.all([
         DataService.listChapters(),
@@ -123,6 +123,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
   };
 
   const handleSaveChapter = async () => {
+    if (isSavingChapter) return;
+
     if (!chapterFormData.name) {
       await showAlert('Chapter Name is required');
       return;
@@ -142,6 +144,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
       return;
     }
 
+    setIsSavingChapter(true);
     try {
       const res = await DataService.saveChapter(chapterId, payload, token);
       if (res.success) {
@@ -155,6 +158,8 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
       }
     } catch (e) {
       await showAlert('Error saving chapter');
+    } finally {
+      setIsSavingChapter(false);
     }
   };
 
@@ -162,22 +167,29 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!file.type.startsWith('image/')) {
+      await showAlert('Please select a valid image file.');
+      return;
+    }
+
     setIsUploadingLogo(true);
     try {
-      const token = getSessionToken();
-      if (!token) {
-        await showAlert('Session expired. Please log in again.');
-        return;
-      }
-      const res = await uploadImageToDrive(file, 'chapters', token);
-      
-      if (res.success && res.url) {
-        setChapterFormData(prev => ({ ...prev, logo: res.url }));
-      } else {
-        await showAlert('Failed to upload logo: ' + (res.error || 'Unknown error'));
-      }
+      const logoPreview = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result !== 'string') {
+            reject(new Error('Image preview failed.'));
+            return;
+          }
+          resolve(reader.result);
+        };
+        reader.onerror = () => reject(new Error('Image preview failed.'));
+        reader.readAsDataURL(file);
+      });
+
+      setChapterFormData(prev => ({ ...prev, logo: logoPreview }));
     } catch (error) {
-      await showAlert('Error uploading logo');
+      await showAlert('Error reading logo image');
     } finally {
       setIsUploadingLogo(false);
     }
@@ -627,7 +639,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                             {/* Preview */}
                             <div className="w-20 h-20 rounded-lg bg-black/20 border border-white/10 flex items-center justify-center overflow-hidden flex-shrink-0">
                                {chapterFormData.logo ? (
-                                 <img src={chapterFormData.logo} alt={`${chapterFormData.name || chapterFormData.title || 'Chapter'} logo preview`} className="w-full h-full object-cover" />
+                                 <img src={chapterFormData.logo} alt={`${chapterFormData.name || 'Chapter'} logo preview`} className="w-full h-full object-cover" />
                                ) : (
                                  <ImageIcon className="text-white/20" />
                                )}
@@ -647,7 +659,7 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                                      {isUploadingLogo ? (
                                         <>
                                            <Loader className="animate-spin" size={18} />
-                                           <span className="text-sm">Uploading...</span>
+                                         <span className="text-sm">Processing...</span>
                                         </>
                                      ) : (
                                         <>
@@ -680,9 +692,18 @@ export const ChaptersManagement: React.FC<ChaptersManagementProps> = ({ onBack }
                           <button onClick={() => setView('LIST')} className="text-white/60 hover:text-white px-4 py-2">Cancel</button>
                           <button 
                             onClick={handleSaveChapter}
-                            className="bg-primary-cyan text-ocean-deep font-bold px-6 py-2 rounded-lg hover:bg-cyan-400 transition-colors flex items-center gap-2"
+                            disabled={isSavingChapter}
+                            className="bg-primary-cyan text-ocean-deep font-bold px-6 py-2 rounded-lg hover:bg-cyan-400 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            <Save size={18} /> Save Details
+                            {isSavingChapter ? (
+                              <>
+                                <Loader className="animate-spin" size={18} /> Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save size={18} /> Save Details
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>

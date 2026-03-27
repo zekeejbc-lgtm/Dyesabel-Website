@@ -16,6 +16,19 @@ const sendUsersRequest = async <T>(payload: object): Promise<ApiResponse<T>> => 
   return sendApiRequest<T>('users', payload);
 };
 
+const inFlightImageUploads = new Map<string, Promise<ApiResponse<{ fileId: string; fileUrl: string; thumbnailUrl: string }>>>();
+
+const buildUploadDedupKey = (file: File, sessionToken: string, customFolderId?: string) => {
+  return [
+    sessionToken,
+    customFolderId || '',
+    file.name,
+    file.type,
+    String(file.size),
+    String(file.lastModified)
+  ].join('::');
+};
+
 const DATA_CACHE_TTL_MS = 5 * 60 * 1000;
 const CHAPTER_CACHE_TTL_MS = 3 * 60 * 1000;
 
@@ -140,24 +153,71 @@ export const DriveService = {
     sessionToken: string,
     customFolderId?: string
   ) => {
-    try {
-      if (file.size > 10 * 1024 * 1024) {
-        return { success: false, error: 'File too large (>10MB)' };
-      }
-
-      const base64 = await fileToBase64(file);
-
-      return sendRequest<{ fileId: string; fileUrl: string; thumbnailUrl: string }>({
-        action: 'uploadImage',
-        sessionToken,
+    if (file.size > 10 * 1024 * 1024) {
+      console.error('[DriveService] Upload blocked by client size limit', {
         fileName: file.name,
         fileType: file.type,
-        fileData: base64,
-        customFolderId
+        fileSize: file.size,
+        maxSize: 10 * 1024 * 1024,
+        hasCustomFolderId: Boolean(customFolderId)
       });
-    } catch {
-      return { success: false, error: 'File processing failed' };
+      return { success: false, error: 'File too large (>10MB)' };
     }
+
+    const dedupKey = buildUploadDedupKey(file, sessionToken, customFolderId);
+    const existingUpload = inFlightImageUploads.get(dedupKey);
+    if (existingUpload) {
+      console.warn('[DriveService] Duplicate upload prevented; reusing in-flight request', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        hasCustomFolderId: Boolean(customFolderId)
+      });
+      return existingUpload;
+    }
+
+    const uploadPromise = (async () => {
+      try {
+        const base64 = await fileToBase64(file);
+
+        const response = await sendRequest<{ fileId: string; fileUrl: string; thumbnailUrl: string }>({
+          action: 'uploadImage',
+          sessionToken,
+          fileName: file.name,
+          fileType: file.type,
+          fileData: base64,
+          customFolderId
+        });
+
+        if (!response.success) {
+          console.error('[DriveService] Upload request failed', {
+            action: 'uploadImage',
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            hasCustomFolderId: Boolean(customFolderId),
+            backendError: response.error,
+            backendMessage: response.message
+          });
+        }
+
+        return response;
+      } catch (error) {
+        console.error('[DriveService] Upload processing failed before API request', {
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          hasCustomFolderId: Boolean(customFolderId),
+          error: error instanceof Error ? error.message : String(error)
+        });
+        return { success: false, error: 'File processing failed' };
+      } finally {
+        inFlightImageUploads.delete(dedupKey);
+      }
+    })();
+
+    inFlightImageUploads.set(dedupKey, uploadPromise);
+    return uploadPromise;
   },
 
   uploadFromUrl: async (
@@ -591,6 +651,9 @@ export const convertToCORSFreeLink = (url: string | undefined): string => {
 
   const normalizedUrl = url.trim();
   if (!normalizedUrl) return '';
+  if (normalizedUrl.startsWith('data:')) {
+    return normalizedUrl;
+  }
 
   if (normalizedUrl.includes('drive.google.com/thumbnail')) {
     return normalizedUrl;

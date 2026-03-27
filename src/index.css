@@ -187,3 +187,72 @@
 .text-shadow-md {
   text-shadow: 0 4px 6px rgba(0,0,0,0.3);
 }
+
+/* =========================================
+   5. GLOBAL TOAST THEME (SONNER)
+   ========================================= */
+[data-sonner-toaster] {
+  --normal-bg: rgba(3, 19, 30, 0.94);
+  --normal-text: #d7f9ff;
+  --normal-border: rgba(34, 211, 238, 0.28);
+
+  --success-bg: rgba(3, 19, 30, 0.96);
+  --success-text: #dcfce7;
+  --success-border: rgba(34, 197, 94, 0.42);
+
+  --info-bg: rgba(3, 19, 30, 0.96);
+  --info-text: #d7f9ff;
+  --info-border: rgba(34, 211, 238, 0.38);
+
+  --warning-bg: rgba(23, 18, 9, 0.96);
+  --warning-text: #fef3c7;
+  --warning-border: rgba(245, 158, 11, 0.4);
+
+  --error-bg: rgba(41, 10, 10, 0.96);
+  --error-text: #fee2e2;
+  --error-border: rgba(248, 113, 113, 0.45);
+
+  --toast-border-radius: 14px;
+}
+
+[data-sonner-toast] {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-width: 1px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.35);
+}
+
+[data-sonner-toast] [data-title] {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+[data-sonner-toast] [data-description] {
+  color: rgba(224, 247, 255, 0.86);
+}
+
+[data-sonner-toast] [data-button] {
+  border-radius: 10px;
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  background: rgba(34, 211, 238, 0.16);
+  color: #d7f9ff;
+  font-weight: 600;
+}
+
+[data-sonner-toast] [data-button]:hover {
+  background: rgba(34, 211, 238, 0.24);
+}
+
+[data-sonner-toast] [data-close-button] {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(2, 8, 12, 0.42);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+[data-sonner-toast][data-type='success'] [data-close-button] {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.dark [data-sonner-toast] {
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.5);
+}

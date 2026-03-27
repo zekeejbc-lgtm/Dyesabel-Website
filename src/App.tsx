@@ -16,7 +16,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AppDialogProvider } from './contexts/AppDialogContext';
 import { AppView, patchPersistedAppState, readPersistedAppState } from './utils/appState';
 import { Chapter, ExecutiveOfficer, Pillar, User } from './types';
-import { DataService } from './services/DriveService';
+import { DataService, getImageDebugInfo } from './services/DriveService';
 import { getSessionUser } from './utils/session';
 import { BookOpen, Heart, Leaf, Palette, Scale } from 'lucide-react';
 import { APP_CONFIG } from './config';
@@ -423,7 +423,22 @@ function AppContent() {
         ]);
 
         if (pillarsRes.success && Array.isArray(pillarsRes.pillars)) {
+          const imageDiagnostics = pillarsRes.pillars.map((pillar) => ({
+            pillarId: pillar.id,
+            pillarTitle: pillar.title,
+            ...getImageDebugInfo(pillar.imageUrl)
+          }));
+
+          console.log('[App] Loaded pillars image diagnostics', imageDiagnostics);
+
+          const invalidImageEntries = imageDiagnostics.filter((entry) => !entry.hasUrl);
+          if (invalidImageEntries.length) {
+            console.warn('[App] Pillars with missing image URLs', invalidImageEntries);
+          }
+
           setPillars(pillarsRes.pillars);
+        } else {
+          console.error('[App] Failed to load pillars data', pillarsRes);
         }
 
         if (chaptersRes.success && Array.isArray(chaptersRes.chapters)) {

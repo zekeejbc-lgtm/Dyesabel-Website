@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { Pillar, PillarActivity } from '../types';
-import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, Loader, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
-import { uploadImageToDrive } from '../utils/driveUpload';
-import { getSessionToken } from '../utils/session';
 
 interface PillarsEditorProps {
   pillars: Pillar[];
@@ -30,7 +28,6 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   const [editedPillars, setEditedPillars] = useState<Pillar[]>(pillars);
   const [selectedPillarIndex, setSelectedPillarIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
   const [visibleActivityCount, setVisibleActivityCount] = useState<Record<string, number>>({});
 
@@ -102,34 +99,36 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     setEditedPillars(updated);
   };
 
-  const handleImageUpload = async (pillarIndex: number, activityIndex: number | null, file: File) => {
-    setUploadingImage(true);
-    try {
-      const sessionToken = getSessionToken();
-      if (!sessionToken) {
-        await showAlert('Session expired. Please log in again.');
-        setUploadingImage(false);
-        return;
-      }
-
-      const folder = activityIndex !== null ? 'pillar-activities' : 'pillars';
-      
-      const result = await uploadImageToDrive(file, folder, sessionToken);
-
-      if (result.success && result.url) {
-        if (activityIndex !== null) {
-          updateActivity(pillarIndex, activityIndex, 'imageUrl', result.url);
-        } else {
-          updatePillar(pillarIndex, 'imageUrl', result.url);
+  const readImageAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Image preview failed.'));
+          return;
         }
-        await showAlert('Image uploaded successfully!', { title: 'Upload Complete' });
+        resolve(reader.result);
+      };
+      reader.onerror = () => reject(new Error('Image preview failed.'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageUpload = async (pillarIndex: number, activityIndex: number | null, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      await showAlert('Please select a valid image file.');
+      return;
+    }
+
+    try {
+      const previewUrl = await readImageAsDataUrl(file);
+      if (activityIndex !== null) {
+        updateActivity(pillarIndex, activityIndex, 'imageUrl', previewUrl);
       } else {
-        await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
+        updatePillar(pillarIndex, 'imageUrl', previewUrl);
       }
     } catch (error) {
-      await showAlert('Error uploading image. Please try again.');
-    } finally {
-      setUploadingImage(false);
+      await showAlert('Error reading image. Please try again.');
     }
   };
 
@@ -224,20 +223,10 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                         accept="image/*"
                         onChange={(e) => e.target.files?.[0] && handleImageUpload(selectedPillarIndex, null, e.target.files[0])}
                         className="hidden"
-                        disabled={uploadingImage}
                       />
                       <div className="text-white text-center">
-                        {uploadingImage ? (
-                          <>
-                            <Loader className="w-8 h-8 mx-auto mb-2 animate-spin" />
-                            <span className="text-sm font-medium">Uploading to Drive...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-8 h-8 mx-auto mb-2" />
-                            <span className="text-sm font-medium">Upload to Google Drive</span>
-                          </>
-                        )}
+                        <Upload className="w-8 h-8 mx-auto mb-2" />
+                        <span className="text-sm font-medium">Change Image</span>
                       </div>
                     </label>
                   </div>

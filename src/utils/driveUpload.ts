@@ -32,6 +32,12 @@ export async function uploadImageToDrive(
     // Validate file type
     const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {
+      console.error('[driveUpload] Upload blocked by invalid file type', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        folder
+      });
       return {
         success: false,
         error: 'Invalid file type. Please upload JPG, PNG, GIF, or WebP images.'
@@ -41,6 +47,13 @@ export async function uploadImageToDrive(
     // Validate file size (5MB max)
     const maxSize = 5 * 1024 * 1024; // 5MB in bytes
     if (file.size > maxSize) {
+      console.error('[driveUpload] Upload blocked by size limit', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        maxSize,
+        folder
+      });
       return {
         success: false,
         error: 'File too large. Maximum size is 5MB.'
@@ -52,9 +65,19 @@ export async function uploadImageToDrive(
       try {
         const deleteResult = await DriveService.deleteImage(oldFileId, sessionToken);
         if (!deleteResult.success) {
+          console.error('[driveUpload] Previous image delete failed before replacement upload', {
+            oldFileId,
+            folder,
+            backendError: deleteResult.error
+          });
           // Continue anyway - old image stays but new one will be uploaded
         }
       } catch (deleteError) {
+        console.error('[driveUpload] Previous image delete threw before replacement upload', {
+          oldFileId,
+          folder,
+          error: deleteError instanceof Error ? deleteError.message : String(deleteError)
+        });
         // Continue with upload despite delete failure
       }
     }
@@ -69,12 +92,29 @@ export async function uploadImageToDrive(
         fileId: result.fileId
       };
     } else {
+      console.error('[driveUpload] Upload failed', {
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        folder,
+        oldFileId,
+        backendError: result.error,
+        backendMessage: result.message
+      });
       return {
         success: false,
         error: result.error || 'Upload failed'
       };
     }
   } catch (error) {
+    console.error('[driveUpload] Unexpected upload exception', {
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      folder,
+      oldFileId,
+      error: error instanceof Error ? error.message : String(error)
+    });
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Network error. Please try again.'

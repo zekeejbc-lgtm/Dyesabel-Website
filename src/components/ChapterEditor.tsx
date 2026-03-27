@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Check, Image as ImageIcon, FileText, Users, Upload, Trash2, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Globe, Megaphone, Pencil, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
-import { DriveService, DataService, convertToCORSFreeLink } from '../services/DriveService';
+import { DataService, convertToCORSFreeLink } from '../services/DriveService';
 import { Chapter } from '../types';
 import { getSessionToken } from '../utils/session';
 
@@ -160,22 +160,32 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   };
 
   // Generalized Image Upload Handler
+  const fileToDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result !== 'string') {
+          reject(new Error('Image preview failed.'));
+          return;
+        }
+        resolve(reader.result);
+      };
+      reader.onerror = () => reject(new Error('Image preview failed.'));
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleUpload = async (file: File, field: string) => {
+    if (!file.type.startsWith('image/')) {
+      await showAlert('Please select a valid image file.');
+      return;
+    }
+
     try {
-      const sessionToken = getSessionToken();
-      if (!sessionToken) {
-        await showAlert('Session expired. Please login again.');
-        return;
-      }
-      const result = await DriveService.uploadImage(file, sessionToken);
-      
-      if (result.success && result.fileUrl) {
-        setChapterData(prev => ({ ...prev, [field]: result.fileUrl }));
-      } else {
-        await showAlert('Upload failed: ' + (result.error || 'Unknown error'));
-      }
+      const previewUrl = await fileToDataUrl(file);
+      setChapterData(prev => ({ ...prev, [field]: previewUrl }));
     } catch (error) {
-      await showAlert('Error uploading image.');
+      await showAlert('Error reading image.');
     }
   };
 
@@ -186,18 +196,16 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
   };
 
   const handleActivityImageUpload = async (index: number, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      await showAlert('Please select a valid image file.');
+      return;
+    }
+
     try {
-      const sessionToken = getSessionToken();
-      if (!sessionToken) {
-        await showAlert('Session expired. Please login again.');
-        return;
-      }
-      const result = await DriveService.uploadImage(file, sessionToken);
-      if (result.success && result.fileUrl) {
-        handleActivityChange(index, 'imageUrl', result.fileUrl);
-      }
+      const previewUrl = await fileToDataUrl(file);
+      handleActivityChange(index, 'imageUrl', previewUrl);
     } catch (error) {
-      await showAlert('Error uploading activity image.');
+      await showAlert('Error reading activity image.');
     }
   };
 

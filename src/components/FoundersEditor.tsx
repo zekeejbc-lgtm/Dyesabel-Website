@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Plus, Save, Search, Trash2, Upload, X } from 'lucide-react';
-import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
 import { ExecutiveOfficer, Founder } from '../types';
-import { DataService, DriveService, convertToCORSFreeLink } from '../services/DriveService';
+import { DataService, convertToCORSFreeLink } from '../services/DriveService';
 import { getSessionToken } from '../utils/session';
 
 interface FoundersEditorProps {
@@ -82,7 +81,6 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   const [editedFounders, setEditedFounders] = useState<Founder[]>(founders);
   const [editedExecutiveOfficers, setEditedExecutiveOfficers] = useState<ExecutiveOfficer[]>(executiveOfficers);
   const [saving, setSaving] = useState(false);
-  const [uploadingImageKey, setUploadingImageKey] = useState<string | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [dropdownDirection, setDropdownDirection] = useState<DropdownDirection>('down');
   const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
@@ -271,28 +269,30 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
 
   const uploadProfileImage = async (
     file: File,
-    onUploaded: (value: string) => void,
-    uploadKey: string
+    onUploaded: (value: string) => void
   ) => {
-    const sessionToken = getSessionToken();
-    if (!sessionToken) {
-      await showAlert('Session expired. Please log in again.');
+    if (!file.type.startsWith('image/')) {
+      await showAlert('Please select a valid image file.');
       return;
     }
 
-    setUploadingImageKey(uploadKey);
-
     try {
-      const result = await DriveService.uploadImage(file, sessionToken);
-      if (!result.success || !result.fileUrl) {
-        throw new Error(result.error || 'Upload failed');
-      }
+      const previewUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (typeof reader.result !== 'string') {
+            reject(new Error('Image preview failed.'));
+            return;
+          }
+          resolve(reader.result);
+        };
+        reader.onerror = () => reject(new Error('Image preview failed.'));
+        reader.readAsDataURL(file);
+      });
 
-      onUploaded(result.fileUrl);
+      onUploaded(previewUrl);
     } catch (error) {
-      await showAlert(error instanceof Error ? error.message : 'Error uploading image.');
-    } finally {
-      setUploadingImageKey((current) => (current === uploadKey ? null : current));
+      await showAlert(error instanceof Error ? error.message : 'Error reading image.');
     }
   };
 
@@ -320,7 +320,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
     try {
       await saveContent();
       onSave({ founders: editedFounders, executiveOfficers: editedExecutiveOfficers });
-      toast.success('Founders and executive officers saved successfully.');
+      await showAlert('Founders and executive officers saved successfully!', { title: 'Founders Updated' });
       onClose();
     } catch (error) {
       await showAlert(error instanceof Error ? error.message : 'Error saving content. Please try again.');
@@ -463,8 +463,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                                 if (!file) return;
                                 void uploadProfileImage(
                                   file,
-                                  (imageUrl) => updateFounder(index, 'imageUrl', imageUrl),
-                                  `founder-${founder.id}`
+                                  (imageUrl) => updateFounder(index, 'imageUrl', imageUrl)
                                 );
                               }}
                               className="hidden"
@@ -519,20 +518,13 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
             </section>
 
             <section>
-              <div className="flex items-center justify-between mb-6">
+              <div className="mb-6">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Executive Officers</h3>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                     Pick from preset executive and program-director positions, or switch to custom.
                   </p>
                 </div>
-                <button
-                  onClick={addExecutiveOfficer}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Executive
-                </button>
               </div>
 
               <div className="space-y-6">
@@ -588,8 +580,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                                   if (!file) return;
                                   void uploadProfileImage(
                                     file,
-                                    (imageUrl) => updateExecutiveOfficer(index, 'imageUrl', imageUrl),
-                                    `executive-${officer.id}`
+                                    (imageUrl) => updateExecutiveOfficer(index, 'imageUrl', imageUrl)
                                   );
                                 }}
                                 className="hidden"
@@ -667,6 +658,24 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
                     <p className="font-medium mb-2">No executive officers added yet</p>
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={addExecutiveOfficer}
+                  className="w-full rounded-xl border border-gray-200 dark:border-gray-700 p-5 text-left transition-colors hover:border-primary-blue dark:hover:border-primary-cyan hover:bg-primary-blue/5 dark:hover:bg-primary-cyan/5"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h4 className="font-medium text-gray-900 dark:text-white">Add Executive</h4>
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                        Add another executive officer card to continue the list.
+                      </p>
+                    </div>
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary-blue/10 text-primary-blue dark:bg-primary-cyan/15 dark:text-primary-cyan">
+                      <Plus className="w-5 h-5" />
+                    </span>
+                  </div>
+                </button>
               </div>
             </section>
             </div>
@@ -681,11 +690,11 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !!uploadingImageKey}
+            disabled={saving}
             className="flex items-center gap-2 rounded-lg bg-primary-blue px-6 py-2 font-medium text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
-            {saving ? 'Saving...' : uploadingImageKey ? 'Uploading image...' : 'Save Changes'}
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
         </div>

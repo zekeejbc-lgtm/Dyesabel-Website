@@ -179,18 +179,50 @@ function buildDriveImageUrl_(fileId) {
   return 'https://drive.google.com/uc?export=view&id=' + fileId;
 }
 
-function ensureFileIsPublic_(file) {
+function ensureFileIsPublic_(file, context) {
+  var details = context || {};
+  var fileId = details.fileId || (file && typeof file.getId === 'function' ? file.getId() : 'unknown');
+  var fileName = details.fileName || (file && typeof file.getName === 'function' ? file.getName() : 'unknown');
+  var folderId = details.folderId || 'unknown';
+  var folderName = details.folderName || 'unknown';
+  var isPublicAccess = function(access) {
+    return access === DriveApp.Access.ANYONE || access === DriveApp.Access.ANYONE_WITH_LINK;
+  };
+
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (error) {
-    throw new Error('Uploaded image could not be shared publicly. Check Drive sharing settings for the target folder.');
+    var reason = error && error.message ? error.message : String(error);
+    var sharingAccess = 'unknown';
+    try {
+      sharingAccess = file.getSharingAccess();
+    } catch (innerError) {}
+
+    if (!isPublicAccess(sharingAccess)) {
+      throw new Error('Uploaded image could not be shared publicly. Check Drive sharing settings for the target folder. ' +
+        'Details: fileId=' + fileId + ', fileName=' + fileName + ', folderId=' + folderId + ', folderName=' + folderName + ', error=' + reason + ', sharingAccess=' + sharingAccess);
+    }
+
+    Logger.log('setSharing failed but file is already public. Continuing upload. ' +
+      'Details: fileId=' + fileId + ', fileName=' + fileName + ', folderId=' + folderId + ', folderName=' + folderName + ', error=' + reason + ', sharingAccess=' + sharingAccess);
+  }
+
+  var finalAccess = file.getSharingAccess();
+  if (!isPublicAccess(finalAccess)) {
+    throw new Error('Uploaded image is not publicly accessible. Check Drive sharing settings for the target folder. ' +
+      'Details: fileId=' + fileId + ', fileName=' + fileName + ', folderId=' + folderId + ', folderName=' + folderName + ', sharingAccess=' + finalAccess);
   }
 }
 
 function uploadImage_(data) {
   var folder = getTargetFolder_(data.customFolderId);
   var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(data.fileData), data.fileType, data.fileName));
-  ensureFileIsPublic_(file);
+  ensureFileIsPublic_(file, {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    folderId: folder.getId(),
+    folderName: folder.getName()
+  });
   logUpload_(data.sessionToken, file.getId(), file.getName(), folder.getName());
   var publicUrl = buildDriveImageUrl_(file.getId());
   return { fileId: file.getId(), fileName: file.getName(), fileUrl: publicUrl, originalUrl: file.getDownloadUrl(), thumbnailUrl: publicUrl };
@@ -201,7 +233,12 @@ function uploadFromUrl_(data) {
   var blob = UrlFetchApp.fetch(data.imageUrl).getBlob();
   blob.setName(data.fileName);
   var file = folder.createFile(blob);
-  ensureFileIsPublic_(file);
+  ensureFileIsPublic_(file, {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    folderId: folder.getId(),
+    folderName: folder.getName()
+  });
   return { fileId: file.getId(), fileName: file.getName(), fileUrl: buildDriveImageUrl_(file.getId()) };
 }
 
@@ -250,23 +287,140 @@ function logUpload_(token, fileId, fileName, folderName) {
   }
 }
 
-function processAndUploadImages_(item) {
+function sanitizeUploadFileNameSegment_(value, fallbackValue) {
+  var source = value == null ? '' : String(value);
+  var cleaned = source.replace(/\s+/g, '-').replace(/[^A-Za-z0-9_-]/g, '-').replace(/-+/g, '-').replace(/^[-_]+|[-_]+$/g, '');
+  if (!cleaned) cleaned = fallbackValue || 'Item';
+  if (cleaned.length > 48) cleaned = cleaned.substring(0, 48);
+  return cleaned;
+}
+
+function getUploadFileExtension_(contentType) {
+  var raw = String(contentType || '').split('/')[1] || 'jpg';
+  var ext = raw.split('+')[0].replace(/[^A-Za-z0-9]/g, '').toLowerCase();
+  return ext || 'jpg';
+}
+
+function buildStructuredUploadFileName_(fieldKey, contentType, item, options) {
+  var context = options || {};
+  var contextArea = sanitizeUploadFileNameSegment_(context.area || 'Content', 'Content');
+  var contextTitle = sanitizeUploadFileNameSegment_(context.title || (item && (item.title || item.name)) || 'Item', 'Item');
+  var contextId = sanitizeUploadFileNameSegment_(context.id || (item && item.id) || 'NoID', 'NoID');
+  var contextField = sanitizeUploadFileNameSegment_(fieldKey || 'Image', 'Image');
+  var extension = getUploadFileExtension_(contentType);
+  var timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss_SSS');
+  return [contextArea, contextTitle, contextId, contextField, timestamp].join('-') + '.' + extension;
+}
+
+function isBase64ImageDataUrl_(value) {
+  return typeof value === 'string' && value.indexOf('data:image/') === 0;
+}
+
+function isImageFieldKey_(key) {
+  return /image|logo|thumbnail|cover|photo|avatar|banner|featured/i.test(String(key || ''));
+}
+
+function extractDriveFileIdFromUrl_(value) {
+  var normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(normalized)) return normalized;
+
+  var idMatch =
+    normalized.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) ||
+    normalized.match(/\/d\/([a-zA-Z0-9_-]{20,})/) ||
+    normalized.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/);
+  if (idMatch && idMatch[1]) return idMatch[1];
+
+  if (!/drive\.google\.com|googleusercontent\.com|uc\?export=view/i.test(normalized)) return '';
+  var fallback = normalized.match(/[-\w]{25,}/);
+  return fallback ? fallback[0] : '';
+}
+
+function deleteDriveImageByUrl_(value, reason) {
+  var fileId = extractDriveFileIdFromUrl_(value);
+  if (!fileId) return;
+  try {
+    DriveApp.getFileById(fileId).setTrashed(true);
+  } catch (error) {
+    Logger.log('Unable to trash replaced/removed image. fileId=' + fileId + ', reason=' + (reason || 'n/a') + ', error=' + (error && error.message ? error.message : String(error)));
+  }
+}
+
+function collectReferencedImageUrlsDeep_(value, urlLookup) {
+  if (!value) return;
+  if (Array.isArray(value)) {
+    value.forEach(function(entry) { collectReferencedImageUrlsDeep_(entry, urlLookup); });
+    return;
+  }
+  if (typeof value !== 'object') return;
+
+  for (var key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    var entryValue = value[key];
+    if (typeof entryValue === 'string' && isImageFieldKey_(key)) {
+      var normalized = String(entryValue || '').trim();
+      if (normalized && !isBase64ImageDataUrl_(normalized)) {
+        urlLookup[normalized] = true;
+      }
+      continue;
+    }
+    if (entryValue && typeof entryValue === 'object') {
+      collectReferencedImageUrlsDeep_(entryValue, urlLookup);
+    }
+  }
+}
+
+function cleanupImageFieldsFromItem_(item, reason, retainedUrlLookup) {
+  if (!item || typeof item !== 'object') return;
+  var retained = retainedUrlLookup || null;
+  for (var key in item) {
+    if (!Object.prototype.hasOwnProperty.call(item, key)) continue;
+    if (!isImageFieldKey_(key)) continue;
+    var value = item[key];
+    if (typeof value !== 'string' || !value) continue;
+    if (isBase64ImageDataUrl_(value)) continue;
+    var normalized = String(value).trim();
+    if (retained && retained[normalized]) continue;
+    deleteDriveImageByUrl_(value, reason || ('cleanup-' + key));
+  }
+}
+
+function processAndUploadImages_(item, options, previousItem) {
   if (!item || typeof item !== 'object') return item;
+  var previous = previousItem && typeof previousItem === 'object' ? previousItem : null;
   for (var key in item) {
     if (!Object.prototype.hasOwnProperty.call(item, key)) continue;
     var value = item[key];
-    if (typeof value === 'string' && value.indexOf('data:image/') === 0) {
+    var previousValue = previous && previous[key] != null ? String(previous[key]) : '';
+
+    if (isBase64ImageDataUrl_(value)) {
       try {
         var contentType = value.substring(5, value.indexOf(';'));
         var base64Data = value.substring(value.indexOf(',') + 1);
-        var fileExt = contentType.split('/')[1] || 'jpg';
-        var fileName = 'auto_upload_' + key + '_' + new Date().getTime() + '.' + fileExt;
-        var file = getTargetFolder_(null).createFile(Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, fileName));
-        ensureFileIsPublic_(file);
-        item[key] = buildDriveImageUrl_(file.getId());
+        var fileName = buildStructuredUploadFileName_(key, contentType, item, options);
+        var folder = getTargetFolder_(null);
+        var file = folder.createFile(Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, fileName));
+        ensureFileIsPublic_(file, {
+          fileId: file.getId(),
+          fileName: file.getName(),
+          folderId: folder.getId(),
+          folderName: folder.getName()
+        });
+        var uploadedUrl = buildDriveImageUrl_(file.getId());
+        item[key] = uploadedUrl;
+
+        if (previousValue && previousValue !== uploadedUrl && !isBase64ImageDataUrl_(previousValue)) {
+          deleteDriveImageByUrl_(previousValue, 'replaced-' + key);
+        }
       } catch (error) {
         Logger.log('Error auto-uploading base64 image: ' + error);
       }
+      continue;
+    }
+
+    var valueAsString = value == null ? '' : String(value);
+    if (!valueAsString && previousValue && isImageFieldKey_(key) && !isBase64ImageDataUrl_(previousValue)) {
+      deleteDriveImageByUrl_(previousValue, 'cleared-' + key);
     }
   }
   return item;
@@ -322,12 +476,49 @@ function saveData_(sheetKey, contentData) {
   var config = MAIN_DATA_CONFIG[sheetKey];
   if (!config) throw new Error('Unsupported mapped sheet: ' + sheetKey);
   var ss = getMainSpreadsheet_();
+  var previousData = loadData_(sheetKey)[config.responseKey];
+
   if (config.type === 'object') {
-    saveMappedObjectData_(ss, config, processAndUploadImages_(contentData || {}));
+    var objectData = contentData || {};
+    var previousObjectData = previousData && typeof previousData === 'object' && !Array.isArray(previousData) ? previousData : {};
+    saveMappedObjectData_(ss, config, processAndUploadImages_(objectData, {
+      area: config.sheetName || sheetKey,
+      title: objectData.title || objectData.name || sheetKey,
+      id: objectData.id || 'object'
+    }, previousObjectData));
   } else if (config.type === 'array') {
-    saveMappedArrayData_(ss, config, Array.isArray(contentData) ? contentData.map(function(item) { return processAndUploadImages_(item || {}); }) : []);
+    var previousItems = Array.isArray(previousData) ? previousData : [];
+    var retainedImageUrls = {};
+    var previousByLookup = {};
+    previousItems.forEach(function(previousItem, previousIndex) {
+      var previousLookup = previousItem && previousItem.id ? String(previousItem.id) : ('__index__' + previousIndex);
+      previousByLookup[previousLookup] = previousItem;
+    });
+
+    var retainedLookup = {};
+    var mappedItems = Array.isArray(contentData) ? contentData.map(function(item, index) {
+      var currentItem = item || {};
+      var lookup = currentItem.id ? String(currentItem.id) : ('__index__' + index);
+      retainedLookup[lookup] = true;
+      var processedItem = processAndUploadImages_(currentItem, {
+        area: config.sheetName || sheetKey,
+        title: currentItem.title || currentItem.name || (sheetKey + '-' + (index + 1)),
+        id: currentItem.id || ('item-' + (index + 1))
+      }, previousByLookup[lookup] || null);
+      collectReferencedImageUrlsDeep_(processedItem, retainedImageUrls);
+      return processedItem;
+    }) : [];
+
+    previousItems.forEach(function(previousItem, previousIndex) {
+      var previousLookup = previousItem && previousItem.id ? String(previousItem.id) : ('__index__' + previousIndex);
+      if (!retainedLookup[previousLookup]) {
+        cleanupImageFieldsFromItem_(previousItem, 'removed-' + (config.sheetName || sheetKey), retainedImageUrls);
+      }
+    });
+
+    saveMappedArrayData_(ss, config, mappedItems);
   } else if (config.type === 'nested') {
-    saveMappedNestedData_(ss, config, Array.isArray(contentData) ? contentData : []);
+    saveMappedNestedData_(ss, config, Array.isArray(contentData) ? contentData : [], Array.isArray(previousData) ? previousData : []);
   }
   return { message: sheetKey + ' saved' };
 }
@@ -432,18 +623,72 @@ function saveMappedArrayData_(ss, config, items) {
   }));
 }
 
-function saveMappedNestedData_(ss, config, items) {
+function saveMappedNestedData_(ss, config, items, previousItems) {
   var parentRows = [];
   var childRows = [];
+  var retainedImageUrls = {};
+  var previousParents = Array.isArray(previousItems) ? previousItems : [];
+  var previousParentsById = {};
+  previousParents.forEach(function(previousParent) {
+    if (!previousParent || !previousParent.id) return;
+    previousParentsById[String(previousParent.id)] = previousParent;
+  });
+  var retainedParentIds = {};
+
   items.forEach(function(rawItem, itemIndex) {
-    var item = processAndUploadImages_(rawItem || {});
+    var incomingParentId = rawItem && rawItem.id ? String(rawItem.id) : '';
+    var previousParent = incomingParentId ? (previousParentsById[incomingParentId] || null) : null;
+    var item = processAndUploadImages_(rawItem || {}, {
+      area: config.sheetName || 'Pillars',
+      title: rawItem && (rawItem.title || rawItem.name) ? (rawItem.title || rawItem.name) : ('Parent-' + (itemIndex + 1)),
+      id: rawItem && rawItem.id ? rawItem.id : ('parent-' + (itemIndex + 1))
+    }, previousParent);
+    collectReferencedImageUrlsDeep_(item, retainedImageUrls);
     var parentId = item.id || Utilities.getUuid();
+    retainedParentIds[String(parentId)] = true;
     parentRows.push([parentId, item.title || '', item.excerpt || '', item.description || '', item.aim || '', item.imageUrl || '', itemIndex]);
+
+    var previousActivitiesById = {};
+    if (previousParent && Array.isArray(previousParent.activities)) {
+      previousParent.activities.forEach(function(previousActivity) {
+        if (!previousActivity || !previousActivity.id) return;
+        previousActivitiesById[String(previousActivity.id)] = previousActivity;
+      });
+    }
+    var retainedActivityIds = {};
+
     (Array.isArray(item.activities) ? item.activities : []).forEach(function(rawActivity, activityIndex) {
-      var activity = processAndUploadImages_(rawActivity || {});
-      childRows.push([parentId, activity.id || Utilities.getUuid(), activity.title || '', activity.date || '', activity.description || '', activity.imageUrl || '', activityIndex]);
+      var incomingActivityId = rawActivity && rawActivity.id ? String(rawActivity.id) : '';
+      var previousActivity = incomingActivityId ? (previousActivitiesById[incomingActivityId] || null) : null;
+      var activity = processAndUploadImages_(rawActivity || {}, {
+        area: config.childSheetName || ((config.sheetName || 'Pillars') + 'Activities'),
+        title: rawActivity && (rawActivity.title || rawActivity.name) ? (rawActivity.title || rawActivity.name) : ((item.title || 'Parent') + '-Activity-' + (activityIndex + 1)),
+        id: rawActivity && rawActivity.id ? rawActivity.id : ('activity-' + (activityIndex + 1))
+      }, previousActivity);
+      collectReferencedImageUrlsDeep_(activity, retainedImageUrls);
+      var activityId = activity.id || Utilities.getUuid();
+      retainedActivityIds[String(activityId)] = true;
+      childRows.push([parentId, activityId, activity.title || '', activity.date || '', activity.description || '', activity.imageUrl || '', activityIndex]);
+    });
+
+    if (previousParent && Array.isArray(previousParent.activities)) {
+      previousParent.activities.forEach(function(previousActivity) {
+        var previousActivityId = previousActivity && previousActivity.id ? String(previousActivity.id) : '';
+        if (!previousActivityId || retainedActivityIds[previousActivityId]) return;
+        cleanupImageFieldsFromItem_(previousActivity, 'removed-' + (config.childSheetName || 'NestedActivity'), retainedImageUrls);
+      });
+    }
+  });
+
+  previousParents.forEach(function(previousParent) {
+    var previousParentId = previousParent && previousParent.id ? String(previousParent.id) : '';
+    if (!previousParentId || retainedParentIds[previousParentId]) return;
+    cleanupImageFieldsFromItem_(previousParent, 'removed-' + (config.sheetName || 'NestedParent'), retainedImageUrls);
+    (Array.isArray(previousParent.activities) ? previousParent.activities : []).forEach(function(previousActivity) {
+      cleanupImageFieldsFromItem_(previousActivity, 'removed-' + (config.childSheetName || 'NestedActivity'), retainedImageUrls);
     });
   });
+
   dyesabelWriteSheetRows_(dyesabelGetOrCreateSheet_(ss, config.sheetName), config.parentFields, parentRows);
   dyesabelWriteSheetRows_(dyesabelGetOrCreateSheet_(ss, config.childSheetName), config.childFields, childRows);
 }
@@ -510,20 +755,60 @@ function getLegacyJsonSheetPayload_(sheet) {
   return { hasLegacyFormat: true, value: JSON.parse(jsonString) };
 }
 
-function savePartners_(partners) {
+function savePartners_(partners, previousPartners) {
   var rows = [];
+  var existingPartners = Array.isArray(previousPartners) ? previousPartners : (loadPartners_().partners || []);
+  var retainedImageUrls = {};
+  var existingByCategoryAndPartner = {};
+
+  existingPartners.forEach(function(existingCategory) {
+    var categoryId = String(existingCategory && existingCategory.id || '');
+    var partnersById = {};
+    (Array.isArray(existingCategory && existingCategory.partners) ? existingCategory.partners : []).forEach(function(existingPartner) {
+      if (!existingPartner || !existingPartner.id) return;
+      partnersById[String(existingPartner.id)] = existingPartner;
+    });
+    existingByCategoryAndPartner[categoryId] = partnersById;
+  });
+
+  var retainedPartnerKeys = {};
+
   (Array.isArray(partners) ? partners : []).forEach(function(rawCategory) {
     var category = rawCategory || {};
+    var categoryId = String(category.id || '');
+    var existingPartnersForCategory = existingByCategoryAndPartner[categoryId] || {};
     var categoryPartners = Array.isArray(category.partners) ? category.partners : [];
     if (categoryPartners.length) {
-      categoryPartners.forEach(function(rawPartner) {
-        var partner = processAndUploadImages_(rawPartner || {});
+      categoryPartners.forEach(function(rawPartner, partnerIndex) {
+        var incomingPartnerId = rawPartner && rawPartner.id ? String(rawPartner.id) : '';
+        var existingPartner = incomingPartnerId ? (existingPartnersForCategory[incomingPartnerId] || null) : null;
+        var partner = processAndUploadImages_(rawPartner || {}, {
+          area: 'Partners',
+          title: rawPartner && (rawPartner.name || rawPartner.title) ? (rawPartner.name || rawPartner.title) : (category.title || ('Partner-' + (partnerIndex + 1))),
+          id: rawPartner && rawPartner.id ? rawPartner.id : (category.id || ('partner-' + (partnerIndex + 1)))
+        }, existingPartner);
+        collectReferencedImageUrlsDeep_(partner, retainedImageUrls);
+        if (partner && partner.id) {
+          retainedPartnerKeys[categoryId + '::' + String(partner.id)] = true;
+        }
         rows.push([category.id || '', category.title || '', partner.id || '', partner.name || '', partner.logo || '']);
       });
     } else {
       rows.push([category.id || '', category.title || '', '', '', '']);
     }
   });
+
+  existingPartners.forEach(function(existingCategory) {
+    var categoryId = String(existingCategory && existingCategory.id || '');
+    (Array.isArray(existingCategory && existingCategory.partners) ? existingCategory.partners : []).forEach(function(existingPartner) {
+      var partnerId = existingPartner && existingPartner.id ? String(existingPartner.id) : '';
+      if (!partnerId) return;
+      if (!retainedPartnerKeys[categoryId + '::' + partnerId]) {
+        cleanupImageFieldsFromItem_(existingPartner, 'removed-Partners', retainedImageUrls);
+      }
+    });
+  });
+
   dyesabelWriteSheetRows_(dyesabelGetOrCreateSheet_(getMainSpreadsheet_(), 'Partners'), PARTNER_HEADERS, rows);
   return { message: 'Partners saved successfully' };
 }
@@ -662,7 +947,9 @@ function deletePartner_(categoryId, partnerId) {
   return { message: 'partner deleted', partner: removed, categoryId: categoryId };
 }
 
-function normalizeChapterRecord_(chapterId, chapterData) {
+function normalizeChapterRecord_(chapterId, chapterData, previousChapterData) {
+  var previousChapter = previousChapterData && typeof previousChapterData === 'object' ? previousChapterData : null;
+  var retainedImageUrls = {};
   var chapter = processAndUploadImages_({
     id: chapterId,
     name: chapterData.name || chapterData.title || '',
@@ -683,11 +970,43 @@ function normalizeChapterRecord_(chapterId, chapterData) {
     websiteUrl: chapterData.websiteUrl || '',
     joinUrl: chapterData.joinUrl || '',
     joinCtaDescription: chapterData.joinCtaDescription || ''
-  });
-  chapter.activities = (Array.isArray(chapterData.activities) ? chapterData.activities : []).map(function(activity) {
-    var nextActivity = processAndUploadImages_(activity || {});
+  }, {
+    area: 'Chapters',
+    title: chapterData.name || chapterData.title || chapterId || 'Chapter',
+    id: chapterId || 'chapter'
+  }, previousChapter);
+  collectReferencedImageUrlsDeep_(chapter, retainedImageUrls);
+
+  var previousActivitiesById = {};
+  if (previousChapter && Array.isArray(previousChapter.activities)) {
+    previousChapter.activities.forEach(function(previousActivity) {
+      if (!previousActivity || !previousActivity.id) return;
+      previousActivitiesById[String(previousActivity.id)] = previousActivity;
+    });
+  }
+  var retainedActivityIds = {};
+
+  chapter.activities = (Array.isArray(chapterData.activities) ? chapterData.activities : []).map(function(activity, activityIndex) {
+    var activityId = activity && activity.id ? String(activity.id) : '';
+    var previousActivity = activityId ? (previousActivitiesById[activityId] || null) : null;
+    var nextActivity = processAndUploadImages_(activity || {}, {
+      area: 'ChapterActivities',
+      title: activity && (activity.title || activity.name) ? (activity.title || activity.name) : ((chapter.name || chapterId || 'Chapter') + '-Activity-' + (activityIndex + 1)),
+      id: activity && activity.id ? activity.id : ((chapterId || 'chapter') + '-activity-' + (activityIndex + 1))
+    }, previousActivity);
+    collectReferencedImageUrlsDeep_(nextActivity, retainedImageUrls);
+    if (nextActivity && nextActivity.id) retainedActivityIds[String(nextActivity.id)] = true;
     return { id: nextActivity.id || Utilities.getUuid(), title: nextActivity.title || '', description: nextActivity.description || '', date: nextActivity.date || '', imageUrl: nextActivity.imageUrl || '' };
   });
+
+  if (previousChapter && Array.isArray(previousChapter.activities)) {
+    previousChapter.activities.forEach(function(previousActivity) {
+      var previousActivityId = previousActivity && previousActivity.id ? String(previousActivity.id) : '';
+      if (!previousActivityId || retainedActivityIds[previousActivityId]) return;
+      cleanupImageFieldsFromItem_(previousActivity, 'removed-ChapterActivities', retainedImageUrls);
+    });
+  }
+
   return chapter;
 }
 
@@ -771,8 +1090,9 @@ function saveChapter_(data) {
   requireChapterManager_(data.sessionToken, data.chapterId);
   var ss = getMainSpreadsheet_();
   var chapters = loadAllChaptersNormalized_(ss);
-  var nextChapter = normalizeChapterRecord_(data.chapterId, data.chapterData || {});
   var index = chapters.findIndex(function(chapter) { return String(chapter.id) === String(data.chapterId); });
+  var previousChapter = index >= 0 ? chapters[index] : null;
+  var nextChapter = normalizeChapterRecord_(data.chapterId, data.chapterData || {}, previousChapter);
   if (index >= 0) chapters[index] = nextChapter; else chapters.push(nextChapter);
   rewriteChaptersSheets_(ss, chapters);
   return { message: 'Chapter saved successfully' };
@@ -788,7 +1108,20 @@ function listChapters_() {
 
 function deleteChapter_(chapterId) {
   var ss = getMainSpreadsheet_();
-  rewriteChaptersSheets_(ss, loadAllChaptersNormalized_(ss).filter(function(chapter) { return String(chapter.id) !== String(chapterId); }));
+  var allChapters = loadAllChaptersNormalized_(ss);
+  var remainingChapters = allChapters.filter(function(chapter) { return String(chapter.id) !== String(chapterId); });
+  var retainedImageUrls = {};
+  remainingChapters.forEach(function(chapter) {
+    collectReferencedImageUrlsDeep_(chapter, retainedImageUrls);
+  });
+  var removedChapters = allChapters.filter(function(chapter) { return String(chapter.id) === String(chapterId); });
+  removedChapters.forEach(function(removedChapter) {
+    cleanupImageFieldsFromItem_(removedChapter, 'removed-Chapters', retainedImageUrls);
+    (Array.isArray(removedChapter.activities) ? removedChapter.activities : []).forEach(function(removedActivity) {
+      cleanupImageFieldsFromItem_(removedActivity, 'removed-ChapterActivities', retainedImageUrls);
+    });
+  });
+  rewriteChaptersSheets_(ss, remainingChapters);
   return { message: 'Chapter deleted' };
 }
 

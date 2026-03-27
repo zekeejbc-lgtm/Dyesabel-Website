@@ -207,16 +207,36 @@ function buildDriveImageUrl(fileId) {
   return `https://drive.google.com/uc?export=view&id=${fileId}`;
 }
 
-function ensureFileIsPublic(file) {
+function ensureFileIsPublic(file, context) {
+  const details = context || {};
+  const fileId = details.fileId || (file && typeof file.getId === 'function' ? file.getId() : 'unknown');
+  const fileName = details.fileName || (file && typeof file.getName === 'function' ? file.getName() : 'unknown');
+  const folderId = details.folderId || 'unknown';
+  const folderName = details.folderName || 'unknown';
+  const isPublicAccess = (access) => access === DriveApp.Access.ANYONE || access === DriveApp.Access.ANYONE_WITH_LINK;
+
   try {
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
   } catch (e) {
-    throw new Error('Uploaded image could not be shared publicly. Check Drive sharing settings for the target folder.');
+    const reason = e && e.message ? e.message : String(e);
+    let sharingAccess = 'unknown';
+    try {
+      sharingAccess = file.getSharingAccess();
+    } catch (innerError) {}
+
+    if (!isPublicAccess(sharingAccess)) {
+      throw new Error('Uploaded image could not be shared publicly. Check Drive sharing settings for the target folder. ' +
+        `Details: fileId=${fileId}, fileName=${fileName}, folderId=${folderId}, folderName=${folderName}, error=${reason}, sharingAccess=${sharingAccess}`);
+    }
+
+    Logger.log('setSharing failed but file is already public. Continuing upload. ' +
+      `Details: fileId=${fileId}, fileName=${fileName}, folderId=${folderId}, folderName=${folderName}, error=${reason}, sharingAccess=${sharingAccess}`);
   }
 
   const sharingAccess = file.getSharingAccess();
-  if (sharingAccess !== DriveApp.Access.ANYONE && sharingAccess !== DriveApp.Access.ANYONE_WITH_LINK) {
-    throw new Error('Uploaded image is not publicly accessible. Check Drive sharing settings for the target folder.');
+  if (!isPublicAccess(sharingAccess)) {
+    throw new Error('Uploaded image is not publicly accessible. Check Drive sharing settings for the target folder. ' +
+      `Details: fileId=${fileId}, fileName=${fileName}, folderId=${folderId}, folderName=${folderName}, sharingAccess=${sharingAccess}`);
   }
 }
 
@@ -232,7 +252,12 @@ function handleUploadImage(data) {
   const file = folder.createFile(blob);
 
   // 3. Ensure the uploaded image can be rendered publicly on the site
-  ensureFileIsPublic(file);
+  ensureFileIsPublic(file, {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    folderId: folder.getId(),
+    folderName: folder.getName()
+  });
 
   // 4. Log
   logUpload(data.sessionToken, file.getId(), file.getName(), folder.getName());
@@ -258,7 +283,12 @@ function handleUploadFromUrl(data) {
   blob.setName(data.fileName);
   
   const file = folder.createFile(blob);
-  ensureFileIsPublic(file);
+  ensureFileIsPublic(file, {
+    fileId: file.getId(),
+    fileName: file.getName(),
+    folderId: folder.getId(),
+    folderName: folder.getName()
+  });
 
   const publicImageUrl = buildDriveImageUrl(file.getId());
 
@@ -649,7 +679,12 @@ function processAndUploadImages(item) {
         const blob = Utilities.newBlob(Utilities.base64Decode(base64Data), contentType, fileName);
         const file = folder.createFile(blob);
 
-        ensureFileIsPublic(file);
+        ensureFileIsPublic(file, {
+          fileId: file.getId(),
+          fileName: file.getName(),
+          folderId: folder.getId(),
+          folderName: folder.getName()
+        });
         const driveUrl = buildDriveImageUrl(file.getId());
         
         item[key] = driveUrl;

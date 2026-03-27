@@ -2,6 +2,7 @@ import React from 'react';
 import { Pillar } from '../types';
 import { Leaf, BookOpen, Scale, Heart, Palette } from 'lucide-react';
 import { SkeletonBlock } from './Skeleton';
+import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
 
 // Helper to map index to icon since icons can't be saved in JSON
 const getIconForIndex = (index: number) => {
@@ -75,13 +76,28 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, 
               className={`glass-card rounded-2xl overflow-hidden group flex flex-col h-full transform hover:-translate-y-3 transition-all duration-500 hover:shadow-[0_20px_40px_-15px_rgba(34,211,238,0.3)] reveal reveal-delay-${(index + 1) * 100} cursor-pointer`}
             >
               <div className="relative h-48 md:h-36 lg:h-48 overflow-hidden">
+                {(() => {
+                  const imageSrc = convertToCORSFreeLink(pillar.imageUrl);
+                  return (
                 <img 
-                  src={pillar.imageUrl} 
+                  src={imageSrc} 
                   alt={`${pillar.title} pillar image`} 
                   loading="lazy"
                   decoding="async"
+                  referrerPolicy="no-referrer"
+                  onError={(event) => {
+                    const info = getImageDebugInfo(pillar.imageUrl);
+                    console.error('[Pillars] Card image failed to load', {
+                      pillarId: pillar.id,
+                      pillarTitle: pillar.title,
+                      attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                      ...info
+                    });
+                  }}
                   className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-1000"
                 />
+                  );
+                })()}
                 <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep/90 via-transparent to-transparent opacity-90"></div>
                 
                 <div className="absolute bottom-4 left-4 bg-gradient-to-br from-primary-cyan to-primary-blue p-2.5 rounded-xl shadow-lg transform group-hover:rotate-12 transition-transform duration-300 ring-2 ring-white/20">

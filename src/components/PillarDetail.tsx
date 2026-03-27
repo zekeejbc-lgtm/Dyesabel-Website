@@ -3,6 +3,7 @@ import { ArrowLeft, Target, Calendar, CheckCircle2, Edit } from 'lucide-react';
 // ✅ FIXED IMPORTS: Changed '../../' to '../'
 import { Pillar } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
 
 interface PillarDetailProps {
   pillar: Pillar;
@@ -39,10 +40,20 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
       <section className="relative h-[60vh] min-h-[500px] flex items-end pb-16 overflow-hidden mb-12">
         <div className="absolute inset-0 z-0">
           <img 
-            src={pillar.imageUrl} 
+            src={convertToCORSFreeLink(pillar.imageUrl)} 
             alt={`${pillar.title} pillar cover image`} 
             fetchPriority="high"
             decoding="async"
+            referrerPolicy="no-referrer"
+            onError={(event) => {
+              const info = getImageDebugInfo(pillar.imageUrl);
+              console.error('[PillarDetail] Hero image failed to load', {
+                pillarId: pillar.id,
+                pillarTitle: pillar.title,
+                attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                ...info
+              });
+            }}
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-ocean-deep via-ocean-deep/70 to-transparent"></div>
@@ -90,10 +101,22 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
                     <div key={activity.id} className="glass-card rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:bg-white/5 transition-colors border border-white/10 shrink-0">
                       <div className="w-full md:w-1/3 h-48 md:h-auto relative overflow-hidden">
                          <img 
-                            src={activity.imageUrl} 
+                            src={convertToCORSFreeLink(activity.imageUrl)} 
                            alt={`${activity.title || 'Pillar activity'} image for ${pillar.title}`}
                             loading="lazy"
                             decoding="async"
+                            referrerPolicy="no-referrer"
+                            onError={(event) => {
+                              const info = getImageDebugInfo(activity.imageUrl);
+                              console.error('[PillarDetail] Activity image failed to load', {
+                                pillarId: pillar.id,
+                                pillarTitle: pillar.title,
+                                activityId: activity.id,
+                                activityTitle: activity.title,
+                                attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src,
+                                ...info
+                              });
+                            }}
                             className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                           />
                           <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">

@@ -68,18 +68,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
 
   return (
     <>
-      <div className={`fixed inset-0 z-[100] flex items-center justify-center p-4 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-4 md:p-6 transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0'}`}>
         <div
           className="absolute inset-0 bg-ocean-deep/80 backdrop-blur-md transition-opacity duration-300"
           onClick={onClose}
         />
 
         <div
-          className={`relative max-h-[90vh] w-[95%] max-w-md overflow-y-auto rounded-[2rem] border border-white/10 bg-white p-6 shadow-2xl transition-all duration-300 dark:bg-[#051923] md:p-8 ${isOpen ? 'translate-y-0 scale-100' : 'translate-y-8 scale-95'} custom-scrollbar`}
+          className={`relative max-h-[95vh] sm:max-h-[92vh] w-[95vw] max-w-sm sm:max-w-md overflow-y-auto rounded-xl sm:rounded-2xl border border-white/10 bg-white px-4 sm:px-6 py-6 sm:py-8 shadow-2xl transition-all duration-300 dark:bg-[#051923] custom-scrollbar ${isOpen ? 'translate-y-0 scale-100' : 'translate-y-8 scale-95'}`}
         >
           <button
             onClick={onClose}
-            className="absolute right-4 top-4 z-10 rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
+            className="absolute right-3 sm:right-4 top-3 sm:top-4 z-10 rounded-full p-2 text-gray-500 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/10"
           >
             <X size={20} />
           </button>

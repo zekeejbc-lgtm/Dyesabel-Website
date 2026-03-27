@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ArrowUpRight, MapPin } from 'lucide-react';
 import { Chapter } from '../types';
 import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
 import { SkeletonBlock, SkeletonCircle } from './Skeleton';
+
+const ENABLE_IMAGE_DIAGNOSTICS = import.meta.env.DEV && import.meta.env.VITE_ENABLE_IMAGE_DIAGNOSTICS === 'true';
 
 interface ChaptersProps {
   chapters: Chapter[];
@@ -11,6 +13,34 @@ interface ChaptersProps {
 }
 
 export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false, onSelectChapter }) => {
+  useEffect(() => {
+    if (!ENABLE_IMAGE_DIAGNOSTICS) return;
+    if (!chapters.length) return;
+
+    const chapterDiagnostics = chapters.map((chapter) => {
+      const rawLogo = String(chapter.logo || chapter.logoUrl || '').trim();
+      return {
+        chapterId: chapter.id,
+        chapterName: chapter.name,
+        logoRaw: rawLogo,
+        logoMatchesChapterId: rawLogo !== '' && rawLogo === String(chapter.id || ''),
+        ...getImageDebugInfo(rawLogo)
+      };
+    });
+
+    const missing = chapterDiagnostics.filter((entry) => !entry.hasUrl);
+    const suspicious = chapterDiagnostics.filter((entry) => entry.logoMatchesChapterId);
+
+    if (missing.length || suspicious.length) {
+      console.warn('[Chapters] Logo diagnostics warning', {
+        missingLogoCount: missing.length,
+        suspiciousLogoCount: suspicious.length,
+        missing,
+        suspicious
+      });
+    }
+  }, [chapters]);
+
   return (
     <section id="chapters" className="py-24 relative overflow-hidden">
       <div className="container mx-auto px-4 relative z-10">
@@ -40,7 +70,9 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
              ))
           ) : (
              // Real Data
-             chapters.map((chapter, index) => (
+             chapters.map((chapter, index) => {
+              const chapterLogo = chapter.logo || chapter.logoUrl || '';
+              return (
               <div 
                 key={chapter.id} 
                 onClick={() => onSelectChapter(chapter)}
@@ -49,7 +81,7 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
                 <div className="w-20 h-20 flex-shrink-0 bg-white/20 dark:bg-black/20 rounded-full p-1 border border-white/30 shadow-inner group-hover:scale-105 transition-transform duration-500 overflow-hidden relative">
                   <div className="absolute inset-0 bg-gradient-to-tr from-primary-cyan/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   <img 
-                      src={convertToCORSFreeLink(chapter.logo) || `https://ui-avatars.com/api/?name=${chapter.name}&background=random`} 
+                      src={convertToCORSFreeLink(chapterLogo) || `https://ui-avatars.com/api/?name=${chapter.name}&background=random`} 
                       alt={`${chapter.name} chapter logo`} 
                       loading="lazy"
                       decoding="async"
@@ -58,7 +90,7 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
                         console.error('[Chapters] Card logo failed to load', {
                           chapterId: chapter.id,
                           chapterName: chapter.name,
-                          image: getImageDebugInfo(chapter.logo),
+                          image: getImageDebugInfo(chapterLogo),
                           attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
                         });
                         event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(chapter.name)}&background=random`;
@@ -81,7 +113,8 @@ export const Chapters: React.FC<ChaptersProps> = ({ chapters, isLoading = false,
                   <ArrowUpRight size={20} className="transform group-hover:rotate-45 transition-transform duration-300" />
                 </div>
               </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

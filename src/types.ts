@@ -34,6 +34,7 @@ export interface ChapterActivity {
   description: string;
   date?: string;
   imageUrl?: string;
+  learnMoreUrl?: string;
 }
 
 export interface Chapter {
@@ -41,6 +42,7 @@ export interface Chapter {
   name: string;
   location: string;
   logo: string;
+  logoUrl?: string; // Backward-compatible alias used by some chapter payloads
   image?: string; // Cover image for the chapter
   imageUrl?: string; // Backward-compatible alias used by backend responses/components
   description?: string;
@@ -73,6 +75,7 @@ export interface PillarActivity {
   date: string;
   description: string;
   imageUrl: string;
+  learnMoreUrl?: string;
 }
 
 export interface Pillar {

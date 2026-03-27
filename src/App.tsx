@@ -65,6 +65,7 @@ const SEO_HOME_PATH = '/home';
 const SEO_DEFAULT_IMAGE = `${SEO_SITE_ORIGIN}/icons/social-preview-image.png`;
 const SEO_DEFAULT_DESCRIPTION =
   'Empowering communities through youth environmental advocacy, sustainable development, and education as a non-profit organization in the Philippines, with active programs in Davao City and nearby communities.';
+const ENABLE_IMAGE_DIAGNOSTICS = import.meta.env.DEV && import.meta.env.VITE_ENABLE_IMAGE_DIAGNOSTICS === 'true';
 const SEO_BASE_KEYWORDS = [
   'Dyesabel Philippines',
   'Dyesabel PH',
@@ -429,11 +430,13 @@ function AppContent() {
             ...getImageDebugInfo(pillar.imageUrl)
           }));
 
-          console.log('[App] Loaded pillars image diagnostics', imageDiagnostics);
+          if (ENABLE_IMAGE_DIAGNOSTICS) {
+            console.log('[App] Loaded pillars image diagnostics', imageDiagnostics);
 
-          const invalidImageEntries = imageDiagnostics.filter((entry) => !entry.hasUrl);
-          if (invalidImageEntries.length) {
-            console.warn('[App] Pillars with missing image URLs', invalidImageEntries);
+            const invalidImageEntries = imageDiagnostics.filter((entry) => !entry.hasUrl);
+            if (invalidImageEntries.length) {
+              console.warn('[App] Pillars with missing image URLs', invalidImageEntries);
+            }
           }
 
           setPillars(pillarsRes.pillars);
@@ -442,7 +445,35 @@ function AppContent() {
         }
 
         if (chaptersRes.success && Array.isArray(chaptersRes.chapters)) {
+          const chapterLogoDiagnostics = chaptersRes.chapters.map((chapter) => {
+            const rawLogo = String(chapter.logo || chapter.logoUrl || '').trim();
+            return {
+              chapterId: chapter.id,
+              chapterName: chapter.name,
+              logoRaw: rawLogo,
+              logoMatchesChapterId: rawLogo !== '' && rawLogo === String(chapter.id || ''),
+              availableLogoFields: Object.keys(chapter).filter((key) => /logo/i.test(key)),
+              ...getImageDebugInfo(rawLogo)
+            };
+          });
+
+          if (ENABLE_IMAGE_DIAGNOSTICS) {
+            console.log('[App] Loaded chapters logo diagnostics', chapterLogoDiagnostics);
+
+            const chaptersWithMissingLogo = chapterLogoDiagnostics.filter((entry) => !entry.hasUrl);
+            if (chaptersWithMissingLogo.length) {
+              console.warn('[App] Chapters with missing logo URLs', chaptersWithMissingLogo);
+            }
+
+            const chaptersWithSuspiciousLogo = chapterLogoDiagnostics.filter((entry) => entry.logoMatchesChapterId);
+            if (chaptersWithSuspiciousLogo.length) {
+              console.warn('[App] Chapters with suspicious logo values (same as chapter id)', chaptersWithSuspiciousLogo);
+            }
+          }
+
           setChapters(chaptersRes.chapters);
+        } else {
+          console.error('[App] Failed to load chapters data', chaptersRes);
         }
 
         if (partnersRes.success && partnersRes.partners) {

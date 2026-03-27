@@ -86,8 +86,11 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   const [dropdownPosition, setDropdownPosition] = useState<DropdownPosition | null>(null);
   const [roleSearch, setRoleSearch] = useState('');
   const [customRoleMode, setCustomRoleMode] = useState<Record<string, boolean>>({});
+  const [isModalVisible, setIsModalVisible] = useState(false);
   const dropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const dropdownMenuRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const modalTransitionMs = 300;
 
   if (!canEdit) {
     return null;
@@ -123,6 +126,17 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
       document.removeEventListener('keydown', handleEscape);
     };
   }, [openDropdownId]);
+
+  useEffect(() => {
+    const entryTimer = window.setTimeout(() => setIsModalVisible(true), 10);
+
+    return () => {
+      window.clearTimeout(entryTimer);
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const originalBodyOverflow = document.body.style.overflow;
@@ -321,12 +335,20 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
       await saveContent();
       onSave({ founders: editedFounders, executiveOfficers: editedExecutiveOfficers });
       await showAlert('Founders and executive officers saved successfully!', { title: 'Founders Updated' });
-      onClose();
+      requestClose();
     } catch (error) {
       await showAlert(error instanceof Error ? error.message : 'Error saving content. Please try again.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestClose = () => {
+    if (closeTimerRef.current != null) return;
+    setIsModalVisible(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      onClose();
+    }, modalTransitionMs);
   };
 
   const toggleRoleDropdown = (officerId: string) => {
@@ -388,9 +410,9 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm">
+    <div className={`fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`}>
       <div className="flex min-h-screen items-center justify-center p-4 md:p-8">
-        <div className="flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900 md:max-h-[calc(100vh-4rem)]">
+        <div className={`flex max-h-[calc(100vh-2rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl transition-all duration-300 dark:border-gray-700 dark:bg-gray-900 md:max-h-[calc(100vh-4rem)] ${isModalVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-95 opacity-0'}`}>
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-700 sm:px-6 sm:py-5">
           <div>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white sm:text-2xl">Edit Founders and Executives</h2>
@@ -399,7 +421,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
             </p>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
           >
             <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
@@ -683,7 +705,7 @@ export const FoundersEditor: React.FC<FoundersEditorProps> = ({
 
         <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-5 py-4 dark:border-gray-700 sm:px-6 sm:py-5">
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="rounded-lg border border-gray-300 px-6 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
           >
             Cancel

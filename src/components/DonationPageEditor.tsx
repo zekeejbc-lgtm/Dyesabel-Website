@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   CreditCard,
@@ -29,6 +29,57 @@ interface DonationPageEditorProps {
 }
 
 const MANILA_TIME_ZONE = 'Asia/Manila';
+const DONATION_EDITOR_CACHE_PREFIX = 'dyesabel:donation-editor:content-cache:v1';
+
+interface DonationEditorCacheRecord {
+  content: DonationContent;
+  cachedAt: number;
+}
+
+const createStableJson_ = (value: unknown): string => {
+  const normalize = (input: unknown): unknown => {
+    if (Array.isArray(input)) {
+      return input.map(normalize);
+    }
+
+    if (input && typeof input === 'object') {
+      const keys = Object.keys(input as Record<string, unknown>).sort();
+      const normalized: Record<string, unknown> = {};
+      keys.forEach((key) => {
+        normalized[key] = normalize((input as Record<string, unknown>)[key]);
+      });
+      return normalized;
+    }
+
+    return input;
+  };
+
+  return JSON.stringify(normalize(value));
+};
+
+const readDonationEditorCache_ = (cacheKey: string): DonationEditorCacheRecord | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(cacheKey);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DonationEditorCacheRecord;
+    if (!parsed || typeof parsed !== 'object' || !parsed.content) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const writeDonationEditorCache_ = (cacheKey: string, content: DonationContent): void => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage.setItem(cacheKey, JSON.stringify({ content, cachedAt: Date.now() }));
+  } catch {
+    // Ignore storage write failures to avoid blocking editor usage.
+  }
+};
 
 const formatToManilaInputValue = (value?: string): string => {
   const date = value ? new Date(value) : new Date();
@@ -132,11 +183,33 @@ const colorOptions: CustomSelectOption[] = [
 export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }) => {
   const { user } = useAuth();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
+  const donationEditorCacheKey = `${DONATION_EDITOR_CACHE_PREFIX}:${user?.id || 'anonymous'}`;
+  const [isModalVisible, setIsModalVisible] = useState(false);
   const [content, setContent] = useState<DonationContent>(emptyContent);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [localQrPreviews, setLocalQrPreviews] = useState<Record<string, string>>({});
   const [pendingQrFiles, setPendingQrFiles] = useState<Record<string, File>>({});
+  const closeTimerRef = useRef<number | null>(null);
+  const modalTransitionMs = 300;
+
+  const requestClose = () => {
+    if (saving || closeTimerRef.current != null) return;
+    setIsModalVisible(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      onBack();
+    }, modalTransitionMs);
+  };
+
+  useEffect(() => {
+    const entryTimer = window.setTimeout(() => setIsModalVisible(true), 10);
+    return () => {
+      window.clearTimeout(entryTimer);
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const loadContent = async () => {
@@ -147,12 +220,28 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
         return;
       }
 
-      setLoading(true);
+      const cachedRecord = readDonationEditorCache_(donationEditorCacheKey);
+      const cachedContent = cachedRecord?.content;
+      const cachedSignature = cachedContent ? createStableJson_(cachedContent) : '';
+
+      if (cachedContent) {
+        setContent(cachedContent);
+        setLoading(false);
+      } else {
+        setLoading(true);
+      }
+
       const result = await DonationsService.getEditableDonationContent(sessionToken);
       if (result.success && result.data) {
-        setContent(result.data);
+        const backendSignature = createStableJson_(result.data);
+        if (!cachedContent || backendSignature !== cachedSignature) {
+          setContent(result.data);
+        }
+        writeDonationEditorCache_(donationEditorCacheKey, result.data);
       } else {
-        toast.error(result.error || 'Unable to load donation page content.');
+        if (!cachedContent) {
+          toast.error(result.error || 'Unable to load donation page content.');
+        }
       }
       setLoading(false);
     };
@@ -160,7 +249,7 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
     if (canEdit) {
       void loadContent();
     }
-  }, [canEdit, onBack]);
+  }, [canEdit, donationEditorCacheKey, onBack]);
 
   useEffect(() => {
     return () => {
@@ -229,7 +318,7 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onBack();
+        requestClose();
       }
     };
 
@@ -237,7 +326,7 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
     return () => {
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [onBack]);
+  }, [requestClose]);
 
   if (!canEdit) {
     return null;
@@ -345,6 +434,7 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
       const result = await DonationsService.saveDonationContent(normalizedContent, sessionToken);
       if (result.success && result.data) {
         setContent(result.data);
+        writeDonationEditorCache_(donationEditorCacheKey, result.data);
         setPendingQrFiles({});
         setLocalQrPreviews((current) => {
           Object.values(current).forEach((previewUrl) => {
@@ -365,36 +455,25 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm">
-      <div className="min-h-screen p-4 md:p-8">
-        <div className="max-w-6xl mx-auto overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
-          <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-700">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-3 md:p-4 backdrop-blur-sm transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`flex max-h-[98vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl transition-all duration-300 dark:border-white/10 dark:bg-gray-900 sm:max-h-[95vh] sm:max-w-5xl md:max-w-6xl sm:rounded-3xl ${isModalVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-95 opacity-0'}`}>
+          <div className="flex items-center justify-between gap-3 border-b border-gray-200 p-4 dark:border-gray-700 sm:p-5 md:p-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Donation Page Editor</h2>
               <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                 Manage donation methods, bank details, allocations, and published recent donations
               </p>
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSave}
-                disabled={saving || loading}
-                className="flex items-center gap-2 rounded-lg bg-primary-blue px-4 py-2 text-white transition-colors hover:bg-primary-cyan disabled:opacity-50"
-              >
-                {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
-                {saving ? 'Saving...' : 'Save Changes'}
-              </button>
-              <button
-                onClick={onBack}
-                className="rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
-                aria-label="Close donation editor"
-              >
-                <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
-              </button>
-            </div>
+            <button
+              onClick={requestClose}
+              className="rounded-lg p-2 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+              aria-label="Close donation editor"
+            >
+              <X className="h-6 w-6 text-gray-600 dark:text-gray-400" />
+            </button>
           </div>
 
-          <div className="bg-gray-50 p-6 dark:bg-gray-950/40">
+          <div className="custom-scrollbar flex-1 overflow-y-auto bg-gray-50 p-4 dark:bg-gray-950/40 sm:p-5 md:p-6">
             <div className="space-y-6">
               {loading ? (
                 <div className="space-y-6">
@@ -718,8 +797,24 @@ export const DonationPageEditor: React.FC<DonationPageEditorProps> = ({ onBack }
               )}
             </div>
           </div>
+
+          <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-white/90 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/90 sm:px-5 sm:py-4 md:px-6">
+            <button
+              onClick={requestClose}
+              className="rounded-lg px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="flex items-center gap-2 rounded-lg bg-primary-blue px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-cyan disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
         </div>
-      </div>
     </div>
   );
 };

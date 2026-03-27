@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pillar, PillarActivity } from '../types';
-import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Save, Plus, Trash2, Upload, BookOpen, Scale, Leaf, Heart, Palette } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
+import { convertToCORSFreeLink } from '../services/DriveService';
+import { CustomSelect } from './CustomSelect';
 
 interface PillarsEditorProps {
   pillars: Pillar[];
@@ -11,47 +13,69 @@ interface PillarsEditorProps {
   activitiesOnly?: boolean;
 }
 
-const PILLAR_ICONS = {
-  'Research and Education': <BookOpen className="w-6 h-6" />,
-  'Good Governance': <Scale className="w-6 h-6" />,
-  'Sustainable Livelihood': <Leaf className="w-6 h-6" />,
-  'Community Health': <Heart className="w-6 h-6" />,
-  'Culture and Arts': <Palette className="w-6 h-6" />
-};
+function getPillarIcon_(title: string, className: string) {
+  switch (title) {
+    case 'Research and Education':
+      return <BookOpen className={className} />;
+    case 'Good Governance':
+      return <Scale className={className} />;
+    case 'Sustainable Livelihood':
+      return <Leaf className={className} />;
+    case 'Community Health':
+      return <Heart className={className} />;
+    case 'Culture and Arts':
+      return <Palette className={className} />;
+    default:
+      return <BookOpen className={className} />;
+  }
+}
 
 var ACTIVITY_INITIAL_VISIBLE_COUNT = 6;
+
+function truncateText_(value: string, maxLength: number) {
+  var text = String(value || '').trim();
+  if (!text || text.length <= maxLength) return text;
+  return text.slice(0, maxLength).trimEnd() + '...';
+}
 
 export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, onClose, activitiesOnly = false }) => {
   const { user } = useAuth();
   const { showAlert, showConfirm } = useAppDialog();
   const canEdit = !!user && (user.role === 'admin' || (user.role === 'editor' && !user.chapterId));
   const [editedPillars, setEditedPillars] = useState<Pillar[]>(pillars);
+  const [persistedPillars, setPersistedPillars] = useState<Pillar[]>(pillars);
   const [selectedPillarIndex, setSelectedPillarIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
-  const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
   const [visibleActivityCount, setVisibleActivityCount] = useState<Record<string, number>>({});
+  const [activeActivityEditor, setActiveActivityEditor] = useState<{ pillarIndex: number; activityIndex: number | null; isNew: boolean } | null>(null);
+  const [activityDraft, setActivityDraft] = useState<PillarActivity | null>(null);
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isActivityEditorVisible, setIsActivityEditorVisible] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const activityEditorCloseTimerRef = useRef<number | null>(null);
+  const modalTransitionMs = 300;
 
   // Check permission
   if (!canEdit) {
     return null;
   }
 
-  const getActivityKey = (pillarIndex: number, activity: PillarActivity, activityIndex: number) =>
-    `${pillarIndex}:${activity.id || activityIndex}`;
+  useEffect(() => {
+    const entryTimer = window.setTimeout(() => setIsModalVisible(true), 10);
+    return () => {
+      window.clearTimeout(entryTimer);
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+      if (activityEditorCloseTimerRef.current != null) {
+        window.clearTimeout(activityEditorCloseTimerRef.current);
+      }
+    };
+  }, []);
 
   const getVisibleCountForPillar = (pillarIndex: number, totalActivities: number) =>
     Math.min(visibleActivityCount[pillarIndex] || ACTIVITY_INITIAL_VISIBLE_COUNT, totalActivities);
-
-  const isActivityExpanded = (pillarIndex: number, activity: PillarActivity, activityIndex: number) =>
-    expandedActivities[getActivityKey(pillarIndex, activity, activityIndex)] !== false;
-
-  const toggleActivityExpanded = (pillarIndex: number, activity: PillarActivity, activityIndex: number) => {
-    const key = getActivityKey(pillarIndex, activity, activityIndex);
-    setExpandedActivities((current) => ({
-      ...current,
-      [key]: current[key] === false
-    }));
-  };
 
   const updatePillar = (index: number, field: keyof Pillar, value: any) => {
     const updated = [...editedPillars];
@@ -68,24 +92,125 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   };
 
   const addActivity = (pillarIndex: number) => {
-    const updated = [...editedPillars];
     const newActivity: PillarActivity = {
       id: `a${pillarIndex}-${Date.now()}`,
       title: 'New Activity',
       date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
       description: 'Activity description',
-      imageUrl: 'https://picsum.photos/seed/new/500/300'
+      imageUrl: 'https://picsum.photos/seed/new/500/300',
+      learnMoreUrl: ''
     };
-    updated[pillarIndex].activities = [...updated[pillarIndex].activities, newActivity];
-    setEditedPillars(updated);
-    setExpandedActivities((current) => ({
-      ...current,
-      [getActivityKey(pillarIndex, newActivity, updated[pillarIndex].activities.length - 1)]: true
-    }));
-    setVisibleActivityCount((current) => ({
-      ...current,
-      [pillarIndex]: updated[pillarIndex].activities.length
-    }));
+    setActiveActivityEditor({ pillarIndex: pillarIndex, activityIndex: null, isNew: true });
+    setActivityDraft({ ...newActivity });
+    window.setTimeout(() => setIsActivityEditorVisible(true), 10);
+  };
+
+  const openActivityEditor = (pillarIndex: number, activityIndex: number) => {
+    var activity = editedPillars[pillarIndex].activities[activityIndex];
+    if (!activity) return;
+    setActiveActivityEditor({ pillarIndex: pillarIndex, activityIndex: activityIndex, isNew: false });
+    setActivityDraft({ ...activity });
+    window.setTimeout(() => setIsActivityEditorVisible(true), 10);
+  };
+
+  const closeActivityEditor = () => {
+    if (activityEditorCloseTimerRef.current != null) {
+      window.clearTimeout(activityEditorCloseTimerRef.current);
+    }
+    setIsActivityEditorVisible(false);
+    activityEditorCloseTimerRef.current = window.setTimeout(() => {
+      setActiveActivityEditor(null);
+      setActivityDraft(null);
+    }, modalTransitionMs);
+  };
+
+  const requestClose = () => {
+    if (closeTimerRef.current != null) return;
+    setIsModalVisible(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      onClose();
+    }, modalTransitionMs);
+  };
+
+  const applyActivityToPillars_ = (
+    basePillars: Pillar[],
+    pillarIndex: number,
+    nextActivity: PillarActivity,
+    options?: { fallbackIndex?: number | null; prepend?: boolean }
+  ) => {
+    var nextPillars = basePillars.map(function(pillar) {
+      return { ...pillar, activities: Array.isArray(pillar.activities) ? [...pillar.activities] : [] };
+    });
+    if (!nextPillars[pillarIndex]) return nextPillars;
+
+    var activities = nextPillars[pillarIndex].activities;
+    if (options && options.prepend) {
+      activities = [nextActivity, ...activities];
+      nextPillars[pillarIndex] = { ...nextPillars[pillarIndex], activities: activities };
+      return nextPillars;
+    }
+
+    var targetIndex = activities.findIndex(function(activity) {
+      return String(activity && activity.id) === String(nextActivity.id);
+    });
+
+    if (
+      targetIndex < 0 &&
+      options &&
+      typeof options.fallbackIndex === 'number' &&
+      activities[options.fallbackIndex]
+    ) {
+      targetIndex = options.fallbackIndex;
+    }
+
+    if (targetIndex < 0) {
+      activities.push(nextActivity);
+    } else {
+      activities[targetIndex] = nextActivity;
+    }
+
+    nextPillars[pillarIndex] = { ...nextPillars[pillarIndex], activities: activities };
+    return nextPillars;
+  };
+
+  const handleSaveSpecificActivity = async () => {
+    if (!activeActivityEditor || !activityDraft) return;
+
+    var pillarIndex = activeActivityEditor.pillarIndex;
+    var nextActivity = { ...activityDraft };
+
+    if (!String(nextActivity.title || '').trim()) {
+      await showAlert('Activity title is required.');
+      return;
+    }
+
+    var activityOptions = activeActivityEditor.isNew
+      ? { prepend: true }
+      : { fallbackIndex: activeActivityEditor.activityIndex };
+
+    var updatedEditedPillars = applyActivityToPillars_(editedPillars, pillarIndex, nextActivity, activityOptions);
+    var updatedPersistedPillars = applyActivityToPillars_(persistedPillars, pillarIndex, nextActivity, activityOptions);
+
+    setEditedPillars(updatedEditedPillars);
+    setSavingActivity(true);
+    try {
+      await onSave(updatedPersistedPillars);
+      setPersistedPillars(updatedPersistedPillars);
+      if (activeActivityEditor.isNew) {
+        setVisibleActivityCount((current) => ({
+          ...current,
+          [pillarIndex]: (current[pillarIndex] || ACTIVITY_INITIAL_VISIBLE_COUNT) + 1
+        }));
+      }
+      await showAlert(activeActivityEditor.isNew ? 'Activity created successfully.' : 'Activity updated successfully.', {
+        title: 'Activity Saved'
+      });
+      closeActivityEditor();
+    } catch (error) {
+      await showAlert('Error saving activity. Please try again.');
+    } finally {
+      setSavingActivity(false);
+    }
   };
 
   const removeActivity = async (pillarIndex: number, activityIndex: number) => {
@@ -122,8 +247,8 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
 
     try {
       const previewUrl = await readImageAsDataUrl(file);
-      if (activityIndex !== null) {
-        updateActivity(pillarIndex, activityIndex, 'imageUrl', previewUrl);
+      if (activeActivityEditor && activityDraft) {
+        setActivityDraft({ ...activityDraft, imageUrl: previewUrl });
       } else {
         updatePillar(pillarIndex, 'imageUrl', previewUrl);
       }
@@ -136,8 +261,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     setSaving(true);
     try {
       await onSave(editedPillars);
+      setPersistedPillars(editedPillars);
       await showAlert('Pillars saved successfully!', { title: 'Pillars Updated' });
-      onClose();
+      requestClose();
     } catch (error) {
       await showAlert('Error saving pillars. Please try again.');
     } finally {
@@ -146,19 +272,26 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   };
 
   const currentPillar = editedPillars[selectedPillarIndex];
+  const pillarOptions = editedPillars.map(function(pillar, index) {
+    return {
+      value: String(index),
+      label: pillar.title || ('Pillar ' + (index + 1)),
+      icon: getPillarIcon_(pillar.title || '', 'w-4 h-4 text-primary-blue')
+    };
+  });
   const visibleActivities = currentPillar.activities.slice(0, getVisibleCountForPillar(selectedPillarIndex, currentPillar.activities.length));
   const hasHiddenActivities = visibleActivities.length < currentPillar.activities.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm md:p-8">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm md:p-8 transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`}>
       <button
         type="button"
         aria-label="Close pillars editor"
         className="absolute inset-0"
-        onClick={onClose}
+        onClick={requestClose}
       />
 
-      <div className="relative flex w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-4rem)] dark:bg-gray-900">
+      <div className={`relative flex w-full max-w-7xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl max-h-[calc(100vh-2rem)] transition-all duration-300 md:max-h-[calc(100vh-4rem)] dark:bg-gray-900 ${isModalVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-95 opacity-0'}`}>
           {/* Header */}
           <div className="shrink-0 flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
             <div>
@@ -168,7 +301,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             >
               <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
@@ -181,7 +314,22 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
               <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 uppercase mb-3">
                 Select Pillar
               </h3>
-              <div className="space-y-2">
+              <div className="relative z-20 lg:hidden">
+                <CustomSelect
+                  value={String(selectedPillarIndex)}
+                  onChange={(nextValue) => {
+                    var nextIndex = Number(nextValue);
+                    if (!Number.isNaN(nextIndex)) setSelectedPillarIndex(nextIndex);
+                  }}
+                  options={pillarOptions}
+                  ariaLabel="Select pillar"
+                  className="w-full"
+                  triggerClassName="min-h-[48px] border-gray-300 bg-white text-sm font-semibold text-gray-900 shadow-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  menuClassName="z-[70] border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-800"
+                />
+              </div>
+
+              <div className="hidden space-y-2 lg:block">
                 {editedPillars.map((pillar, index) => (
                   <button
                     key={pillar.id}
@@ -194,7 +342,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                   >
                     <div className="flex items-center gap-2">
                       <div className={selectedPillarIndex === index ? 'text-white' : 'text-primary-blue'}>
-                        {PILLAR_ICONS[pillar.title as keyof typeof PILLAR_ICONS] || <BookOpen className="w-5 h-5" />}
+                        {getPillarIcon_(pillar.title || '', 'w-5 h-5')}
                       </div>
                       <span className="text-sm font-medium">{pillar.title}</span>
                     </div>
@@ -213,8 +361,11 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                   </label>
                   <div className="relative mx-auto aspect-[3/2] w-full max-w-3xl max-h-[360px] rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                     <img
-                      src={currentPillar.imageUrl}
+                      src={convertToCORSFreeLink(currentPillar.imageUrl)}
                       alt={`${currentPillar.title || 'Pillar'} cover image preview`}
+                      onError={(event) => {
+                        event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentPillar.title || 'Pillar')}&background=1e3a8a&color=ffffff&size=512`;
+                      }}
                       className="w-full h-full object-contain"
                     />
                     <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
@@ -295,106 +446,66 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                     <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">
                       Activities
                     </label>
-                    <button
-                      onClick={() => addActivity(selectedPillarIndex)}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-primary-blue text-white rounded-lg hover:bg-primary-blue/90 transition-colors text-sm font-medium"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Activity
-                    </button>
                   </div>
 
                   <div className="space-y-4">
-                    {visibleActivities.map((activity, activityIndex) => {
-                      var activityKey = getActivityKey(selectedPillarIndex, activity, activityIndex);
-                      var isExpanded = isActivityExpanded(selectedPillarIndex, activity, activityIndex);
-
-                      return (
-                      <div
-                        key={activityKey}
-                        className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <button
-                            type="button"
-                            onClick={() => toggleActivityExpanded(selectedPillarIndex, activity, activityIndex)}
-                            className="flex min-w-0 flex-1 items-start gap-3 text-left"
-                          >
-                            <div className="mt-0.5 text-primary-blue dark:text-primary-cyan">
-                              {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                            </div>
-                            <div className="min-w-0">
-                              <h4 className="font-medium text-gray-900 dark:text-white">
-                                {activity.title || `Activity ${activityIndex + 1}`}
-                              </h4>
-                              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                                {activity.date || 'No date set'}
-                              </p>
-                              {!isExpanded && (
-                                <p className="mt-2 line-clamp-2 text-sm text-gray-600 dark:text-gray-300">
-                                  {activity.description || 'No description yet.'}
-                                </p>
-                              )}
-                            </div>
-                          </button>
-                          <button
-                            onClick={() => removeActivity(selectedPillarIndex, activityIndex)}
-                            className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-red-600 dark:text-red-400"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                    <button
+                      type="button"
+                      onClick={() => addActivity(selectedPillarIndex)}
+                      className="w-full rounded-xl border border-dashed border-primary-blue/60 bg-primary-blue/5 p-4 text-left transition-colors hover:bg-primary-blue/10 dark:border-primary-cyan/60 dark:bg-primary-cyan/5 dark:hover:bg-primary-cyan/10"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-blue text-white dark:bg-primary-cyan dark:text-[#04131a]">
+                          <Plus className="h-5 w-5" />
                         </div>
-
-                        {isExpanded && (
-                          <div className="space-y-3">
-                            {/* Activity Image */}
-                            <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
-                              <img
-                                src={activity.imageUrl}
-                                alt={`${activity.title || 'Pillar activity'} image preview`}
-                                className="w-full h-full object-cover"
-                              />
-                              <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={(e) => e.target.files?.[0] && handleImageUpload(selectedPillarIndex, activityIndex, e.target.files[0])}
-                                  className="hidden"
-                                />
-                                <div className="text-white text-center">
-                                  <Upload className="w-6 h-6 mx-auto mb-1" />
-                                  <span className="text-xs font-medium">Change Image</span>
-                                </div>
-                              </label>
-                            </div>
-
-                            <input
-                              type="text"
-                              value={activity.title}
-                              onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'title', e.target.value)}
-                              placeholder="Activity title"
-                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                            />
-
-                            <input
-                              type="text"
-                              value={activity.date}
-                              onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'date', e.target.value)}
-                              placeholder="Date (e.g., January 2024)"
-                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                            />
-
-                            <textarea
-                              value={activity.description}
-                              onChange={(e) => updateActivity(selectedPillarIndex, activityIndex, 'description', e.target.value)}
-                              placeholder="Activity description"
-                              rows={2}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
-                            />
-                          </div>
-                        )}
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-white">Add Activity</p>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">Create a new activity card.</p>
+                        </div>
                       </div>
-                    )})}
+                    </button>
+
+                    {visibleActivities.map((activity, activityIndex) => {
+                      var activityKey = `${selectedPillarIndex}:${activity.id || activityIndex}`;
+                      return (
+                        <div
+                          key={activityKey}
+                          className="border border-gray-200 dark:border-gray-700 rounded-xl p-4"
+                        >
+                          <div className="flex items-start gap-3">
+                            <button
+                              type="button"
+                              onClick={() => openActivityEditor(selectedPillarIndex, activityIndex)}
+                              className="flex w-full min-w-0 items-center gap-4 text-left"
+                            >
+                              <div className="h-20 w-28 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100 dark:bg-gray-800">
+                                <img
+                                  src={convertToCORSFreeLink(activity.imageUrl)}
+                                  alt={`${activity.title || 'Pillar activity'} preview image`}
+                                  onError={(event) => {
+                                    event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(activity.title || 'Activity')}&background=0f172a&color=ffffff&size=512`;
+                                  }}
+                                  className="h-full w-full object-cover"
+                                />
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <h4 className="line-clamp-1 font-semibold text-gray-900 dark:text-white">
+                                  {truncateText_(activity.title || `Activity ${activityIndex + 1}`, 80)}
+                                </h4>
+                              </div>
+                            </button>
+
+                            <button
+                              onClick={() => removeActivity(selectedPillarIndex, activityIndex)}
+                              className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded text-red-600 dark:text-red-400"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
 
                     {hasHiddenActivities && (
                       <button
@@ -417,7 +528,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
           {/* Footer */}
           <div className="shrink-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
             >
               Cancel
@@ -432,6 +543,111 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
             </button>
           </div>
       </div>
+
+      {activeActivityEditor && activityDraft && (
+        <div className={`fixed inset-0 z-[70] flex items-center justify-center p-3 sm:p-4 md:p-6 transition-opacity duration-300 ${isActivityEditorVisible ? 'opacity-100' : 'opacity-0'}`}>
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={closeActivityEditor}
+            aria-label="Close activity editor"
+          />
+
+          <div className={`relative z-10 w-full max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[95vh] sm:max-h-[92vh] overflow-y-auto rounded-2xl sm:rounded-2xl border border-gray-200 bg-white px-4 sm:px-6 md:px-8 py-4 sm:py-6 shadow-2xl transition-all duration-300 dark:border-gray-700 dark:bg-gray-900 ${isActivityEditorVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-95 opacity-0'}`}>
+            <button
+              type="button"
+              onClick={closeActivityEditor}
+              aria-label="Close activity editor"
+              className="absolute right-3 sm:right-4 top-3 sm:top-4 rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
+            >
+              <X className="h-4 w-4 sm:h-5 sm:w-5" />
+            </button>
+
+            <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white pr-10">{activeActivityEditor.isNew ? 'Add Activity' : 'Edit Activity'}</h3>
+            <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+              {activeActivityEditor.isNew
+                ? 'Complete this panel and save to create a new activity card.'
+                : 'Save this panel to update only this activity.'}
+            </p>
+
+            <div className="mt-4 sm:mt-6 space-y-3 sm:space-y-4">
+              <div className="relative aspect-video rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                <img
+                  src={convertToCORSFreeLink(activityDraft.imageUrl)}
+                  alt={`${activityDraft.title || 'Pillar activity'} image preview`}
+                  onError={(event) => {
+                    event.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(activityDraft.title || 'Activity')}&background=0f172a&color=ffffff&size=512`;
+                  }}
+                  className="w-full h-full object-cover"
+                />
+                <label className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => e.target.files?.[0] && handleImageUpload(activeActivityEditor.pillarIndex, activeActivityEditor.activityIndex, e.target.files[0])}
+                    className="hidden"
+                  />
+                  <div className="text-white text-center">
+                    <Upload className="w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1" />
+                    <span className="text-[11px] sm:text-xs font-medium">Change Image</span>
+                  </div>
+                </label>
+              </div>
+
+              <input
+                type="text"
+                value={activityDraft.title}
+                onChange={(e) => setActivityDraft({ ...activityDraft, title: e.target.value })}
+                placeholder="Activity title"
+                className="w-full px-3 py-2 text-xs sm:text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-cyan/50"
+              />
+
+              <input
+                type="text"
+                value={activityDraft.date}
+                onChange={(e) => setActivityDraft({ ...activityDraft, date: e.target.value })}
+                placeholder="Date (e.g., 2026-02-28T16:00:00.000Z or March 01, 2026 12:00 PM)"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+
+              <textarea
+                value={activityDraft.description}
+                onChange={(e) => setActivityDraft({ ...activityDraft, description: e.target.value })}
+                placeholder="Activity description"
+                rows={4}
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+
+              <input
+                type="url"
+                value={activityDraft.learnMoreUrl || ''}
+                onChange={(e) => setActivityDraft({ ...activityDraft, learnMoreUrl: e.target.value })}
+                placeholder="Learn More URL (Facebook, Instagram, X, website, etc.)"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={closeActivityEditor}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSpecificActivity}
+                disabled={savingActivity}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary-blue px-4 py-2 font-semibold text-white transition-colors hover:bg-primary-blue/90 disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" />
+                {savingActivity ? 'Saving Activity...' : activeActivityEditor.isNew ? 'Create Activity' : 'Save Activity'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

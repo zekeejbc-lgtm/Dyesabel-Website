@@ -646,12 +646,27 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+const isLikelyDriveFileId = (value: string): boolean => {
+  const normalizedValue = String(value || '').trim();
+  if (!/^[a-zA-Z0-9_-]{25,}$/.test(normalizedValue)) return false;
+  // Avoid rewriting known app identifiers (e.g., generated chapter IDs) as Drive links.
+  if (/_chapter_|_activity_|_pillar_/i.test(normalizedValue)) return false;
+  return true;
+};
+
 export const convertToCORSFreeLink = (url: string | undefined): string => {
   if (!url) return '';
 
   const normalizedUrl = url.trim();
   if (!normalizedUrl) return '';
   if (normalizedUrl.startsWith('data:')) {
+    return normalizedUrl;
+  }
+
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    if (isLikelyDriveFileId(normalizedUrl)) {
+      return `https://drive.google.com/thumbnail?id=${normalizedUrl}&sz=w4000`;
+    }
     return normalizedUrl;
   }
 
@@ -674,25 +689,39 @@ export const extractDriveFileId = (url: string | undefined): string => {
   const normalizedUrl = url.trim();
   if (!normalizedUrl) return '';
 
+  if (!/^https?:\/\//i.test(normalizedUrl)) {
+    return isLikelyDriveFileId(normalizedUrl) ? normalizedUrl : '';
+  }
+
   const idMatch =
     normalizedUrl.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) ||
     normalizedUrl.match(/\/d\/([a-zA-Z0-9_-]{20,})/) ||
-    normalizedUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/) ||
-    normalizedUrl.match(/[-\w]{25,}/);
+    normalizedUrl.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/);
 
-  return idMatch?.[1] || idMatch?.[0] || '';
+  if (idMatch?.[1]) return idMatch[1];
+
+  if (!/drive\.google\.com|googleusercontent\.com|uc\?export=view/i.test(normalizedUrl)) {
+    return '';
+  }
+
+  const fallback = normalizedUrl.match(/[-\w]{25,}/);
+  return fallback?.[0] || '';
 };
 
 export const getImageDebugInfo = (url: string | undefined) => {
   const rawUrl = String(url || '').trim();
   const fileId = extractDriveFileId(rawUrl);
   const normalizedUrl = convertToCORSFreeLink(rawUrl);
+  const isHttpUrl = /^https?:\/\//i.test(rawUrl);
+  const looksLikeRawId = /^[a-zA-Z0-9_-]{20,}$/.test(rawUrl);
 
   return {
     rawUrl,
     normalizedUrl,
     fileId,
-    isDriveUrl: /drive\.google\.com|googleusercontent\.com/.test(rawUrl),
+    isHttpUrl,
+    looksLikeRawId,
+    isDriveUrl: /drive\.google\.com|googleusercontent\.com/.test(rawUrl) || isLikelyDriveFileId(rawUrl),
     isDataUrl: rawUrl.startsWith('data:'),
     hasUrl: !!rawUrl
   };

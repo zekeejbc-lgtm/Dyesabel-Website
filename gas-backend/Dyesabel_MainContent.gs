@@ -15,12 +15,12 @@ var MAIN_DATA_CONFIG = {
     sheetName: 'Pillars',
     childSheetName: 'PillarActivities',
     parentFields: ['id', 'title', 'excerpt', 'description', 'aim', 'imageUrl', 'sortOrder'],
-    childFields: ['pillarId', 'id', 'title', 'date', 'description', 'imageUrl', 'sortOrder']
+    childFields: ['pillarId', 'id', 'title', 'date', 'description', 'imageUrl', 'learnMoreUrl', 'sortOrder']
   }
 };
 var PARTNER_HEADERS = ['CategoryID', 'CategoryTitle', 'PartnerID', 'PartnerName', 'PartnerLogo'];
 var CHAPTER_HEADERS = ['ChapterID', 'Title', 'Description', 'ImageURL', 'LogoURL', 'Location', 'HeadName', 'HeadRole', 'HeadQuote', 'HeadImageUrl', 'Email', 'Phone', 'Facebook', 'Twitter', 'Instagram', 'WebsiteUrl', 'JoinUrl', 'JoinCtaDescription'];
-var CHAPTER_ACTIVITY_HEADERS = ['ChapterID', 'ActivityID', 'Title', 'Description', 'Date', 'ImageURL', 'SortOrder'];
+var CHAPTER_ACTIVITY_HEADERS = ['ChapterID', 'ActivityID', 'Title', 'Description', 'Date', 'ImageURL', 'LearnMoreUrl', 'SortOrder'];
 
 function doGet() {
   return dyesabelCreateResponse_(true, null, { message: dyesabelGetScriptProperty_('APP_NAME', 'Dyesabel Main Content API') + ' is online.' });
@@ -668,7 +668,7 @@ function saveMappedNestedData_(ss, config, items, previousItems) {
       collectReferencedImageUrlsDeep_(activity, retainedImageUrls);
       var activityId = activity.id || Utilities.getUuid();
       retainedActivityIds[String(activityId)] = true;
-      childRows.push([parentId, activityId, activity.title || '', activity.date || '', activity.description || '', activity.imageUrl || '', activityIndex]);
+      childRows.push([parentId, activityId, activity.title || '', activity.date || '', activity.description || '', activity.imageUrl || '', activity.learnMoreUrl || '', activityIndex]);
     });
 
     if (previousParent && Array.isArray(previousParent.activities)) {
@@ -718,13 +718,30 @@ function getMappedNestedData_(ss, config) {
   if (!parentSheet || parentSheet.getLastRow() < 2 || !dyesabelSheetHasHeaders_(parentSheet, config.parentFields)) return [];
   var childSheet = ss.getSheetByName(config.childSheetName);
   var activitiesByParent = {};
-  if (childSheet && childSheet.getLastRow() >= 2 && dyesabelSheetHasHeaders_(childSheet, config.childFields)) {
-    childSheet.getRange(2, 1, childSheet.getLastRow() - 1, config.childFields.length).getValues().forEach(function(row) {
-      var parentId = String(row[0] || '');
+  if (childSheet && childSheet.getLastRow() >= 2) {
+    var childHeaders = childSheet.getRange(1, 1, 1, childSheet.getLastColumn()).getValues()[0];
+    var childIndexMap = createHeaderIndexMap_(childHeaders);
+    var requiredLegacyHeaders = ['pillarId', 'id', 'title', 'date', 'description', 'imageUrl', 'sortOrder'];
+    var hasChildHeaders = requiredLegacyHeaders.every(function(header) {
+      return childIndexMap[header] != null;
+    });
+
+    if (hasChildHeaders) {
+      childSheet.getRange(2, 1, childSheet.getLastRow() - 1, childSheet.getLastColumn()).getValues().forEach(function(row) {
+      var parentId = String(row[childIndexMap.pillarId] || '');
       if (!parentId) return;
       if (!activitiesByParent[parentId]) activitiesByParent[parentId] = [];
-      activitiesByParent[parentId].push({ id: row[1], title: row[2], date: row[3], description: row[4], imageUrl: row[5], sortOrder: Number(row[6] || 0) });
+      activitiesByParent[parentId].push({
+        id: row[childIndexMap.id],
+        title: row[childIndexMap.title],
+        date: row[childIndexMap.date],
+        description: row[childIndexMap.description],
+        imageUrl: row[childIndexMap.imageUrl],
+        learnMoreUrl: childIndexMap.learnMoreUrl != null ? row[childIndexMap.learnMoreUrl] : '',
+        sortOrder: Number(row[childIndexMap.sortOrder] || 0)
+      });
     });
+    }
   }
   return parentSheet.getRange(2, 1, parentSheet.getLastRow() - 1, config.parentFields.length).getValues().filter(function(row) {
     return row.some(function(cell) { return cell !== ''; });
@@ -735,7 +752,14 @@ function getMappedNestedData_(ss, config) {
     return {
       id: row[0], title: row[1], excerpt: row[2], description: row[3], aim: row[4], imageUrl: row[5],
       activities: (activitiesByParent[parentId] || []).sort(function(a, b) { return a.sortOrder - b.sortOrder; }).map(function(activity) {
-        return { id: activity.id, title: activity.title, date: activity.date, description: activity.description, imageUrl: activity.imageUrl };
+        return {
+          id: activity.id,
+          title: activity.title,
+          date: activity.date,
+          description: activity.description,
+          imageUrl: activity.imageUrl,
+          learnMoreUrl: activity.learnMoreUrl || ''
+        };
       })
     };
   });
@@ -996,7 +1020,14 @@ function normalizeChapterRecord_(chapterId, chapterData, previousChapterData) {
     }, previousActivity);
     collectReferencedImageUrlsDeep_(nextActivity, retainedImageUrls);
     if (nextActivity && nextActivity.id) retainedActivityIds[String(nextActivity.id)] = true;
-    return { id: nextActivity.id || Utilities.getUuid(), title: nextActivity.title || '', description: nextActivity.description || '', date: nextActivity.date || '', imageUrl: nextActivity.imageUrl || '' };
+    return {
+      id: nextActivity.id || Utilities.getUuid(),
+      title: nextActivity.title || '',
+      description: nextActivity.description || '',
+      date: nextActivity.date || '',
+      imageUrl: nextActivity.imageUrl || '',
+      learnMoreUrl: nextActivity.learnMoreUrl || ''
+    };
   });
 
   if (previousChapter && Array.isArray(previousChapter.activities)) {
@@ -1019,16 +1050,37 @@ function createHeaderIndexMap_(headers) {
 function loadChapterActivitiesByChapterId_(ss) {
   var activitySheet = ss.getSheetByName('ChapterActivities');
   var activitiesByChapter = {};
-  if (!activitySheet || activitySheet.getLastRow() < 2 || !dyesabelSheetHasHeaders_(activitySheet, CHAPTER_ACTIVITY_HEADERS)) return activitiesByChapter;
-  activitySheet.getRange(2, 1, activitySheet.getLastRow() - 1, CHAPTER_ACTIVITY_HEADERS.length).getValues().forEach(function(row) {
-    var chapterId = String(row[0] || '');
+  if (!activitySheet || activitySheet.getLastRow() < 2) return activitiesByChapter;
+  var headers = activitySheet.getRange(1, 1, 1, activitySheet.getLastColumn()).getValues()[0];
+  var indexMap = createHeaderIndexMap_(headers);
+  var requiredHeaders = ['ChapterID', 'ActivityID', 'Title', 'Description', 'Date', 'ImageURL', 'SortOrder'];
+  var hasHeaders = requiredHeaders.every(function(header) { return indexMap[header] != null; });
+  if (!hasHeaders) return activitiesByChapter;
+
+  activitySheet.getRange(2, 1, activitySheet.getLastRow() - 1, activitySheet.getLastColumn()).getValues().forEach(function(row) {
+    var chapterId = String(row[indexMap.ChapterID] || '');
     if (!chapterId) return;
     if (!activitiesByChapter[chapterId]) activitiesByChapter[chapterId] = [];
-    activitiesByChapter[chapterId].push({ id: row[1], title: row[2], description: row[3], date: row[4], imageUrl: row[5], sortOrder: Number(row[6] || 0) });
+    activitiesByChapter[chapterId].push({
+      id: row[indexMap.ActivityID],
+      title: row[indexMap.Title],
+      description: row[indexMap.Description],
+      date: row[indexMap.Date],
+      imageUrl: row[indexMap.ImageURL],
+      learnMoreUrl: indexMap.LearnMoreUrl != null ? row[indexMap.LearnMoreUrl] : '',
+      sortOrder: Number(row[indexMap.SortOrder] || 0)
+    });
   });
   Object.keys(activitiesByChapter).forEach(function(chapterId) {
     activitiesByChapter[chapterId] = activitiesByChapter[chapterId].sort(function(a, b) { return a.sortOrder - b.sortOrder; }).map(function(activity) {
-      return { id: activity.id, title: activity.title, description: activity.description, date: activity.date, imageUrl: activity.imageUrl };
+      return {
+        id: activity.id,
+        title: activity.title,
+        description: activity.description,
+        date: activity.date,
+        imageUrl: activity.imageUrl,
+        learnMoreUrl: activity.learnMoreUrl || ''
+      };
     });
   });
   return activitiesByChapter;
@@ -1050,15 +1102,67 @@ function loadLegacyChapters_(rows) {
   });
 }
 
+function isLikelyUrl_(value) {
+  return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function extractDriveIdFromUrlForLog_(value) {
+  var normalized = String(value || '').trim();
+  if (!normalized) return '';
+  var idMatch =
+    normalized.match(/[?&]id=([a-zA-Z0-9_-]{20,})/) ||
+    normalized.match(/\/d\/([a-zA-Z0-9_-]{20,})/) ||
+    normalized.match(/\/file\/d\/([a-zA-Z0-9_-]{20,})/);
+  if (idMatch && idMatch[1]) return idMatch[1];
+  var fallback = normalized.match(/[-\w]{25,}/);
+  return fallback ? fallback[0] : '';
+}
+
+function buildChapterLogoDiagnostic_(chapter) {
+  var item = chapter || {};
+  var chapterId = String(item.id || '');
+  var logoRaw = String(item.logo || item.logoUrl || '').trim();
+  var isMissing = !logoRaw;
+  var equalsChapterId = logoRaw !== '' && logoRaw === chapterId;
+  var isUrl = isLikelyUrl_(logoRaw);
+  return {
+    chapterId: chapterId,
+    chapterName: String(item.name || item.title || ''),
+    logoRaw: logoRaw,
+    isMissing: isMissing,
+    equalsChapterId: equalsChapterId,
+    isUrl: isUrl,
+    driveFileId: isUrl ? extractDriveIdFromUrlForLog_(logoRaw) : '',
+    isSuspicious: isMissing || equalsChapterId || !isUrl
+  };
+}
+
+function logChapterLogoDiagnostics_(contextLabel, chapters) {
+  var chapterList = Array.isArray(chapters) ? chapters : [];
+  var diagnostics = chapterList.map(function(chapter) {
+    return buildChapterLogoDiagnostic_(chapter);
+  });
+  var suspicious = diagnostics.filter(function(entry) { return entry.isSuspicious; });
+  if (!suspicious.length) {
+    Logger.log('[ChapterLogoDiagnostics][' + contextLabel + '] all clear. total=' + diagnostics.length);
+    return;
+  }
+  Logger.log('[ChapterLogoDiagnostics][' + contextLabel + '] suspicious count=' + suspicious.length + ', details=' + JSON.stringify(suspicious));
+}
+
 function loadAllChaptersNormalized_(ss) {
   var chapterSheet = ss.getSheetByName('Chapters');
   if (!chapterSheet || chapterSheet.getLastRow() < 2) return [];
   var rows = chapterSheet.getDataRange().getValues();
   var headers = rows[0];
-  if (headers.indexOf('ActivitiesJSON') >= 0 || headers.indexOf('ExtendedData') >= 0) return loadLegacyChapters_(rows);
+  if (headers.indexOf('ActivitiesJSON') >= 0 || headers.indexOf('ExtendedData') >= 0) {
+    var legacyChapters = loadLegacyChapters_(rows);
+    logChapterLogoDiagnostics_('loadAllChaptersNormalized-legacy', legacyChapters);
+    return legacyChapters;
+  }
   var indexMap = createHeaderIndexMap_(headers);
   var activitiesByChapter = loadChapterActivitiesByChapterId_(ss);
-  return rows.slice(1).filter(function(row) {
+  var normalizedChapters = rows.slice(1).filter(function(row) {
     return row[indexMap.ChapterID] !== '' && row[indexMap.ChapterID] != null;
   }).map(function(row) {
     var chapterId = row[indexMap.ChapterID];
@@ -1070,6 +1174,8 @@ function loadAllChaptersNormalized_(ss) {
       joinCtaDescription: row[indexMap.JoinCtaDescription] || '', activities: activitiesByChapter[String(chapterId)] || []
     };
   });
+  logChapterLogoDiagnostics_('loadAllChaptersNormalized-mapped', normalizedChapters);
+  return normalizedChapters;
 }
 
 function rewriteChaptersSheets_(ss, chapters) {
@@ -1079,7 +1185,7 @@ function rewriteChaptersSheets_(ss, chapters) {
     var chapter = normalizeChapterRecord_(rawChapter.id, rawChapter);
     chapterRows.push([chapter.id, chapter.name || '', chapter.description || '', chapter.imageUrl || chapter.image || '', chapter.logo || '', chapter.location || '', chapter.headName || '', chapter.headRole || '', chapter.headQuote || '', chapter.headImageUrl || '', chapter.email || '', chapter.phone || '', chapter.facebook || '', chapter.twitter || '', chapter.instagram || '', chapter.websiteUrl || '', chapter.joinUrl || '', chapter.joinCtaDescription || '']);
     (chapter.activities || []).forEach(function(activity, index) {
-      activityRows.push([chapter.id, activity.id || Utilities.getUuid(), activity.title || '', activity.description || '', activity.date || '', activity.imageUrl || '', index]);
+      activityRows.push([chapter.id, activity.id || Utilities.getUuid(), activity.title || '', activity.description || '', activity.date || '', activity.imageUrl || '', activity.learnMoreUrl || '', index]);
     });
   });
   dyesabelWriteSheetRows_(dyesabelGetOrCreateSheet_(ss, 'Chapters'), CHAPTER_HEADERS, chapterRows);
@@ -1092,18 +1198,34 @@ function saveChapter_(data) {
   var chapters = loadAllChaptersNormalized_(ss);
   var index = chapters.findIndex(function(chapter) { return String(chapter.id) === String(data.chapterId); });
   var previousChapter = index >= 0 ? chapters[index] : null;
+  Logger.log('[saveChapter_] incoming payload diagnostics=' + JSON.stringify({
+    chapterId: String(data.chapterId || ''),
+    chapterName: String(data.chapterData && (data.chapterData.name || data.chapterData.title) || ''),
+    logo: String(data.chapterData && (data.chapterData.logo || data.chapterData.logoUrl) || ''),
+    image: String(data.chapterData && (data.chapterData.image || data.chapterData.imageUrl) || ''),
+    hasActivities: Array.isArray(data.chapterData && data.chapterData.activities)
+  }));
   var nextChapter = normalizeChapterRecord_(data.chapterId, data.chapterData || {}, previousChapter);
+  Logger.log('[saveChapter_] normalized chapter diagnostics=' + JSON.stringify(buildChapterLogoDiagnostic_(nextChapter)));
   if (index >= 0) chapters[index] = nextChapter; else chapters.push(nextChapter);
   rewriteChaptersSheets_(ss, chapters);
   return { message: 'Chapter saved successfully' };
 }
 
 function loadChapter_(chapterId) {
-  return { chapter: loadAllChaptersNormalized_(getMainSpreadsheet_()).find(function(item) { return String(item.id) === String(chapterId); }) || null };
+  var chapter = loadAllChaptersNormalized_(getMainSpreadsheet_()).find(function(item) { return String(item.id) === String(chapterId); }) || null;
+  if (!chapter) {
+    Logger.log('[loadChapter_] chapter not found for chapterId=' + String(chapterId || ''));
+    return { chapter: null };
+  }
+  Logger.log('[loadChapter_] chapter diagnostics=' + JSON.stringify(buildChapterLogoDiagnostic_(chapter)));
+  return { chapter: chapter };
 }
 
 function listChapters_() {
-  return { chapters: loadAllChaptersNormalized_(getMainSpreadsheet_()) };
+  var chapters = loadAllChaptersNormalized_(getMainSpreadsheet_());
+  logChapterLogoDiagnostics_('listChapters', chapters);
+  return { chapters: chapters };
 }
 
 function deleteChapter_(chapterId) {

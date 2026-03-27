@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { X, Save, Plus, Trash2, Upload, Users, Building2, Globe2, Flag, FolderPlus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAppDialog } from '../contexts/AppDialogContext';
@@ -38,11 +38,24 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
   const [selectedCategoryIndex, setSelectedCategoryIndex] = useState<number>(0);
   const [saving, setSaving] = useState(false);
   const [pendingDeleteCategoryIndex, setPendingDeleteCategoryIndex] = useState<number | null>(null);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
+  const modalTransitionMs = 300;
 
   // Check permission
   if (!canEdit) {
     return null;
   }
+
+  useEffect(() => {
+    const entryTimer = window.setTimeout(() => setIsModalVisible(true), 10);
+    return () => {
+      window.clearTimeout(entryTimer);
+      if (closeTimerRef.current != null) {
+        window.clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, []);
 
   // ✅ NEW: Ability to add a new category if list is empty
   const addCategory = () => {
@@ -122,7 +135,7 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
     try {
       await onSave(editedCategories);
       await showAlert('Partners saved successfully!', { title: 'Partners Updated' });
-      onClose();
+      requestClose();
     } catch (error) {
       await showAlert('Error saving partners. Please try again.');
     } finally {
@@ -130,16 +143,23 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
     }
   };
 
+  const requestClose = () => {
+    if (closeTimerRef.current != null) return;
+    setIsModalVisible(false);
+    closeTimerRef.current = window.setTimeout(() => {
+      onClose();
+    }, modalTransitionMs);
+  };
+
   // ✅ SAFE ACCESS: Check if category exists
   const currentCategory = editedCategories[selectedCategoryIndex];
   const pendingDeleteCategory = pendingDeleteCategoryIndex === null ? null : editedCategories[pendingDeleteCategoryIndex];
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 overflow-y-auto">
-      <div className="min-h-screen p-4 md:p-8">
-        <div className="max-w-6xl mx-auto bg-white dark:bg-gray-900 rounded-2xl shadow-2xl">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 sm:p-3 md:p-4 backdrop-blur-sm transition-opacity duration-300 ${isModalVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <div className={`flex max-h-[98vh] w-full max-w-[98vw] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl transition-all duration-300 dark:border-white/10 dark:bg-gray-900 sm:max-h-[95vh] sm:max-w-6xl sm:rounded-3xl ${isModalVisible ? 'translate-y-0 scale-100 opacity-100' : 'translate-y-6 scale-95 opacity-0'}`}>
           {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between border-b border-gray-200 p-4 dark:border-gray-700 sm:p-5 md:p-6">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Edit Partners</h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -147,14 +167,15 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
             >
               <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
             </button>
           </div>
 
-          <div className="flex flex-col lg:flex-row">
+          <div className="custom-scrollbar flex-1 overflow-y-auto">
+            <div className="flex flex-col lg:flex-row">
             {/* Sidebar - Category Selection */}
             <div className="lg:w-64 border-b lg:border-b-0 lg:border-r border-gray-200 dark:border-gray-700 p-4 flex flex-col gap-4">
               <div>
@@ -303,12 +324,13 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
                 </div>
               )}
             </div>
+            </div>
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-end gap-3 border-t border-gray-200 bg-white/90 px-4 py-3 dark:border-gray-700 dark:bg-gray-900/90 sm:px-5 sm:py-4 md:px-6">
             <button
-              onClick={onClose}
+              onClick={requestClose}
               className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors font-medium"
             >
               Cancel
@@ -323,7 +345,6 @@ export const PartnersEditor: React.FC<PartnersEditorProps> = ({ categories, onSa
             </button>
           </div>
         </div>
-      </div>
 
       {pendingDeleteCategory ? (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">

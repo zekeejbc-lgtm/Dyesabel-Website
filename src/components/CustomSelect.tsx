@@ -6,6 +6,7 @@ export interface CustomSelectOption {
   label: string;
   description?: string;
   previewClassName?: string;
+  icon?: React.ReactNode;
 }
 
 interface CustomSelectProps {
@@ -201,6 +202,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         )}
       >
         <span className="flex min-w-0 items-center gap-3">
+          {selectedOption?.icon && (
+            <span aria-hidden="true" className="flex-shrink-0">
+              {selectedOption.icon}
+            </span>
+          )}
           {selectedOption?.previewClassName && (
             <span
               aria-hidden="true"
@@ -252,6 +258,11 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 )}
               >
                 <span className="flex min-w-0 items-center gap-3">
+                  {option.icon && (
+                    <span aria-hidden="true" className="flex-shrink-0">
+                      {option.icon}
+                    </span>
+                  )}
                   {option.previewClassName && (
                     <span
                       aria-hidden="true"

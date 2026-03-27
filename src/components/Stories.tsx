@@ -110,7 +110,7 @@ export const Pillars: React.FC<PillarsProps> = ({ pillars = [], onSelectPillar, 
                 <h3 className="text-xl md:text-lg lg:text-xl font-bold text-ocean-deep dark:text-white mb-3 leading-tight group-hover:text-primary-blue dark:group-hover:text-primary-cyan transition-colors">
                   {pillar.title}
                 </h3>
-                <p className="text-ocean-deep/70 dark:text-gray-300 text-sm leading-relaxed flex-grow font-medium">
+                <p className="text-ocean-deep/70 dark:text-gray-300 text-sm leading-relaxed flex-grow font-medium whitespace-pre-line text-justify">
                   {pillar.excerpt}
                 </p>
                 <div className="mt-4 pt-4 border-t border-ocean-deep/10 dark:border-white/10 text-xs font-bold text-primary-blue dark:text-primary-cyan uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity transform translate-y-2 group-hover:translate-y-0">

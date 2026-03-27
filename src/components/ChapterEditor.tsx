@@ -35,7 +35,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
     
     // Images
     imageUrl: chapter?.image || '', // Cover Image
-    logoUrl: chapter?.logo || '',   // Chapter Logo
+    logoUrl: chapter?.logo || chapter?.logoUrl || '',   // Chapter Logo
 
     // Contact Info
     email: chapter?.email || '',
@@ -78,7 +78,7 @@ export const ChapterEditor: React.FC<ChapterEditorProps> = ({ onBack, chapter }:
             
             // ✅ CRITICAL FIX: Map backend fields to local state names correctly
             title: result.chapter.name || result.chapter.title || chapterData.title, 
-            logoUrl: result.chapter.logo || chapterData.logoUrl, // <--- Fixes the missing logo issue
+            logoUrl: result.chapter.logo || result.chapter.logoUrl || chapterData.logoUrl, // <--- Fixes the missing logo issue
             
             // Ensure activities is an array if the backend returns undefined
             activities: result.chapter.activities || []

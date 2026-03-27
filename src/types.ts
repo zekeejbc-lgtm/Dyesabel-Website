@@ -76,6 +76,26 @@ export interface PillarActivity {
   description: string;
   imageUrl: string;
   learnMoreUrl?: string;
+  applicationOpen?: boolean;
+  applicationUrl?: string;
+  applicationLabel?: string;
+  applicationNote?: string;
+}
+
+export interface PillarSocialLinks {
+  facebook?: string;
+  instagram?: string;
+  twitter?: string;
+  linkedin?: string;
+  youtube?: string;
+  website?: string;
+}
+
+export interface PillarJoinNow {
+  isOpen?: boolean;
+  url?: string;
+  label?: string;
+  description?: string;
 }
 
 export interface Pillar {
@@ -85,6 +105,9 @@ export interface Pillar {
   description: string;
   aim: string;
   imageUrl: string;
+  impactAreas?: string[];
+  socialLinks?: PillarSocialLinks;
+  joinNow?: PillarJoinNow;
   activities: PillarActivity[];
 }
 

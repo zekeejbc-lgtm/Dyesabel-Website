@@ -82,10 +82,48 @@ function getSocialLinkMeta_(url: string) {
   return { label: 'Visit Website', icon: <Globe size={18} /> };
 }
 
+function getDefaultImpactAreas_() {
+  return ['Sustainability', 'Youth', 'Community', 'Future'];
+}
+
+function getPillarSocialItems_(pillar: Pillar) {
+  var links = pillar.socialLinks || {};
+  var candidates: Array<{ key: string; label: string; value?: string; icon: JSX.Element }> = [
+    { key: 'facebook', label: 'Facebook', value: links.facebook, icon: <Facebook size={16} /> },
+    { key: 'instagram', label: 'Instagram', value: links.instagram, icon: <Instagram size={16} /> },
+    { key: 'twitter', label: 'X', value: links.twitter, icon: <Twitter size={16} /> },
+    { key: 'linkedin', label: 'LinkedIn', value: links.linkedin, icon: <Linkedin size={16} /> },
+    { key: 'youtube', label: 'YouTube', value: links.youtube, icon: <Youtube size={16} /> },
+    { key: 'website', label: 'Website', value: links.website, icon: <Globe size={16} /> }
+  ];
+
+  return candidates
+    .map(function(entry) {
+      return {
+        key: entry.key,
+        label: entry.label,
+        url: normalizeExternalUrl_(entry.value),
+        icon: entry.icon
+      };
+    })
+    .filter(function(entry) { return !!entry.url; });
+}
+
 export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEdit }) => {
   const { user } = useAuth();
   const [selectedActivity, setSelectedActivity] = useState<PillarActivity | null>(null);
   const [zoomedActivityImageUrl, setZoomedActivityImageUrl] = useState<string | null>(null);
+  const pillarImpactAreas = useMemo(
+    () => Array.isArray(pillar.impactAreas) && pillar.impactAreas.length > 0 ? pillar.impactAreas : getDefaultImpactAreas_(),
+    [pillar.impactAreas]
+  );
+  const pillarSocialItems = useMemo(() => getPillarSocialItems_(pillar), [pillar]);
+  const pillarJoinNowUrl = useMemo(() => normalizeExternalUrl_(pillar.joinNow?.url), [pillar.joinNow?.url]);
+  const isPillarJoinOpen = !!pillar.joinNow?.isOpen;
+  const pillarJoinFallbackText = useMemo(
+    () => String(pillar.joinNow?.description || '').trim() || 'Stay tuned for upcoming application opportunities.',
+    [pillar.joinNow?.description]
+  );
   const selectedActivityLearnMoreUrl = useMemo(
     () => normalizeExternalUrl_(selectedActivity?.learnMoreUrl),
     [selectedActivity?.learnMoreUrl]
@@ -94,6 +132,56 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
     () => getSocialLinkMeta_(selectedActivity?.learnMoreUrl || ''),
     [selectedActivity?.learnMoreUrl]
   );
+  const selectedActivityJoinNow = useMemo(() => {
+    var activityOpen = !!selectedActivity?.applicationOpen;
+    var activityJoinUrl = normalizeExternalUrl_(selectedActivity?.applicationUrl);
+    if (activityOpen && activityJoinUrl) {
+      return {
+        url: activityJoinUrl,
+        label: String(selectedActivity?.applicationLabel || '').trim() || 'Join Now',
+        note: String(selectedActivity?.applicationNote || '').trim(),
+        pending: false
+      };
+    }
+
+    if (activityOpen && !activityJoinUrl) {
+      return {
+        url: '',
+        label: '',
+        note: String(selectedActivity?.applicationNote || '').trim() || 'Stay tuned for application details.',
+        pending: true
+      };
+    }
+
+    if (isPillarJoinOpen && pillarJoinNowUrl) {
+      return {
+        url: pillarJoinNowUrl,
+        label: String(pillar.joinNow?.label || '').trim() || 'Join Now',
+        note: String(pillar.joinNow?.description || '').trim(),
+        pending: false
+      };
+    }
+
+    if (isPillarJoinOpen && !pillarJoinNowUrl) {
+      return {
+        url: '',
+        label: '',
+        note: String(pillar.joinNow?.description || '').trim() || 'Stay tuned for application details.',
+        pending: true
+      };
+    }
+
+    return null;
+  }, [
+    isPillarJoinOpen,
+    pillar.joinNow?.description,
+    pillar.joinNow?.label,
+    pillarJoinNowUrl,
+    selectedActivity?.applicationLabel,
+    selectedActivity?.applicationNote,
+    selectedActivity?.applicationOpen,
+    selectedActivity?.applicationUrl
+  ]);
 
   return (
     <div className="min-h-screen pt-20 pb-10">
@@ -252,12 +340,54 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
               <div className="mt-8 pt-6 border-t border-ocean-deep/10 dark:border-white/10">
                  <h4 className="font-bold text-sm uppercase tracking-wider text-ocean-deep/50 dark:text-gray-500 mb-4">Impact Areas</h4>
                  <div className="flex flex-wrap gap-2">
-                    {['Sustainability', 'Youth', 'Community', 'Future'].map(tag => (
+                    {pillarImpactAreas.map(tag => (
                        <span key={tag} className="text-xs font-bold px-3 py-1 rounded-full bg-white/10 text-ocean-deep dark:text-white border border-white/10">
                           #{tag}
                        </span>
                     ))}
                  </div>
+              </div>
+
+              {pillarSocialItems.length > 0 && (
+                <div className="mt-6 pt-6 border-t border-ocean-deep/10 dark:border-white/10">
+                  <h4 className="font-bold text-sm uppercase tracking-wider text-ocean-deep/50 dark:text-gray-500 mb-4">Social Links</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {pillarSocialItems.map((item) => (
+                      <a
+                        key={item.key}
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-ocean-deep transition-colors hover:bg-primary-cyan/30 dark:text-white"
+                      >
+                        {item.icon}
+                        <span>{item.label}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-6 pt-6 border-t border-ocean-deep/10 dark:border-white/10">
+                <h4 className="font-bold text-sm uppercase tracking-wider text-ocean-deep/50 dark:text-gray-500 mb-3">Join Now</h4>
+                {isPillarJoinOpen && pillarJoinNowUrl ? (
+                  <div className="space-y-2">
+                    <a
+                      href={pillarJoinNowUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-xl bg-primary-cyan px-4 py-2 text-sm font-bold text-[#04131a] transition-colors hover:bg-[#7cf0ff]"
+                    >
+                      <span>{String(pillar.joinNow?.label || '').trim() || 'Join Now'}</span>
+                      <ExternalLink size={14} />
+                    </a>
+                    {!!String(pillar.joinNow?.description || '').trim() && (
+                      <p className="text-xs text-ocean-deep/70 dark:text-gray-300 whitespace-pre-wrap text-justify">{pillar.joinNow?.description}</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-ocean-deep/60 dark:text-gray-400">{pillarJoinFallbackText}</p>
+                )}
               </div>
             </div>
 
@@ -285,25 +415,31 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
                 setSelectedActivity(null);
                 setZoomedActivityImageUrl(null);
               }}
-              className="absolute right-3 sm:right-4 top-3 sm:top-4 z-20 rounded-lg bg-black/30 p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+              className="fixed right-4 sm:right-6 top-4 sm:top-6 z-[125] rounded-lg bg-black/45 p-2 text-white transition-colors hover:bg-white/25 hover:text-white"
             >
               <X size={16} className="sm:w-5 sm:h-5" />
             </button>
 
             <div className="relative h-48 sm:h-64 md:h-80 w-full overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setZoomedActivityImageUrl(convertToCORSFreeLink(selectedActivity.imageUrl))}
-                className="absolute inset-0 z-0 h-full w-full cursor-zoom-in"
-                aria-label="View full activity image"
-              >
-                <img
-                  src={convertToCORSFreeLink(selectedActivity.imageUrl)}
-                  alt={`${selectedActivity.title || 'Pillar activity'} image`}
-                  className="h-full w-full object-cover"
-                />
-              </button>
-              <div className="absolute inset-0 bg-gradient-to-t from-[#07111e] via-[#07111e]/40 to-transparent" />
+              {selectedActivity.imageUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setZoomedActivityImageUrl(convertToCORSFreeLink(selectedActivity.imageUrl))}
+                  className="absolute inset-0 z-0 h-full w-full cursor-zoom-in"
+                  aria-label="View full activity image"
+                >
+                  <img
+                    src={convertToCORSFreeLink(selectedActivity.imageUrl)}
+                    alt={`${selectedActivity.title || 'Pillar activity'} image`}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-200 text-gray-500">
+                  No Image
+                </div>
+              )}
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#07111e] via-[#07111e]/40 to-transparent" />
               <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-3 sm:right-4 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
                 <h3 className="max-w-full text-base sm:text-lg md:text-2xl lg:text-[1.7rem] font-bold leading-tight text-white">
                   {selectedActivity.title}
@@ -313,9 +449,11 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
                   {formatActivityDateInManila_(selectedActivity.date)}
                 </div>
               </div>
-              <div className="absolute left-3 sm:left-4 top-3 sm:top-4 z-10 rounded-full bg-black/45 px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-white/90">
-                Tap image to view full size
-              </div>
+              {selectedActivity.imageUrl && (
+                <div className="pointer-events-none absolute left-3 sm:left-4 top-3 sm:top-4 z-10 rounded-full bg-black/45 px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-white/90">
+                  Tap image to view full size
+                </div>
+              )}
             </div>
 
             <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 md:p-8">
@@ -339,6 +477,26 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
                   <p className="text-[11px] sm:text-xs text-white/60 break-all whitespace-pre-wrap text-justify">{selectedActivityLearnMoreUrl}</p>
                 </div>
               )}
+
+              {selectedActivityJoinNow && (
+                <div className="space-y-2 rounded-xl border border-primary-cyan/30 bg-primary-cyan/10 p-3 sm:p-4">
+                  <h5 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-primary-cyan">Join This Initiative</h5>
+                  {!selectedActivityJoinNow.pending && (
+                    <a
+                      href={selectedActivityJoinNow.url || ''}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 rounded-lg sm:rounded-xl bg-primary-cyan px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-[#04131a] transition-colors hover:bg-[#7cf0ff]"
+                    >
+                      <span>{selectedActivityJoinNow.label}</span>
+                      <ExternalLink size={14} className="sm:w-4 sm:h-4" />
+                    </a>
+                  )}
+                  {!!selectedActivityJoinNow.note && (
+                    <p className="text-[11px] sm:text-xs text-white/70 whitespace-pre-wrap text-justify">{selectedActivityJoinNow.note}</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -356,7 +514,7 @@ export const PillarDetail: React.FC<PillarDetailProps> = ({ pillar, onBack, onEd
             type="button"
             aria-label="Close full image"
             onClick={() => setZoomedActivityImageUrl(null)}
-            className="absolute right-4 top-4 z-20 rounded-lg bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+            className="fixed right-4 sm:right-6 top-4 sm:top-6 z-[135] rounded-lg bg-white/15 p-2 text-white transition-colors hover:bg-white/25"
           >
             <X size={18} />
           </button>

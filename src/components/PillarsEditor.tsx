@@ -38,6 +38,32 @@ function truncateText_(value: string, maxLength: number) {
   return text.slice(0, maxLength).trimEnd() + '...';
 }
 
+function parseImpactAreasInput_(value: string) {
+  var seen: Record<string, boolean> = {};
+  return String(value || '')
+    .split(',')
+    .map(function(tag) {
+      return tag.trim().replace(/^#+\s*/, '');
+    })
+    .filter(function(tag) {
+      if (!tag) return false;
+      var normalized = tag.toLowerCase();
+      if (seen[normalized]) return false;
+      seen[normalized] = true;
+      return true;
+    });
+}
+
+function toImpactAreasInput_(areas?: string[]) {
+  return Array.isArray(areas)
+    ? areas
+        .map(function(tag) { return String(tag || '').trim().replace(/^#+\s*/, ''); })
+        .filter(Boolean)
+        .map(function(tag) { return '#' + tag; })
+        .join(', ')
+    : '';
+}
+
 export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, onClose, activitiesOnly = false }) => {
   const { user } = useAuth();
   const { showAlert, showConfirm } = useAppDialog();
@@ -45,6 +71,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   const [editedPillars, setEditedPillars] = useState<Pillar[]>(pillars);
   const [persistedPillars, setPersistedPillars] = useState<Pillar[]>(pillars);
   const [selectedPillarIndex, setSelectedPillarIndex] = useState<number>(0);
+  const [impactAreasDraft, setImpactAreasDraft] = useState<string>(() => toImpactAreasInput_(pillars[0] && pillars[0].impactAreas));
   const [saving, setSaving] = useState(false);
   const [visibleActivityCount, setVisibleActivityCount] = useState<Record<string, number>>({});
   const [activeActivityEditor, setActiveActivityEditor] = useState<{ pillarIndex: number; activityIndex: number | null; isNew: boolean } | null>(null);
@@ -74,6 +101,11 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     };
   }, []);
 
+  useEffect(() => {
+    var current = editedPillars[selectedPillarIndex];
+    setImpactAreasDraft(toImpactAreasInput_(current && current.impactAreas));
+  }, [selectedPillarIndex]);
+
   const getVisibleCountForPillar = (pillarIndex: number, totalActivities: number) =>
     Math.min(visibleActivityCount[pillarIndex] || ACTIVITY_INITIAL_VISIBLE_COUNT, totalActivities);
 
@@ -81,6 +113,28 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
     const updated = [...editedPillars];
     updated[index] = { ...updated[index], [field]: value };
     setEditedPillars(updated);
+  };
+
+  const commitImpactAreasDraft_ = (pillarIndex: number, draftValue?: string) => {
+    var normalizedDraft = draftValue != null ? draftValue : impactAreasDraft;
+    var parsed = parseImpactAreasInput_(normalizedDraft);
+    var updated = [...editedPillars];
+    if (updated[pillarIndex]) {
+      updated[pillarIndex] = { ...updated[pillarIndex], impactAreas: parsed };
+      setEditedPillars(updated);
+    }
+    setImpactAreasDraft(toImpactAreasInput_(parsed));
+    return updated;
+  };
+
+  const handleSelectPillar_ = (nextIndex: number) => {
+    if (Number.isNaN(nextIndex) || nextIndex < 0 || nextIndex >= editedPillars.length) return;
+    if (nextIndex !== selectedPillarIndex) {
+      commitImpactAreasDraft_(selectedPillarIndex);
+      setSelectedPillarIndex(nextIndex);
+      return;
+    }
+    setSelectedPillarIndex(nextIndex);
   };
 
   const updateActivity = (pillarIndex: number, activityIndex: number, field: keyof PillarActivity, value: string) => {
@@ -98,7 +152,11 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
       date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
       description: 'Activity description',
       imageUrl: 'https://picsum.photos/seed/new/500/300',
-      learnMoreUrl: ''
+      learnMoreUrl: '',
+      applicationOpen: false,
+      applicationUrl: '',
+      applicationLabel: 'Join Now',
+      applicationNote: ''
     };
     setActiveActivityEditor({ pillarIndex: pillarIndex, activityIndex: null, isNew: true });
     setActivityDraft({ ...newActivity });
@@ -258,10 +316,11 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
   };
 
   const handleSave = async () => {
+    var pillarsToSave = commitImpactAreasDraft_(selectedPillarIndex);
     setSaving(true);
     try {
-      await onSave(editedPillars);
-      setPersistedPillars(editedPillars);
+      await onSave(pillarsToSave);
+      setPersistedPillars(pillarsToSave);
       await showAlert('Pillars saved successfully!', { title: 'Pillars Updated' });
       requestClose();
     } catch (error) {
@@ -319,7 +378,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                   value={String(selectedPillarIndex)}
                   onChange={(nextValue) => {
                     var nextIndex = Number(nextValue);
-                    if (!Number.isNaN(nextIndex)) setSelectedPillarIndex(nextIndex);
+                    if (!Number.isNaN(nextIndex)) handleSelectPillar_(nextIndex);
                   }}
                   options={pillarOptions}
                   ariaLabel="Select pillar"
@@ -333,7 +392,7 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                 {editedPillars.map((pillar, index) => (
                   <button
                     key={pillar.id}
-                    onClick={() => setSelectedPillarIndex(index)}
+                    onClick={() => handleSelectPillar_(index)}
                     className={`w-full text-left p-3 rounded-lg transition-all ${
                       selectedPillarIndex === index
                         ? 'bg-primary-blue text-white shadow-md'
@@ -440,6 +499,113 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                 </div>
                 )}
 
+                {!activitiesOnly && (
+                <div className="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-200">Impact Areas & Social Links</h4>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                      Impact Areas (comma separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={impactAreasDraft}
+                      onChange={(e) => setImpactAreasDraft(e.target.value)}
+                      onBlur={() => {
+                        commitImpactAreasDraft_(selectedPillarIndex);
+                      }}
+                      placeholder="#Sustainability, #Youth, #Community"
+                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="url"
+                      value={currentPillar.socialLinks?.facebook || ''}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'socialLinks', { ...(currentPillar.socialLinks || {}), facebook: e.target.value })}
+                      placeholder="Facebook URL"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                    <input
+                      type="url"
+                      value={currentPillar.socialLinks?.instagram || ''}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'socialLinks', { ...(currentPillar.socialLinks || {}), instagram: e.target.value })}
+                      placeholder="Instagram URL"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                    <input
+                      type="url"
+                      value={currentPillar.socialLinks?.twitter || ''}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'socialLinks', { ...(currentPillar.socialLinks || {}), twitter: e.target.value })}
+                      placeholder="X / Twitter URL"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                    <input
+                      type="url"
+                      value={currentPillar.socialLinks?.linkedin || ''}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'socialLinks', { ...(currentPillar.socialLinks || {}), linkedin: e.target.value })}
+                      placeholder="LinkedIn URL"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                    <input
+                      type="url"
+                      value={currentPillar.socialLinks?.youtube || ''}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'socialLinks', { ...(currentPillar.socialLinks || {}), youtube: e.target.value })}
+                      placeholder="YouTube URL"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                    <input
+                      type="url"
+                      value={currentPillar.socialLinks?.website || ''}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'socialLinks', { ...(currentPillar.socialLinks || {}), website: e.target.value })}
+                      placeholder="Website URL"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+                )}
+
+                {!activitiesOnly && (
+                <div className="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                  <h4 className="text-sm font-bold uppercase tracking-wide text-gray-700 dark:text-gray-200">Pillar Join Now</h4>
+
+                  <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={!!currentPillar.joinNow?.isOpen}
+                      onChange={(e) => updatePillar(selectedPillarIndex, 'joinNow', { ...(currentPillar.joinNow || {}), isOpen: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    Open pillar application
+                  </label>
+
+                  <input
+                    type="url"
+                    value={currentPillar.joinNow?.url || ''}
+                    onChange={(e) => updatePillar(selectedPillarIndex, 'joinNow', { ...(currentPillar.joinNow || {}), url: e.target.value })}
+                    placeholder="Application URL"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+
+                  <input
+                    type="text"
+                    value={currentPillar.joinNow?.label || ''}
+                    onChange={(e) => updatePillar(selectedPillarIndex, 'joinNow', { ...(currentPillar.joinNow || {}), label: e.target.value })}
+                    placeholder="Button label (default: Join Now)"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+
+                  <textarea
+                    value={currentPillar.joinNow?.description || ''}
+                    onChange={(e) => updatePillar(selectedPillarIndex, 'joinNow', { ...(currentPillar.joinNow || {}), description: e.target.value })}
+                    placeholder="Optional short note shown under the button"
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                  />
+                </div>
+                )}
+
                 {/* Activities */}
                 <div>
                   <div className="flex items-center justify-between mb-4">
@@ -493,6 +659,9 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                                 <h4 className="line-clamp-1 font-semibold text-gray-900 dark:text-white">
                                   {truncateText_(activity.title || `Activity ${activityIndex + 1}`, 80)}
                                 </h4>
+                                {activity.applicationOpen && (
+                                  <p className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">Application Open</p>
+                                )}
                               </div>
                             </button>
 
@@ -623,6 +792,40 @@ export const PillarsEditor: React.FC<PillarsEditorProps> = ({ pillars, onSave, o
                 value={activityDraft.learnMoreUrl || ''}
                 onChange={(e) => setActivityDraft({ ...activityDraft, learnMoreUrl: e.target.value })}
                 placeholder="Learn More URL (Facebook, Instagram, X, website, etc.)"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+
+              <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={!!activityDraft.applicationOpen}
+                  onChange={(e) => setActivityDraft({ ...activityDraft, applicationOpen: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                Open application for this event
+              </label>
+
+              <input
+                type="url"
+                value={activityDraft.applicationUrl || ''}
+                onChange={(e) => setActivityDraft({ ...activityDraft, applicationUrl: e.target.value })}
+                placeholder="Event application URL"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+
+              <input
+                type="text"
+                value={activityDraft.applicationLabel || ''}
+                onChange={(e) => setActivityDraft({ ...activityDraft, applicationLabel: e.target.value })}
+                placeholder="Application button label (default: Join Now)"
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+
+              <textarea
+                value={activityDraft.applicationNote || ''}
+                onChange={(e) => setActivityDraft({ ...activityDraft, applicationNote: e.target.value })}
+                placeholder="Optional short note for this event application"
+                rows={2}
                 className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               />
             </div>

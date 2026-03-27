@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Mail, Phone, MapPin, Calendar, Facebook, Twitter, Instagram, Globe, ExternalLink, Edit, Loader, X, Linkedin, Youtube } from 'lucide-react';
-import { Chapter } from '../types';
+import { Chapter, ChapterActivity } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { DataService } from '../services/DriveService';
 import { convertToCORSFreeLink, getImageDebugInfo } from '../services/DriveService';
@@ -92,7 +92,8 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
   const chapterLogoDebug = getImageDebugInfo(chapterLogo);
   
   // State for the selected activity (Modal)
-  const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<ChapterActivity | null>(null);
+  const [zoomedActivityImageUrl, setZoomedActivityImageUrl] = useState<string | null>(null);
   const selectedActivityLearnMoreUrl = useMemo(
     () => normalizeExternalUrl_(selectedActivity?.learnMoreUrl),
     [selectedActivity?.learnMoreUrl]
@@ -101,6 +102,11 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
     () => getSocialLinkMeta_(selectedActivity?.learnMoreUrl || ''),
     [selectedActivity?.learnMoreUrl]
   );
+
+  const closeActivityModal_ = () => {
+    setSelectedActivity(null);
+    setZoomedActivityImageUrl(null);
+  };
 
   // Fetch latest chapter data from Backend
   useEffect(() => {
@@ -161,9 +167,9 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
     }
   }, [chapter.id, chapter.name, chapterLogo, chapterLogoDebug.hasUrl, chapterLogoDebug.isHttpUrl, chapterLogoDebug.isDataUrl, chapterLogoDebug.normalizedUrl]);
 
-  // Disable body scroll when modal is open
+  // Disable body scroll when activity overlays are open
   useEffect(() => {
-    if (selectedActivity) {
+    if (selectedActivity || zoomedActivityImageUrl) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -171,7 +177,7 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [selectedActivity]);
+  }, [selectedActivity, zoomedActivityImageUrl]);
 
   return (
     <div className="min-h-screen pt-20 pb-10 relative">
@@ -283,14 +289,15 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
               
               <div className="bg-white/5 border border-white/10 rounded-2xl p-2 max-h-[600px] overflow-y-auto custom-scrollbar">
                 {chapter.activities && chapter.activities.length > 0 ? (
-                  <div className="space-y-4 p-2">
-                    {chapter.activities.map((activity: any, i: number) => (
-                      <div 
-                        key={activity.id || i} 
+                  <div className="grid gap-6 p-2">
+                    {chapter.activities.map((activity, i) => (
+                      <button
+                        key={activity.id || i}
+                        type="button"
                         onClick={() => setSelectedActivity(activity)}
-                        className="glass-card p-6 rounded-2xl flex flex-col md:flex-row gap-6 hover:bg-white/10 transition-all duration-300 group cursor-pointer border border-transparent hover:border-primary-cyan/30"
+                        className="glass-card rounded-2xl overflow-hidden flex flex-col md:flex-row group hover:bg-white/5 transition-colors border border-white/10 shrink-0 w-full text-left"
                       >
-                        <div className="w-full md:w-48 h-32 rounded-xl overflow-hidden flex-shrink-0 bg-gray-200 dark:bg-white/5 relative">
+                        <div className="w-full md:w-1/3 h-48 md:h-auto relative overflow-hidden bg-gray-200 dark:bg-white/5">
                           {activity.imageUrl ? (
                             <img
                               src={convertToCORSFreeLink(activity.imageUrl)}
@@ -307,33 +314,29 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
                                   attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
                                 });
                               }}
-                              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                              className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
                           )}
-                          
-                          {/* Hover Overlay Hint */}
-                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <span className="text-white text-xs font-bold uppercase tracking-wider border border-white/50 px-3 py-1 rounded-full">View Details</span>
+
+                          <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-sm text-white text-xs font-bold py-1 px-3 rounded-full flex items-center gap-1.5">
+                            <Calendar size={12} className="text-primary-cyan" />
+                            {formatActivityDateInManila_(activity.date || '')}
                           </div>
                         </div>
-                        <div className="flex-grow">
-                          {activity.date && (
-                            <div className="flex items-center gap-2 text-primary-cyan text-sm font-bold mb-2">
-                              <Calendar size={14} />
-                              <span>{formatActivityDateInManila_(activity.date)}</span>
-                            </div>
-                          )}
-                          <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-2 group-hover:text-primary-cyan transition-colors">
+                        <div className="p-6 md:p-8 flex flex-col justify-center flex-1">
+                          <h3 className="text-xl font-bold text-ocean-deep dark:text-white mb-3 group-hover:text-primary-blue dark:group-hover:text-primary-cyan transition-colors">
                             {activity.title || 'Untitled Activity'}
                           </h3>
-                          {/* ✅ ADDED text-justify */}
-                          <p className="text-sm text-ocean-deep/60 dark:text-gray-400 line-clamp-2 text-justify whitespace-pre-line">
-                            {truncateDescription_(activity.description || 'No description provided.', 220)}
+                          <p className="text-ocean-deep/70 dark:text-gray-400 mb-4 leading-relaxed line-clamp-3 whitespace-pre-line text-justify">
+                            {truncateDescription_(activity.description || 'No description provided.', 240)}
                           </p>
+                          <div className="flex items-center gap-2 text-sm font-bold text-primary-cyan mt-auto">
+                            <span>Completed</span>
+                          </div>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -489,104 +492,119 @@ export const ChapterDetail: React.FC<ChapterDetailProps> = ({ chapter: initialCh
       {/* Activity Detail Modal */}
       {selectedActivity && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-4 md:p-6">
-          {/* Backdrop */}
-          <div 
+          <button
+            type="button"
+            aria-label="Close activity details"
             className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={() => setSelectedActivity(null)}
-          ></div>
+            onClick={closeActivityModal_}
+          />
 
-          {/* Modal Content - Responsive */}
-          <div className="bg-white dark:bg-[#051923] w-full max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[95vh] sm:max-h-[92vh] rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden relative z-10 flex flex-col animate-pop-in">
-            
-            {/* Close Button */}
-            <button 
-              onClick={() => setSelectedActivity(null)}
-              className="absolute top-3 sm:top-4 right-3 sm:right-4 z-20 p-2 bg-black/50 hover:bg-black/70 text-white rounded-full transition-colors backdrop-blur-md"
+          <div className="relative z-10 w-full max-w-[95vw] sm:max-w-2xl md:max-w-3xl lg:max-w-4xl max-h-[95vh] sm:max-h-[92vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-white/20 bg-[#07111e] shadow-2xl animate-pop-in">
+            <button
+              type="button"
+              aria-label="Close activity details"
+              onClick={closeActivityModal_}
+              className="fixed right-4 sm:right-6 top-4 sm:top-6 z-[65] rounded-lg bg-black/45 p-2 text-white transition-colors hover:bg-white/25 hover:text-white"
             >
-              <X size={18} className="sm:w-5 sm:h-5" />
+              <X size={16} className="sm:w-5 sm:h-5" />
             </button>
 
-            {/* Image Area - Responsive height */}
-            <div className="h-48 sm:h-64 md:h-72 lg:h-96 w-full bg-gray-200 dark:bg-black/20 flex-shrink-0 relative">
+            <div className="relative h-48 sm:h-64 md:h-80 w-full overflow-hidden bg-gray-200 dark:bg-white/5">
               {selectedActivity.imageUrl ? (
-                <img 
-                  src={convertToCORSFreeLink(selectedActivity.imageUrl)} 
-                  alt={`${selectedActivity.title || 'Chapter activity'} full-size image in ${chapter.name}`} 
-                  decoding="async"
-                  referrerPolicy="no-referrer"
-                  onError={(event) => {
-                    console.error('[ChapterDetail] Modal activity image failed to load', {
-                      chapterId: chapter.id,
-                      chapterName: chapter.name,
-                      activityId: selectedActivity.id,
-                      activityTitle: selectedActivity.title,
-                      attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
-                    });
-                  }}
-                  className="w-full h-full object-cover"
-                />
+                <button
+                  type="button"
+                  onClick={() => setZoomedActivityImageUrl(convertToCORSFreeLink(selectedActivity.imageUrl))}
+                  className="absolute inset-0 z-0 h-full w-full cursor-zoom-in"
+                  aria-label="View full activity image"
+                >
+                  <img
+                    src={convertToCORSFreeLink(selectedActivity.imageUrl)}
+                    alt={`${selectedActivity.title || 'Chapter activity'} image`}
+                    decoding="async"
+                    referrerPolicy="no-referrer"
+                    onError={(event) => {
+                      console.error('[ChapterDetail] Modal activity image failed to load', {
+                        chapterId: chapter.id,
+                        chapterName: chapter.name,
+                        activityId: selectedActivity.id,
+                        activityTitle: selectedActivity.title,
+                        attemptedSrc: event.currentTarget.currentSrc || event.currentTarget.src
+                      });
+                    }}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-gray-500">
                   <div className="text-center">
-                    <span className="block text-3xl sm:text-4xl mb-2">📷</span>
-                    <span className="text-xs sm:text-sm">No Image Available</span>
+                    <span className="block text-3xl sm:text-4xl mb-2">No Image</span>
                   </div>
                 </div>
               )}
-              <div className="absolute bottom-0 left-0 right-0 h-20 sm:h-24 bg-gradient-to-t from-black/80 to-transparent"></div>
-            </div>
-
-            {/* Content Area - Scrollable with responsive padding */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-6 md:px-8 py-4 sm:py-6">
-              <div className="flex flex-col gap-3 sm:gap-4">
-                <div>
-                   {selectedActivity.date && (
-                    <div className="flex items-center gap-2 text-primary-cyan font-bold text-xs sm:text-sm mb-2 uppercase tracking-wide">
-                      <Calendar size={14} className="sm:w-4 sm:h-4" />
-                        {formatActivityDateInManila_(selectedActivity.date)}
-                    </div>
-                  )}
-                  <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-ocean-deep dark:text-white leading-tight">
-                    {selectedActivity.title}
-                  </h2>
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#07111e] via-[#07111e]/40 to-transparent" />
+              <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-3 sm:right-4 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
+                <h3 className="max-w-full text-base sm:text-lg md:text-2xl lg:text-[1.7rem] font-bold leading-tight text-white">
+                  {selectedActivity.title}
+                </h3>
+                <div className="inline-flex items-center gap-2 rounded-full bg-black/50 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-bold text-white whitespace-nowrap">
+                  <Calendar size={12} className="sm:w-[13px] sm:h-[13px] text-primary-cyan" />
+                  {formatActivityDateInManila_(selectedActivity.date || '')}
                 </div>
-
-                <div className="h-px w-full bg-gray-200 dark:bg-white/10 my-2"></div>
-
-                <div className="prose dark:prose-invert max-w-none text-sm sm:text-base md:text-lg">
-                  <p className="text-ocean-deep/80 dark:text-gray-300 leading-relaxed whitespace-pre-wrap text-justify">
-                    {selectedActivity.description}
-                  </p>
-                </div>
-
-                {selectedActivityLearnMoreUrl && (
-                  <div className="space-y-2">
-                    <a
-                      href={selectedActivityLearnMoreUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 rounded-lg sm:rounded-xl bg-primary-cyan px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-[#04131a] transition-colors hover:bg-[#7cf0ff]"
-                    >
-                      {selectedActivityLinkMeta.icon}
-                      <span>{selectedActivityLinkMeta.label}</span>
-                      <ExternalLink size={14} className="sm:w-4 sm:h-4" />
-                    </a>
-                    <p className="text-[11px] sm:text-xs text-ocean-deep/60 dark:text-white/60 break-all whitespace-pre-wrap text-justify">{selectedActivityLearnMoreUrl}</p>
-                  </div>
-                )}
               </div>
+              {selectedActivity.imageUrl && (
+                <div className="pointer-events-none absolute left-3 sm:left-4 top-3 sm:top-4 z-10 rounded-full bg-black/45 px-2 sm:px-2.5 py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-wide text-white/90">
+                  Tap image to view full size
+                </div>
+              )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="shrink-0 p-3 sm:p-4 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-black/20 flex justify-end">
-              <button 
-                onClick={() => setSelectedActivity(null)}
-                className="px-4 sm:px-6 py-2 text-sm sm:text-base bg-ocean-deep text-white rounded-lg sm:rounded-xl font-bold hover:bg-primary-blue transition-colors"
-              >
-                Close
-              </button>
+            <div className="space-y-4 sm:space-y-6 p-4 sm:p-6 md:p-8">
+              <div>
+                <h4 className="mb-2 text-xs sm:text-sm font-bold uppercase tracking-wider text-primary-cyan">Activity Details</h4>
+                <p className="text-sm sm:text-base md:text-lg leading-relaxed text-white/85 whitespace-pre-wrap text-justify">{selectedActivity.description || 'No description available.'}</p>
+              </div>
+
+              {selectedActivityLearnMoreUrl && (
+                <div className="space-y-2">
+                  <a
+                    href={selectedActivityLearnMoreUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 rounded-lg sm:rounded-xl bg-primary-cyan px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-bold text-[#04131a] transition-colors hover:bg-[#7cf0ff]"
+                  >
+                    {selectedActivityLinkMeta.icon}
+                    <span>{selectedActivityLinkMeta.label}</span>
+                    <ExternalLink size={14} className="sm:w-4 sm:h-4" />
+                  </a>
+                  <p className="text-[11px] sm:text-xs text-white/60 break-all whitespace-pre-wrap text-justify">{selectedActivityLearnMoreUrl}</p>
+                </div>
+              )}
             </div>
           </div>
+        </div>
+      )}
+
+      {zoomedActivityImageUrl && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4">
+          <button
+            type="button"
+            aria-label="Close full image"
+            className="absolute inset-0"
+            onClick={() => setZoomedActivityImageUrl(null)}
+          />
+          <button
+            type="button"
+            aria-label="Close full image"
+            onClick={() => setZoomedActivityImageUrl(null)}
+            className="fixed right-4 sm:right-6 top-4 sm:top-6 z-[75] rounded-lg bg-white/15 p-2 text-white transition-colors hover:bg-white/25"
+          >
+            <X size={18} />
+          </button>
+          <img
+            src={zoomedActivityImageUrl}
+            alt="Full activity image"
+            className="relative z-10 max-h-[92vh] max-w-[96vw] rounded-xl object-contain"
+          />
         </div>
       )}
 

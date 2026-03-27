@@ -270,7 +270,7 @@ function AppContent() {
       return metadata;
     }
 
-    metadata.title = `${organization} - Youth Environmental Advocacy in Davao City`;
+    metadata.title = `${organization} - Youth Environmental Advocacy in the Philippines`;
     metadata.keywords = joinSeoKeywords(
       SEO_BASE_KEYWORDS,
       [
@@ -281,7 +281,7 @@ function AppContent() {
       ]
     );
     return metadata;
-  }, [currentPageLabel, currentRoute.chapterSlug, currentRoute.pillarSlug, currentRoute.type, pathname, selectedChapter, selectedPillar]);
+  }, [currentPageLabel, currentRoute.type, pathname, selectedChapter, selectedPillar]);
 
   const currentView: AppView = showDashboard
     ? 'dashboard'

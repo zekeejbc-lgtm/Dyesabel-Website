@@ -14,8 +14,8 @@ var MAIN_DATA_CONFIG = {
     responseKey: 'pillars',
     sheetName: 'Pillars',
     childSheetName: 'PillarActivities',
-    parentFields: ['id', 'title', 'excerpt', 'description', 'aim', 'imageUrl', 'sortOrder'],
-    childFields: ['pillarId', 'id', 'title', 'date', 'description', 'imageUrl', 'learnMoreUrl', 'sortOrder']
+    parentFields: ['id', 'title', 'excerpt', 'description', 'aim', 'imageUrl', 'impactAreas', 'facebookUrl', 'instagramUrl', 'twitterUrl', 'linkedinUrl', 'youtubeUrl', 'websiteUrl', 'joinNowOpen', 'joinNowUrl', 'joinNowLabel', 'joinNowDescription', 'sortOrder'],
+    childFields: ['pillarId', 'id', 'title', 'date', 'description', 'imageUrl', 'learnMoreUrl', 'applicationOpen', 'applicationUrl', 'applicationLabel', 'applicationNote', 'sortOrder']
   }
 };
 var PARTNER_HEADERS = ['CategoryID', 'CategoryTitle', 'PartnerID', 'PartnerName', 'PartnerLogo'];
@@ -623,6 +623,47 @@ function saveMappedArrayData_(ss, config, items) {
   }));
 }
 
+function parseBooleanLike_(value) {
+  if (value === true || value === false) return value;
+  var normalized = String(value == null ? '' : value).trim().toLowerCase();
+  if (!normalized) return false;
+  return normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'open';
+}
+
+function sanitizeImpactAreas_(value) {
+  var source = Array.isArray(value)
+    ? value
+    : String(value || '').split(',');
+  var seen = {};
+  return source.map(function(entry) {
+    return String(entry || '').trim().replace(/^#+\s*/, '');
+  }).filter(function(entry) {
+    if (!entry) return false;
+    var key = entry.toLowerCase();
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  });
+}
+
+function serializeImpactAreas_(value) {
+  var cleaned = sanitizeImpactAreas_(value);
+  return cleaned.length ? cleaned.map(function(tag) { return '#' + tag; }).join(', ') : '';
+}
+
+function parseImpactAreas_(rawValue) {
+  if (Array.isArray(rawValue)) return sanitizeImpactAreas_(rawValue);
+  var value = String(rawValue == null ? '' : rawValue).trim();
+  if (!value) return [];
+  if (value.indexOf('[') === 0) {
+    try {
+      var parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return sanitizeImpactAreas_(parsed);
+    } catch (error) {}
+  }
+  return sanitizeImpactAreas_(value);
+}
+
 function saveMappedNestedData_(ss, config, items, previousItems) {
   var parentRows = [];
   var childRows = [];
@@ -646,7 +687,31 @@ function saveMappedNestedData_(ss, config, items, previousItems) {
     collectReferencedImageUrlsDeep_(item, retainedImageUrls);
     var parentId = item.id || Utilities.getUuid();
     retainedParentIds[String(parentId)] = true;
-    parentRows.push([parentId, item.title || '', item.excerpt || '', item.description || '', item.aim || '', item.imageUrl || '', itemIndex]);
+    var socialLinks = item.socialLinks && typeof item.socialLinks === 'object' ? item.socialLinks : {};
+    var joinNow = item.joinNow && typeof item.joinNow === 'object' ? item.joinNow : {};
+    var parentRowItem = {
+      id: parentId,
+      title: item.title || '',
+      excerpt: item.excerpt || '',
+      description: item.description || '',
+      aim: item.aim || '',
+      imageUrl: item.imageUrl || '',
+      impactAreas: serializeImpactAreas_(item.impactAreas),
+      facebookUrl: socialLinks.facebook || '',
+      instagramUrl: socialLinks.instagram || '',
+      twitterUrl: socialLinks.twitter || '',
+      linkedinUrl: socialLinks.linkedin || '',
+      youtubeUrl: socialLinks.youtube || '',
+      websiteUrl: socialLinks.website || '',
+      joinNowOpen: !!joinNow.isOpen,
+      joinNowUrl: joinNow.url || '',
+      joinNowLabel: joinNow.label || '',
+      joinNowDescription: joinNow.description || '',
+      sortOrder: itemIndex
+    };
+    parentRows.push(config.parentFields.map(function(field) {
+      return parentRowItem[field] != null ? parentRowItem[field] : '';
+    }));
 
     var previousActivitiesById = {};
     if (previousParent && Array.isArray(previousParent.activities)) {
@@ -668,7 +733,23 @@ function saveMappedNestedData_(ss, config, items, previousItems) {
       collectReferencedImageUrlsDeep_(activity, retainedImageUrls);
       var activityId = activity.id || Utilities.getUuid();
       retainedActivityIds[String(activityId)] = true;
-      childRows.push([parentId, activityId, activity.title || '', activity.date || '', activity.description || '', activity.imageUrl || '', activity.learnMoreUrl || '', activityIndex]);
+      var childRowItem = {
+        pillarId: parentId,
+        id: activityId,
+        title: activity.title || '',
+        date: activity.date || '',
+        description: activity.description || '',
+        imageUrl: activity.imageUrl || '',
+        learnMoreUrl: activity.learnMoreUrl || '',
+        applicationOpen: !!activity.applicationOpen,
+        applicationUrl: activity.applicationUrl || '',
+        applicationLabel: activity.applicationLabel || '',
+        applicationNote: activity.applicationNote || '',
+        sortOrder: activityIndex
+      };
+      childRows.push(config.childFields.map(function(field) {
+        return childRowItem[field] != null ? childRowItem[field] : '';
+      }));
     });
 
     if (previousParent && Array.isArray(previousParent.activities)) {
@@ -715,7 +796,13 @@ function getMappedArrayData_(ss, config) {
 
 function getMappedNestedData_(ss, config) {
   var parentSheet = ss.getSheetByName(config.sheetName);
-  if (!parentSheet || parentSheet.getLastRow() < 2 || !dyesabelSheetHasHeaders_(parentSheet, config.parentFields)) return [];
+  if (!parentSheet || parentSheet.getLastRow() < 2) return [];
+  var parentHeaders = parentSheet.getRange(1, 1, 1, parentSheet.getLastColumn()).getValues()[0];
+  var parentIndexMap = createHeaderIndexMap_(parentHeaders);
+  var requiredParentHeaders = ['id', 'title', 'excerpt', 'description', 'aim', 'imageUrl'];
+  var hasParentHeaders = requiredParentHeaders.every(function(header) { return parentIndexMap[header] != null; });
+  if (!hasParentHeaders) return [];
+
   var childSheet = ss.getSheetByName(config.childSheetName);
   var activitiesByParent = {};
   if (childSheet && childSheet.getLastRow() >= 2) {
@@ -738,19 +825,48 @@ function getMappedNestedData_(ss, config) {
         description: row[childIndexMap.description],
         imageUrl: row[childIndexMap.imageUrl],
         learnMoreUrl: childIndexMap.learnMoreUrl != null ? row[childIndexMap.learnMoreUrl] : '',
+        applicationOpen: childIndexMap.applicationOpen != null ? parseBooleanLike_(row[childIndexMap.applicationOpen]) : false,
+        applicationUrl: childIndexMap.applicationUrl != null ? row[childIndexMap.applicationUrl] : '',
+        applicationLabel: childIndexMap.applicationLabel != null ? row[childIndexMap.applicationLabel] : '',
+        applicationNote: childIndexMap.applicationNote != null ? row[childIndexMap.applicationNote] : '',
         sortOrder: Number(row[childIndexMap.sortOrder] || 0)
       });
     });
     }
   }
-  return parentSheet.getRange(2, 1, parentSheet.getLastRow() - 1, config.parentFields.length).getValues().filter(function(row) {
+  return parentSheet.getRange(2, 1, parentSheet.getLastRow() - 1, parentSheet.getLastColumn()).getValues().filter(function(row) {
     return row.some(function(cell) { return cell !== ''; });
   }).sort(function(a, b) {
-    return Number(a[6] || 0) - Number(b[6] || 0);
+    var aSortOrder = parentIndexMap.sortOrder != null ? Number(a[parentIndexMap.sortOrder] || 0) : 0;
+    var bSortOrder = parentIndexMap.sortOrder != null ? Number(b[parentIndexMap.sortOrder] || 0) : 0;
+    return aSortOrder - bSortOrder;
   }).map(function(row) {
-    var parentId = String(row[0] || '');
+    var parentId = String(row[parentIndexMap.id] || '');
+    var impactAreas = parentIndexMap.impactAreas != null ? parseImpactAreas_(row[parentIndexMap.impactAreas]) : [];
+    var socialLinks = {
+      facebook: parentIndexMap.facebookUrl != null ? row[parentIndexMap.facebookUrl] : '',
+      instagram: parentIndexMap.instagramUrl != null ? row[parentIndexMap.instagramUrl] : '',
+      twitter: parentIndexMap.twitterUrl != null ? row[parentIndexMap.twitterUrl] : '',
+      linkedin: parentIndexMap.linkedinUrl != null ? row[parentIndexMap.linkedinUrl] : '',
+      youtube: parentIndexMap.youtubeUrl != null ? row[parentIndexMap.youtubeUrl] : '',
+      website: parentIndexMap.websiteUrl != null ? row[parentIndexMap.websiteUrl] : ''
+    };
+    var joinNow = {
+      isOpen: parentIndexMap.joinNowOpen != null ? parseBooleanLike_(row[parentIndexMap.joinNowOpen]) : false,
+      url: parentIndexMap.joinNowUrl != null ? row[parentIndexMap.joinNowUrl] : '',
+      label: parentIndexMap.joinNowLabel != null ? row[parentIndexMap.joinNowLabel] : '',
+      description: parentIndexMap.joinNowDescription != null ? row[parentIndexMap.joinNowDescription] : ''
+    };
     return {
-      id: row[0], title: row[1], excerpt: row[2], description: row[3], aim: row[4], imageUrl: row[5],
+      id: row[parentIndexMap.id],
+      title: row[parentIndexMap.title],
+      excerpt: row[parentIndexMap.excerpt],
+      description: row[parentIndexMap.description],
+      aim: row[parentIndexMap.aim],
+      imageUrl: row[parentIndexMap.imageUrl],
+      impactAreas: impactAreas,
+      socialLinks: socialLinks,
+      joinNow: joinNow,
       activities: (activitiesByParent[parentId] || []).sort(function(a, b) { return a.sortOrder - b.sortOrder; }).map(function(activity) {
         return {
           id: activity.id,
@@ -758,7 +874,11 @@ function getMappedNestedData_(ss, config) {
           date: activity.date,
           description: activity.description,
           imageUrl: activity.imageUrl,
-          learnMoreUrl: activity.learnMoreUrl || ''
+          learnMoreUrl: activity.learnMoreUrl || '',
+          applicationOpen: !!activity.applicationOpen,
+          applicationUrl: activity.applicationUrl || '',
+          applicationLabel: activity.applicationLabel || '',
+          applicationNote: activity.applicationNote || ''
         };
       })
     };
